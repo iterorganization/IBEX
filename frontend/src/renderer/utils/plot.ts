@@ -509,9 +509,11 @@ export const fetchErrorBandsInConfig = async (
   }
 
   try {
-    dataPlotWithErrBands = await fetchErrorBands(active.dataPlot, data.i, uri);
+    dataPlotWithErrBands = active.dataPlot;
+    const updatedDataPlot = dataPlotWithErrBands.find((d) => d.i === data.i);
+    const errBandsResponse = await fetchErrorBands(updatedDataPlot, uri);
 
-    if (dataPlotWithErrBands) {
+    if (errBandsResponse) {
       const plot = selectedDataPlot.plot.find(
         (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
       );
@@ -554,21 +556,13 @@ export const fetchErrorBandsInConfig = async (
  * @param dataPlotId
  * @param uri
  */
-export const fetchErrorBands = async (
-  dataPlot: DataGridPlot[],
-  dataPlotId: string,
-  uri: string,
-) => {
-  const data = dataPlot.find((d) => d.i === dataPlotId);
-
-  const selectedDataPlot = dataPlot.find((dataPlot) => dataPlot.i === data.i);
-
-  if (!selectedDataPlot.displayErrorBand) {
+export const fetchErrorBands = async (dataPlot: DataGridPlot, uri: string) => {
+  if (!dataPlot.displayErrorBand) {
     // Stop error bands when the dataPlot switch is off
     return;
   }
 
-  const plot = selectedDataPlot.plot.find(
+  const plot = dataPlot.plot.find(
     (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
   );
   if (!plot) {
@@ -582,7 +576,7 @@ export const fetchErrorBands = async (
       normalizeIndices(plot.nodeUri) + '_error_upper',
     );
     const defaultUpperYValue = getVectorData(
-      data.coordinates,
+      dataPlot.coordinates,
       upperResponse.value,
     );
     await formatErrorBands(
@@ -596,7 +590,7 @@ export const fetchErrorBands = async (
       normalizeIndices(plot.nodeUri) + '_error_lower',
     );
     const defaultLowerYValue = getVectorData(
-      data.coordinates,
+      dataPlot.coordinates,
       lowerResponse.value,
     );
     await formatErrorBands(
@@ -613,6 +607,13 @@ export const fetchErrorBands = async (
   }
 };
 
+/**
+ * Format plot to includes error bands values
+ * @param foundedPlot The plot to format
+ * @param yValue
+ * @param yData
+ * @param nodeUri
+ */
 const formatErrorBands = (
   foundedPlot: DataPlotly,
   yValue: number[],
@@ -682,8 +683,6 @@ const formatErrorBands = (
     path: normalizeIndices(nodeUri),
     yData: yData,
   });
-
-  return foundedPlot;
 };
 
 /**
@@ -891,9 +890,11 @@ export async function plotNodeUriLoaded(
           continue;
         }
         for (const plot of dataPlot.plot) {
+          const updatedDataPlot = updatedDataGridPlot.find(
+            (d) => d.i === dataPlot.i,
+          );
           await fetchErrorBands(
-            updatedDataGridPlot, // dataPlot list is updated directly from fetchErrorBands to include error bands
-            dataPlot.i,
+            updatedDataPlot, // dataPlot is updated directly from fetchErrorBands to include error bands
             plot.nodeUri,
           );
         }
@@ -1389,6 +1390,15 @@ const trimCoordData = async (
   return tf.slice(dataTensorized, originShape, shapeSize);
 };
 
+/**
+ * Trim a plot data
+ * @param updatedPlot
+ * @param coordinates
+ * @param axeIndexToUpdate
+ * @param newRange
+ * @param oldRange
+ * @returns
+ */
 const trimPlotData = async (
   updatedPlot: DataPlotly | ErrorBandData,
   coordinates: Coordinates[],

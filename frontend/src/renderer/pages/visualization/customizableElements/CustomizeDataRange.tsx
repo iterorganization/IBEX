@@ -9,6 +9,7 @@ import {
   applyRangeInPlot,
   applyRangeInCoord,
   getTensorizedMatrix,
+  fetchErrorBands,
 } from '../../../utils';
 import { Button, Divider, Group, NumberInput, Stack } from '@mantine/core';
 import { IconCheck, IconRestore } from '@tabler/icons-react';
@@ -105,8 +106,11 @@ export const CustomizeDataRange = ({
             // parseInt(dataRangeMax),
           );
 
-          // Update coordinates with data only once because each plots have same coordinates
+          // Get & format error bands if needed
+          await fetchErrorBands(updatedDataPlot, plot.nodeUri);
+
           if (plotIndex === 0) {
+            // Update coordinates with data only once because each plots have same coordinates
             let coordinateIndex = 0;
             for (const coordinate of updatedDataPlot.coordinates) {
               // Reset coordinates
