@@ -35,12 +35,17 @@ const getConfig = async () => {
 const handleError = (error: unknown, context: string, code?: number) => {
   if (error instanceof Error) {
     if (
-      code === 404 &&
-      error.toString().includes('has no attribute') &&
-      (error.toString().includes('_error_upper') ||
-        error.toString().includes('_error_lower'))
+      // Occurs when having at least one plot with error bands and adding a plot without upper / lower in tree
+      (code === 404 &&
+        error.toString().includes('has no attribute') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower'))) || // Occurs when calling automatically error bands without data
+      (code === 464 &&
+        error.toString().includes('No data for') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower')))
     ) {
-      // Prevent from showing notification when no error band founded (error 404)
+      // Prevent from showing notification when no error band founded
       throw error;
     }
 
