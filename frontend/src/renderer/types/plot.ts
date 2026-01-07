@@ -22,7 +22,6 @@ export interface BaseCoordinates {
 
 export interface Coordinates extends BaseCoordinates {
   name: string;
-  downsampled_shape: number[];
   shape: number[] | 'irregular';
   coordinates: string[];
   data: AxisData;
@@ -87,6 +86,7 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   isEditing: boolean;
   coordinates?: Coordinates[];
   downsampled_method?: string;
+  downsampled_size?: number;
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {

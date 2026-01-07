@@ -99,40 +99,37 @@ export const CustomizeDataRange = ({
         let plotIndex = 0;
         for (const plot of updatedDataPlot.plot) {
           // Get original data for each plot
-          const dataPlotDownsampled = await fetchDataPlot(
+          const dataRestored = await fetchDataPlot(
             normalizeIndices(plot.nodeUri),
-            // TODO : Appeler avec downsampling params SI présents + refacto downsampling names
-            // DataRangeMethod,
-            // parseInt(dataRangeMax),
+            updatedDataPlot?.downsampled_method,
+            updatedDataPlot?.downsampled_size,
           );
 
-          // Get & format error bands if needed
-          await fetchErrorBands(updatedDataPlot, plot.nodeUri);
+          if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {
+            // Downsample restored error bands with latest parameters used if error bands exists for this plot
+            await fetchErrorBands(updatedDataPlot, plot.nodeUri);
+          }
 
           if (plotIndex === 0) {
-            // Update coordinates with data only once because each plots have same coordinates
+            // Update coordinates (their shape & data) only once because each plots have same coordinates
             let coordinateIndex = 0;
             for (const coordinate of updatedDataPlot.coordinates) {
               // Reset coordinates
-              coordinate.downsampled_shape =
-                dataPlotDownsampled.data.coordinates[
+              coordinate.shape =
+                dataRestored.data.coordinates[
                   coordinateIndex
                 ].downsampled_shape;
               coordinate.data =
-                dataPlotDownsampled.data.coordinates[coordinateIndex].value;
+                dataRestored.data.coordinates[coordinateIndex].value;
               coordinateIndex++;
             }
-
-            // Update downsampled method
-            updatedDataPlot.downsampled_method =
-              dataPlotDownsampled.data.downsampled_method;
           }
 
           // Update plot with downsampled data
-          plot.shape = dataPlotDownsampled.data.downsampled_shape;
+          plot.shape = dataRestored.data.downsampled_shape;
           // Get x axis switch coordinates dependances
           plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-          plot.yData = dataPlotDownsampled.data.value;
+          plot.yData = dataRestored.data.value;
           // Get y axis
           const vectorData = getVectorData(
             updatedDataPlot.coordinates,

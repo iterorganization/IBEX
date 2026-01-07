@@ -235,10 +235,26 @@ export const fetchDownsamplingMethods = async () => {
 /**
  * Retrieves field values for a given URI.
  */
-export const fetchFieldValue = async (uri: string) => {
-  return fetchFromApi<FieldValueResponse>(
-    `/data/field_value/?uri=${encodeURIComponent(uri)}`,
-  );
+export const fetchFieldValue = async (
+  uri: string,
+  downsamplingMethod?: string,
+  downsamplingSize?: number,
+) => {
+  const downsampled_size = downsamplingSize || 1000;
+  let response: FieldValueResponse;
+  if (downsamplingMethod) {
+    // TODO : this is a temporary solution to get downsampled value without using field_value route. We should use this route as soon as downsampling will be fixed
+    const dataPlotResponse = await fetchFromApi<PlotDataResponse>(
+      `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+    );
+
+    response = { value: dataPlotResponse.data.value } as FieldValueResponse;
+  } else {
+    response = await fetchFromApi<FieldValueResponse>(
+      `/data/field_value/?uri=${encodeURIComponent(uri)}`,
+    );
+  }
+  return response;
 };
 
 /**

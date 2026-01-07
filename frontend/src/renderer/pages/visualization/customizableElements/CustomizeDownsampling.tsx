@@ -3,6 +3,7 @@ import { DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
   fetchDownsamplingMethods,
+  fetchErrorBands,
   getArrayValueFromDependance,
   getVectorData,
   normalizeIndices,
@@ -20,12 +21,15 @@ export const CustomizeDownsampling = ({
   setCustomizedDataGrid,
 }: CustomizeDownsamplingProps) => {
   const [downsamplingList, setDownsamplingList] = useState<string[]>([]);
-  const [downsamplingSize, setDownsamplingSize] = useState<string>('1000');
+  const [downsamplingSize, setDownsamplingSize] = useState<number>(1000);
   const [downsamplingMethod, setDownsamplingMethod] = useState<string | null>(
     null,
   );
   const [loading, { open, close }] = useDisclosure();
 
+  /**
+   * Update configuration with downsampled data (changes coordinates, plots & error bands)
+   */
   const getDownSampledData = async () => {
     try {
       open();
@@ -35,23 +39,41 @@ export const CustomizeDownsampling = ({
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
+        // Downsample data
         const dataPlotDownsampled = await fetchDataPlot(
           normalizeIndices(plot.nodeUri),
           downsamplingMethod,
-          parseInt(downsamplingSize),
+          downsamplingSize,
         );
 
-        // Update coordinates with downsampled data only once because each plots have same coordinates
+        if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {
+          // Downsample error bands with provided parameters if error bands exists for this plot
+          await fetchErrorBands(
+            updatedDataPlot,
+            plot.nodeUri,
+            downsamplingMethod,
+            downsamplingSize,
+          );
+        }
+
         if (plotIndex === 0) {
+          // Update coordinates with downsampled data only once because each plots have same coordinates
           let coordinateIndex = 0;
           for (const coordinate of updatedDataPlot.coordinates) {
-            coordinate.downsampled_shape =
+            // Apply new shape
+            coordinate.shape =
               dataPlotDownsampled.data.coordinates[
                 coordinateIndex
               ].downsampled_shape;
+            // Apply new data
             coordinate.data =
               dataPlotDownsampled.data.coordinates[coordinateIndex].value;
             coordinateIndex++;
+            // Apply new range
+            coordinate.range = [
+              0,
+              coordinate.shape[coordinate.shape.length - 1] - 1,
+            ];
           }
 
           // Update downsampled method
@@ -74,10 +96,12 @@ export const CustomizeDownsampling = ({
         plotIndex++;
       }
 
-      // Save new configuration with sampled data
+      // Save new configuration with downsampled data
       setCustomizedDataGrid({
         ...customizedDataGrid,
+        coordinates: updatedDataPlot.coordinates,
         downsampled_method: updatedDataPlot.downsampled_method,
+        downsampled_size: downsamplingSize,
         plot: updatedDataPlot.plot,
       });
     } catch (error) {
@@ -112,6 +136,13 @@ export const CustomizeDownsampling = ({
     }
   }, [customizedDataGrid.downsampled_method]);
 
+  useEffect(() => {
+    // Update downsampled size after a timeout
+    if (customizedDataGrid.downsampled_size) {
+      setDownsamplingSize(customizedDataGrid.downsampled_size);
+    }
+  }, [customizedDataGrid.downsampled_size]);
+
   return (
     <Stack w="fit-content">
       <Group align="flex-end" justify="space-between">
@@ -130,9 +161,10 @@ export const CustomizeDownsampling = ({
           description="Update the size"
           placeholder="Update the size"
           value={downsamplingSize}
-          onChange={(value) => setDownsamplingSize(value.toString())}
+          onChange={(value: number) => setDownsamplingSize(value)}
           w="45%"
           maw={200}
+          min={0}
         />
       </Group>
 

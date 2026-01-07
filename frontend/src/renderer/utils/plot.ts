@@ -552,11 +552,18 @@ export const fetchErrorBandsInConfig = async (
 
 /**
  * Get & return error bands of provided uri & dataPlot id
- * @param dataPlot
- * @param dataPlotId
- * @param uri
+ * @param dataPlot Datagrid containing the targeted uri
+ * @param uri Uri to get the data
+ * @param forcedDownsamplingMethod Forced downsample method (optional)
+ * @param forcedDownsamplingSize Forced downsample size (optional)
+ * @returns
  */
-export const fetchErrorBands = async (dataPlot: DataGridPlot, uri: string) => {
+export const fetchErrorBands = async (
+  dataPlot: DataGridPlot,
+  uri: string,
+  forcedDownsamplingMethod?: string,
+  forcedDownsamplingSize?: number,
+) => {
   if (!dataPlot.displayErrorBand) {
     // Stop error bands when the dataPlot switch is off
     return;
@@ -571,9 +578,16 @@ export const fetchErrorBands = async (dataPlot: DataGridPlot, uri: string) => {
   }
 
   try {
+    const downsamplingMethod: string =
+      forcedDownsamplingMethod || dataPlot?.downsampled_method;
+    const downsamplingSize: number =
+      forcedDownsamplingSize || dataPlot?.downsampled_size;
+
     // Get error bands
     const upperResponse = await fetchFieldValue(
       normalizeIndices(plot.nodeUri) + '_error_upper',
+      downsamplingMethod,
+      downsamplingSize,
     );
     const defaultUpperYValue = getVectorData(
       dataPlot.coordinates,
@@ -705,7 +719,6 @@ export function formatConfigBeforeLoadingURIs(
                   ...coord,
                   name: '',
                   shape: [],
-                  downsampled_shape: [],
                   coordinates: [],
                   data: [],
                   axeIndex: index,
@@ -805,8 +818,6 @@ export async function plotNodeUriLoaded(
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
               matchingCoord.shape = responseCoordinates.shape;
-              matchingCoord.downsampled_shape =
-                responseCoordinates.downsampled_shape;
               matchingCoord.coordinates = responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
@@ -1447,7 +1458,6 @@ const formatTrimmedCoordinate = async (
 
   // Update shapes
   updatedCoord.shape = trimmed.shape;
-  updatedCoord.downsampled_shape = trimmed.shape;
 
   // Update valueIndex, target & path
   updatedCoord.valueIndex = 0;
