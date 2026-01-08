@@ -234,7 +234,8 @@ export const handleExistingPlot = async (
     // For each dataPlot call fetchDataPlot to get data from BE
     const response = await fetchDataPlot(
       defaultUri,
-      findDataPlot.downsampled_method,
+      findDataPlot?.downsampled_method,
+      findDataPlot?.downsampled_size,
     );
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
@@ -368,7 +369,7 @@ export const handleExistingPlot = async (
     if (response.data.coordinates.length > 0) {
       defaultXValue = getFirstArrayValueFromShape(
         response.data.coordinates[0].value,
-        response.data.coordinates[0].shape as number[],
+        response.data.coordinates[0].downsampled_shape as number[],
       );
     }
 
@@ -388,7 +389,7 @@ export const handleExistingPlot = async (
         defaultUri,
         response.data.ndim,
         yDataResponsePath,
-        response.data.shape as number[],
+        response.data.downsampled_shape as number[],
         node.name,
         response.data.unit,
         response.data.downsampled_method,
@@ -409,7 +410,7 @@ export const handleExistingPlot = async (
         defaultUri,
         response.data.ndim,
         yDataResponsePath,
-        response.data.shape as number[],
+        response.data.downsampled_shape as number[],
         node.name,
         response.data.unit,
         response.data.downsampled_method,
@@ -787,8 +788,11 @@ export async function plotNodeUriLoaded(
               continue;
             }
 
-            const response = await fetchDataPlot(defaultUri);
-
+            const response = await fetchDataPlot(
+              defaultUri,
+              dataGrid?.downsampled_method,
+              dataGrid?.downsampled_size,
+            );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
               errorHasOccurred = true;
@@ -812,12 +816,12 @@ export async function plotNodeUriLoaded(
               const lastField = getLastIndexedField(responseCoordinates.target);
               if (!lastField) continue;
 
-              // If coordinates exist, update the data and shape
+              // If coordinates exist, update it with response from BE
               matchingCoord.data = responseCoordinates.value;
               matchingCoord.name = responseCoordinates.name;
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
-              matchingCoord.shape = responseCoordinates.shape;
+              matchingCoord.shape = responseCoordinates.downsampled_shape;
               matchingCoord.coordinates = responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
@@ -870,7 +874,7 @@ export async function plotNodeUriLoaded(
               description: response.data.description,
               dimensions: response.data.ndim,
               path: yResponsePath,
-              shape: response.data.shape as number[],
+              shape: response.data.downsampled_shape as number[],
               yData: response.data.value,
               x: defaultXValue,
               y: defaultYValue,

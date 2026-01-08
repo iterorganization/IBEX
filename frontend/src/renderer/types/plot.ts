@@ -76,6 +76,8 @@ export interface BaseDataGridPlot {
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
   displayGrid: boolean;
+  downsampled_method?: string;
+  downsampled_size?: number;
   xAxisData?: Axis;
   yAxisData?: Axis;
   y2AxisData?: Axis;
