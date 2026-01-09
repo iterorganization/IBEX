@@ -6,10 +6,9 @@ import {
   getFirstArrayValueFromShape,
   getVectorData,
   normalizeIndices,
-  applyRangeInPlot,
-  applyRangeInCoord,
   getTensorizedMatrix,
   fetchErrorBands,
+  applyRange,
 } from '../../../utils';
 import { Button, Divider, Group, NumberInput, Stack } from '@mantine/core';
 import { IconCheck, IconRestore } from '@tabler/icons-react';
@@ -38,52 +37,24 @@ export const CustomizeDataRange = ({
     const [isLoadingApply, setIsLoadingApply] = useState(false);
     const [isLoadingRestore, setIsLoadingRestore] = useState(false);
 
-    const applyRange = async (
+    const handleApplyRange = async (
       coordinate: Coordinates,
       newRange: [number, number],
       customizedDataGrid: DataGridPlot,
+      newPlotsUri?: string[],
     ) => {
-      try {
-        setIsLoadingApply(true);
-        const updatedDataPlot = customizedDataGrid;
-        const coordinates = JSON.parse(
-          JSON.stringify(updatedDataPlot.coordinates),
-        ) as Coordinates[];
-        const oldRange = coordinates.find(
-          (coord) => coord.axeIndex === coordinate.axeIndex,
-        )?.range;
-
-        // Trim coordinate
-        await applyRangeInCoord(
-          updatedDataPlot.coordinates,
-          coordinate.name,
-          newRange,
-        );
-
-        // Trim plots
-        await applyRangeInPlot(
-          updatedDataPlot.coordinates,
-          updatedDataPlot.plot,
-          coordinate.axeIndex,
-          newRange,
-          oldRange,
-        );
-
-        setCustomizedDataGrid({
-          ...customizedDataGrid,
-          coordinates: updatedDataPlot.coordinates,
-          plot: updatedDataPlot.plot,
-        });
-        return {
-          ...customizedDataGrid,
-          coordinates: updatedDataPlot.coordinates,
-          plot: updatedDataPlot.plot,
-        };
-      } catch (error) {
-        console.error('Error applying the range: ', error);
-      } finally {
-        setIsLoadingApply(false);
+      if (!newRange) {
+        return;
       }
+      setIsLoadingApply(true);
+      const appliedRange = await applyRange(
+        coordinate,
+        newRange,
+        customizedDataGrid,
+        newPlotsUri,
+      );
+      setCustomizedDataGrid(appliedRange);
+      setIsLoadingApply(false);
     };
 
     const restoreRange = async () => {
@@ -149,14 +120,6 @@ export const CustomizeDataRange = ({
         }
 
         delete updatedCoord.range;
-
-        const newRange = [
-          0,
-          (updatedCoord.shape[updatedCoord.shape.length - 1] as number) - 1,
-        ] as [number, number];
-
-        await applyRange(coordinate, newRange, updatedDataPlot);
-
         for (const coord of updatedDataPlot.coordinates) {
           if (coordinate.name !== coord.name) {
             const tensorizedMatrix = await getTensorizedMatrix(coord.data);
@@ -164,7 +127,9 @@ export const CustomizeDataRange = ({
               0,
               tensorizedMatrix.shape[tensorizedMatrix.shape.length - 1] - 1,
             ];
-            await applyRange(coord, forcedRange, updatedDataPlot);
+            await handleApplyRange(coord, forcedRange, updatedDataPlot, [
+              ...updatedDataPlot.plot.map((plot) => plot.nodeUri),
+            ]);
           }
         }
 
@@ -238,7 +203,7 @@ export const CustomizeDataRange = ({
         <Group align="flex-end" justify="space-between">
           <Button
             onClick={() =>
-              applyRange(
+              handleApplyRange(
                 coordinate,
                 [dataRangeMin, dataRangeMax],
                 customizedDataGrid,

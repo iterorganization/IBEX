@@ -427,6 +427,18 @@ export const handleExistingPlot = async (
     }
 
     if (updatedPlot) {
+      // Apply ranges to the new plot added
+      for (const coordinate of updatedPlot.coordinates) {
+        if (coordinate?.range) {
+          updatedPlot = await applyRange(
+            coordinate,
+            coordinate.range,
+            updatedPlot,
+            [defaultUri],
+          );
+        }
+      }
+
       updatedActive.dataPlot = [
         ...(updatedActive.dataPlot || []).filter(
           (plot) => plot.i !== findDataPlot.i,
@@ -891,7 +903,15 @@ export async function plotNodeUriLoaded(
           ...dataGrid,
           xAxisData: updatedXAxisData,
           plot: updatedPlot,
-        };
+        } as DataGridPlot;
+        // Apply ranges to the new plot added
+        for (const coordinate of dataGrid.coordinates) {
+          if (coordinate?.range) {
+            await applyRange(coordinate, coordinate.range, dataGridUpdated, [
+              ...dataGrid.plot.map((plot) => plot.nodeUri),
+            ]);
+          }
+        }
 
         return dataGridUpdated;
       }),
@@ -1482,6 +1502,48 @@ const formatTrimmedCoordinate = async (
   updatedCoord.target = updatedTarget;
 };
 
+export const applyRange = async (
+  coordinate: Coordinates,
+  newRange: [number, number],
+  customizedDataGrid: DataGridPlot,
+  newPlotsUri?: string[],
+) => {
+  try {
+    const updatedDataPlot = customizedDataGrid;
+    const coordinates = JSON.parse(
+      JSON.stringify(updatedDataPlot.coordinates),
+    ) as Coordinates[];
+    const oldRange = coordinates.find(
+      (coord) => coord.axeIndex === coordinate.axeIndex,
+    )?.range;
+
+    // Trim coordinate
+    await applyRangeInCoord(
+      updatedDataPlot.coordinates,
+      coordinate.name,
+      newRange,
+    );
+
+    // Trim plots
+    await applyRangeInPlot(
+      updatedDataPlot.coordinates,
+      updatedDataPlot.plot,
+      coordinate.axeIndex,
+      newRange,
+      oldRange,
+      newPlotsUri,
+    );
+
+    return {
+      ...customizedDataGrid,
+      coordinates: updatedDataPlot.coordinates,
+      plot: updatedDataPlot.plot,
+    } as DataGridPlot;
+  } catch (error) {
+    console.error('Error applying the range: ', error);
+  }
+};
+
 export async function applyRangeInCoord(
   updatedCoords: Coordinates[],
   coordNameToUpdate: string,
@@ -1532,11 +1594,18 @@ export async function applyRangeInPlot(
   axeIndexToUpdate: number,
   newRange: [number, number],
   oldRange?: [number, number],
+  newPlotsUri?: string[],
 ) {
   for (const updatedPlot of updatedPlots) {
     // Update plot.x with trimmed coordinates
     const newX = getArrayValueFromDependance(coordinates, 0);
     updatedPlot.x = newX;
+
+    let rangeAlreadyAppliedInPlot = true;
+    if (newPlotsUri && newPlotsUri.includes(updatedPlot.nodeUri)) {
+      // Boolean used for determined if range has already been applied in this plot
+      rangeAlreadyAppliedInPlot = false;
+    }
 
     // Trim plot.yData
     const trimmed = await trimPlotData(
@@ -1544,7 +1613,7 @@ export async function applyRangeInPlot(
       JSON.parse(JSON.stringify(coordinates)),
       axeIndexToUpdate,
       newRange,
-      oldRange,
+      rangeAlreadyAppliedInPlot === true ? oldRange : null,
     );
     const newYData = (await trimmed.array()) as AxisData;
     updatedPlot.yData = newYData;
