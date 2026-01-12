@@ -929,9 +929,14 @@ export async function plotNodeUriLoaded(
         // Apply range to new error bands when adding loading a config
         for (const coordinate of dataPlot.coordinates) {
           if (coordinate?.range) {
-            await applyRange(coordinate, coordinate.range, dataPlot, [
-              ...dataPlot.plot.map((plot) => plot.nodeUri),
-            ]);
+            const keepValueIndex = true;
+            await applyRange(
+              coordinate,
+              coordinate.range,
+              dataPlot,
+              [...dataPlot.plot.map((plot) => plot.nodeUri)],
+              keepValueIndex,
+            );
           }
         }
       }
@@ -1476,6 +1481,7 @@ const formatTrimmedCoordinate = async (
   updatedCoord: Coordinates,
   trimmed: tf.Tensor<tf.Rank>,
   coordinateAffectingDependency?: Coordinates,
+  keepValueIndex?: boolean,
 ) => {
   const depValues = (await trimmed.array()) as AxisData;
   // Update data
@@ -1484,23 +1490,25 @@ const formatTrimmedCoordinate = async (
   // Update shapes
   updatedCoord.shape = trimmed.shape;
 
-  // Update valueIndex, target & path
-  updatedCoord.valueIndex = 0;
-  const lastTargetLastName = getLastIndexedField(
-    coordinateAffectingDependency?.target ?? updatedCoord.target,
-  );
-  const updatedPath = updateIndexFieldName(
-    updatedCoord.path,
-    lastTargetLastName,
-    0,
-  );
-  const updatedTarget = updateIndexFieldName(
-    updatedCoord.target,
-    lastTargetLastName,
-    0,
-  );
-  updatedCoord.path = updatedPath;
-  updatedCoord.target = updatedTarget;
+  if (!keepValueIndex) {
+    // Update valueIndex, target & path
+    updatedCoord.valueIndex = 0;
+    const lastTargetLastName = getLastIndexedField(
+      coordinateAffectingDependency?.target ?? updatedCoord.target,
+    );
+    const updatedPath = updateIndexFieldName(
+      updatedCoord.path,
+      lastTargetLastName,
+      0,
+    );
+    const updatedTarget = updateIndexFieldName(
+      updatedCoord.target,
+      lastTargetLastName,
+      0,
+    );
+    updatedCoord.path = updatedPath;
+    updatedCoord.target = updatedTarget;
+  }
 };
 
 export const applyRange = async (
@@ -1508,6 +1516,7 @@ export const applyRange = async (
   newRange: [number, number],
   customizedDataGrid: DataGridPlot,
   newPlotsUri?: string[],
+  keepValueIndex?: boolean,
 ) => {
   try {
     const updatedDataPlot = customizedDataGrid;
@@ -1523,6 +1532,7 @@ export const applyRange = async (
       updatedDataPlot.coordinates,
       coordinate.name,
       newRange,
+      keepValueIndex,
     );
 
     // Trim plots
@@ -1549,6 +1559,7 @@ export async function applyRangeInCoord(
   updatedCoords: Coordinates[],
   coordNameToUpdate: string,
   newRange: [number, number],
+  keepValueIndex?: boolean,
 ) {
   const updatedCoord = updatedCoords.find(
     (coord) => coord.name === coordNameToUpdate,
@@ -1562,7 +1573,12 @@ export async function applyRangeInCoord(
     newRange,
   );
   // Format coordinate with trimmed data
-  await formatTrimmedCoordinate(updatedCoord, trimmed);
+  await formatTrimmedCoordinate(
+    updatedCoord,
+    trimmed,
+    undefined,
+    keepValueIndex,
+  );
 
   // Trim coordinates having dependencies
   for (const coordDependencie of updatedCoords) {
@@ -1585,7 +1601,12 @@ export async function applyRangeInCoord(
       newRange,
       dependencyIndex,
     );
-    await formatTrimmedCoordinate(coordDependencie, trimmedDep, updatedCoord);
+    await formatTrimmedCoordinate(
+      coordDependencie,
+      trimmedDep,
+      updatedCoord,
+      keepValueIndex,
+    );
   }
 }
 

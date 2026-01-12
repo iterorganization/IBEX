@@ -116,14 +116,21 @@ export const HoverButtons = React.memo(
           // Apply ranges to the new error bands added with switch "display error bands"
           for (const coordinate of selectedDataPlot.coordinates) {
             if (coordinate?.range) {
-              await applyRange(coordinate, coordinate.range, selectedDataPlot, [
-                ...selectedDataPlot.plot.map(
-                  (plot) => plot.nodeUri + '_error_upper',
-                ),
-                ...selectedDataPlot.plot.map(
-                  (plot) => plot.nodeUri + '_error_lower',
-                ),
-              ]);
+              const keepValueIndex = true;
+              await applyRange(
+                coordinate,
+                coordinate.range,
+                selectedDataPlot,
+                [
+                  ...selectedDataPlot.plot.map(
+                    (plot) => plot.nodeUri + '_error_upper',
+                  ),
+                  ...selectedDataPlot.plot.map(
+                    (plot) => plot.nodeUri + '_error_lower',
+                  ),
+                ],
+                keepValueIndex,
+              );
             }
           }
         } else {

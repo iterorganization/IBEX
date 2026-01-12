@@ -9,6 +9,8 @@ import {
   getTensorizedMatrix,
   fetchErrorBands,
   applyRange,
+  updateIndexFieldName,
+  getLastIndexedField,
 } from '../../../utils';
 import { Button, Divider, Group, NumberInput, Stack } from '@mantine/core';
 import { IconCheck, IconRestore } from '@tabler/icons-react';
@@ -111,15 +113,35 @@ export const CustomizeDataRange = ({
           plotIndex++;
         }
 
+        const lastTargetLastName = getLastIndexedField(updatedCoord.target);
+
         // Apply ranges
         for (const coord of updatedDataPlot.coordinates) {
           // Get full range
           const dataTensorized = await getTensorizedMatrix(coord.data);
           coord.shape = dataTensorized.shape;
           coord.data = (await dataTensorized.array()) as AxisData;
+
+          // Update target & path with index 0
+          const updatedPath = updateIndexFieldName(
+            coord.path,
+            lastTargetLastName,
+            0,
+          );
+          const updatedTarget = updateIndexFieldName(
+            coord.target,
+            lastTargetLastName,
+            0,
+          );
+          coord.path = updatedPath;
+          coord.target = updatedTarget;
+          if (coord.name === updatedCoord.name) {
+            coord.valueIndex = 0;
+          }
         }
 
-        delete updatedCoord.range;
+        delete updatedCoord.range; // delete range of updatedCoord to apply full range
+
         for (const coord of updatedDataPlot.coordinates) {
           if (coordinate.name !== coord.name) {
             const tensorizedMatrix = await getTensorizedMatrix(coord.data);
