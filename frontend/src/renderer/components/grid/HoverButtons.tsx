@@ -18,7 +18,7 @@ import {
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
 import { Configuration, DataGridPlot } from '../../types';
-import { fetchErrorBandsInConfig } from '../../utils';
+import { applyRange, fetchErrorBandsInConfig } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
@@ -111,6 +111,20 @@ export const HoverButtons = React.memo(
           );
           for (const plot of selectedDataPlot.plot) {
             await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
+          }
+
+          // Apply ranges to the new error bands added with switch "display error bands"
+          for (const coordinate of selectedDataPlot.coordinates) {
+            if (coordinate?.range) {
+              await applyRange(coordinate, coordinate.range, selectedDataPlot, [
+                ...selectedDataPlot.plot.map(
+                  (plot) => plot.nodeUri + '_error_upper',
+                ),
+                ...selectedDataPlot.plot.map(
+                  (plot) => plot.nodeUri + '_error_lower',
+                ),
+              ]);
+            }
           }
         } else {
           // Removes all error bands from selected dataPlot

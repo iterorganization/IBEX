@@ -426,19 +426,8 @@ export const handleExistingPlot = async (
       updatedActive.checkedNodeURI = nodes.filter((n) => n !== node);
     }
 
+    // For each dataPlot get error bands
     if (updatedPlot) {
-      // Apply ranges to the new plot added
-      for (const coordinate of updatedPlot.coordinates) {
-        if (coordinate?.range) {
-          updatedPlot = await applyRange(
-            coordinate,
-            coordinate.range,
-            updatedPlot,
-            [defaultUri],
-          );
-        }
-      }
-
       updatedActive.dataPlot = [
         ...(updatedActive.dataPlot || []).filter(
           (plot) => plot.i !== findDataPlot.i,
@@ -447,9 +436,21 @@ export const handleExistingPlot = async (
       ];
     }
 
-    // For each dataPlot get error bands
-    await fetchErrorBandsInConfig(updatedActive, node.uri);
+    await fetchErrorBandsInConfig(updatedActive, defaultUri);
+
+    // Apply range to new error bands when adding another plot
+    for (const coordinate of updatedPlot.coordinates) {
+      if (coordinate?.range) {
+        updatedPlot = await applyRange(
+          coordinate,
+          coordinate.range,
+          updatedPlot,
+          [defaultUri],
+        );
+      }
+    }
   }
+
   return updatedActive;
 };
 
@@ -904,14 +905,6 @@ export async function plotNodeUriLoaded(
           xAxisData: updatedXAxisData,
           plot: updatedPlot,
         } as DataGridPlot;
-        // Apply ranges to the new plot added
-        for (const coordinate of dataGrid.coordinates) {
-          if (coordinate?.range) {
-            await applyRange(coordinate, coordinate.range, dataGridUpdated, [
-              ...dataGrid.plot.map((plot) => plot.nodeUri),
-            ]);
-          }
-        }
 
         return dataGridUpdated;
       }),
@@ -932,6 +925,14 @@ export async function plotNodeUriLoaded(
             updatedDataPlot, // dataPlot is updated directly from fetchErrorBands to include error bands
             plot.nodeUri,
           );
+        }
+        // Apply range to new error bands when adding loading a config
+        for (const coordinate of dataPlot.coordinates) {
+          if (coordinate?.range) {
+            await applyRange(coordinate, coordinate.range, dataPlot, [
+              ...dataPlot.plot.map((plot) => plot.nodeUri),
+            ]);
+          }
         }
       }
     }
