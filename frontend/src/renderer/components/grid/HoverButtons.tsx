@@ -1,5 +1,5 @@
 import classes from './HoverButtons.module.css';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Group,
   Tooltip,
@@ -49,6 +49,9 @@ export const HoverButtons = React.memo(
   }: HoverButtonsProps) => {
     const { active, updatedConfiguration } = useIbexStore();
     const { hovered, ref: hoverRef } = useHover();
+    const previousValueDisplayErrorBands = useRef<boolean | undefined>(
+      undefined,
+    );
 
     const heatmapLogo = (
       <svg width="50" height="50" viewBox="0 0 50 50">
@@ -105,38 +108,46 @@ export const HoverButtons = React.memo(
           JSON.stringify(active),
         ) as Configuration;
         if (data.displayErrorBand) {
-          // Get all error bands from selected dataPLot
-          const selectedDataPlot = updatedActive.dataPlot.find(
-            (dataPlot) => dataPlot.i === data.i,
-          );
-          for (const plot of selectedDataPlot.plot) {
-            await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
-          }
+          if (
+            previousValueDisplayErrorBands.current === false &&
+            data.displayErrorBand === true
+          ) {
+            // Get all error bands from selected dataPlot when user active error bands
+            const selectedDataPlot = updatedActive.dataPlot.find(
+              (dataPlot) => dataPlot.i === data.i,
+            );
+            for (const plot of selectedDataPlot.plot) {
+              await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
+            }
 
-          // Apply ranges to the new error bands added with switch "display error bands"
-          for (const coordinate of selectedDataPlot.coordinates) {
-            if (coordinate?.range) {
-              const keepValueIndex = true;
-              await applyRange(
-                coordinate,
-                coordinate.range,
-                selectedDataPlot,
-                [
-                  ...selectedDataPlot.plot.map(
-                    (plot) => plot.nodeUri + '_error_upper',
-                  ),
-                  ...selectedDataPlot.plot.map(
-                    (plot) => plot.nodeUri + '_error_lower',
-                  ),
-                ],
-                keepValueIndex,
-              );
+            // Apply ranges to the new error bands added with switch "display error bands"
+            for (const coordinate of selectedDataPlot.coordinates) {
+              if (coordinate?.range) {
+                const keepValueIndex = true;
+                await applyRange(
+                  coordinate,
+                  coordinate.range,
+                  selectedDataPlot,
+                  [
+                    ...selectedDataPlot.plot.map(
+                      (plot) => plot.nodeUri + '_error_upper',
+                    ),
+                    ...selectedDataPlot.plot.map(
+                      (plot) => plot.nodeUri + '_error_lower',
+                    ),
+                  ],
+                  keepValueIndex,
+                );
+              }
             }
           }
         } else {
           // Removes all error bands from selected dataPlot
           removeErrorBands(updatedActive);
         }
+        // Update previous value (used to determine the condition: previous === false && new === true)
+        previousValueDisplayErrorBands.current = data.displayErrorBand;
+
         // Update config
         updatedConfiguration(updatedActive);
       };

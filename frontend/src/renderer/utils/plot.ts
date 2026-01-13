@@ -1647,25 +1647,36 @@ export async function applyRangeInPlot(
 
     // Trim error bands if existing
     if (updatedPlot?.error_bands) {
-      for (const error_bands of updatedPlot.error_bands) {
+      for (const error_band of updatedPlot.error_bands) {
         if (
           updatedPlot.error_y.type === 'data' &&
-          ((error_bands.path.endsWith('error_upper') &&
+          ((error_band.path.endsWith('_error_upper') &&
             updatedPlot.error_y.array.length === 0) ||
-            (error_bands.path.endsWith('error_lower') &&
+            (error_band.path.endsWith('_error_lower') &&
               updatedPlot.error_y.arrayminus.length === 0))
         ) {
           continue;
         }
+        const upperOrLower = error_band.path.endsWith('_error_upper')
+          ? '_error_upper'
+          : '_error_lower';
+        if (
+          newPlotsUri &&
+          newPlotsUri.includes(updatedPlot.nodeUri + upperOrLower)
+        ) {
+          // Check if error band has already been applied
+          rangeAlreadyAppliedInPlot = false;
+        }
+
         const trimmed = await trimPlotData(
-          error_bands,
+          error_band,
           JSON.parse(JSON.stringify(coordinates)),
           axeIndexToUpdate,
           newRange,
-          oldRange,
+          rangeAlreadyAppliedInPlot === true ? oldRange : null,
         );
         const newYData = (await trimmed.array()) as AxisData;
-        error_bands.yData = newYData;
+        error_band.yData = newYData;
       }
       const swapped_error_y = getErrorYVectors(updatedPlot, coordinates);
       updatedPlot.error_y = swapped_error_y;
