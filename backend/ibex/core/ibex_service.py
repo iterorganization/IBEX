@@ -117,25 +117,25 @@ def data_entry_exists(uri: str) -> dict:
 def get_node_info(uri: str, recursive: bool = False, show_error_bars: bool = False) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_node_info(
-        uri_obj.uri_entry_identifiers,
-        uri_obj.ids_name,
-        uri_obj.node_path,
-        uri_obj.occurrence,
-        recursive,
-        show_error_bars,
+        uri=uri_obj.uri_entry_identifiers,
+        ids=uri_obj.ids_name,
+        node_path=uri_obj.node_path,
+        occurrence=uri_obj.occurrence,
+        recursive=recursive,
+        show_error_bars=show_error_bars,
     )
 
 
 def get_data(uri: str, downsampling_method: str | None, downsampled_size: int, range: List[int]) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_data(
-        uri_obj.uri_entry_identifiers,
-        uri_obj.ids_name,
-        uri_obj.node_path,
-        uri_obj.occurrence,
-        range,
-        downsampling_method,
-        downsampled_size,
+        uri=uri_obj.uri_entry_identifiers,
+        ids=uri_obj.ids_name,
+        node_path=uri_obj.node_path,
+        occurrence=uri_obj.occurrence,
+        downsampling_method=downsampling_method,
+        downsampled_size=downsampled_size,
+        range=range
     )
 
 
@@ -175,10 +175,10 @@ def get_multiple_node_data(uri: str) -> dict:
 def get_plot_data(uri: str, downsampling_method: str | None, downsampled_size: int) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_plot_data(
-        uri_obj.uri_entry_identifiers,
-        uri_obj.ids_name,
-        uri_obj.node_path,
-        uri_obj.occurrence,
-        downsampling_method,
-        downsampled_size,
+        uri=uri_obj.uri_entry_identifiers,
+        ids=uri_obj.ids_name,
+        node_path=uri_obj.node_path,
+        occurrence=uri_obj.occurrence,
+        downsampling_method=downsampling_method,
+        downsampled_size=downsampled_size,
     )
