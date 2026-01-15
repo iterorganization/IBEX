@@ -7,7 +7,7 @@ def test_status_codes(entry_path):
     :param entry_path:
     :return:
     """
-    uris = [f"imas:mdsplus?path={entry_path}#core_profiles/time"]
+    uris = [f"imas:hdf5?path={entry_path}#core_profiles/time"]
 
     for uri in uris:
         parameters = {"uri": uri}
@@ -17,7 +17,7 @@ def test_status_codes(entry_path):
 
 def test_field_value(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
     }
     response = pytest.test_client.get("/data/field_value", params=parameters)
 
@@ -27,7 +27,7 @@ def test_field_value(entry_path):
 
 def test_get_multiple_values(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/profiles_1d[:]/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
     }
     response = pytest.test_client.get("/data/field_value", params=parameters)
 
@@ -37,7 +37,7 @@ def test_get_multiple_values(entry_path):
 
 def test_get_non_existing_node(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#non_existing_ids/non_existing_path",
+        "uri": f"imas:hdf5?path={entry_path}#non_existing_ids/non_existing_path",
     }
     response = pytest.test_client.get("/data/field_value", params=parameters)
 
@@ -46,7 +46,7 @@ def test_get_non_existing_node(entry_path):
 
 def test_plot_data(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/profiles_1d[:]/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     response_body = response.json()
@@ -71,7 +71,7 @@ def test_plot_data(entry_path):
 
 def test_plot_data_2d(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/profiles_2d[:]/ion[:]/temperature",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[:]/ion[:]/temperature",
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     response_body = response.json()
@@ -107,7 +107,7 @@ def test_plot_data_2d(entry_path):
 
 def test_plot_data_1_N_coord(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/profiles_1d[:]/ion[:]/z_ion",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/ion[:]/z_ion",
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     response_body = response.json()

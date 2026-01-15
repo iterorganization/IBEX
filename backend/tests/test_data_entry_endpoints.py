@@ -2,14 +2,14 @@ import pytest
 
 
 def test_entry_exists(entry_path):
-    parameters = {"uri": f"imas:mdsplus?path={entry_path}"}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}"}
     response = pytest.test_client.get("/data_entry/exists", params=parameters)
     assert response.status_code == 200
     assert response.json() == {"exists": True}
 
 
 def test_entry_list_idses(entry_path):
-    parameters = {"uri": f"imas:mdsplus?path={entry_path}"}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}"}
     response = pytest.test_client.get("/data_entry/list_idses", params=parameters)
     assert response.status_code == 200
 
@@ -18,7 +18,7 @@ def test_entry_list_idses(entry_path):
 
 
 def test_entry_available_entries(entry_path):
-    parameters = {"uri": f"imas:mdsplus?path={entry_path}"}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}"}
     response = pytest.test_client.get("/data_entry/available_entries", params=parameters)
 
     assert response.status_code == 200
