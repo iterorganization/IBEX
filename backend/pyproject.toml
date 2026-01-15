@@ -18,7 +18,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Framework :: FastAPI",
-    "Framework :: Flake8",
     "Framework :: Pytest",
     "Framework :: Sphinx",
     "Intended Audience :: Developers",
@@ -41,15 +40,14 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+    "imas-python",
+    "imas-idstools",
     "uvicorn",
     "fastapi[standard]==0.115.14",
     "packaging",
-    "imas-python",
     "tsdownsample",
     "orjson",
     "autodoc_pydantic",
-    #"IDStools",
-    #"imas-core",
 ]
 
 [project.optional-dependencies]
