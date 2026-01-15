@@ -44,6 +44,7 @@ export const CustomizeDataRange = ({
       newRange: [number, number],
       customizedDataGrid: DataGridPlot,
       newPlotsUri?: string[],
+      shouldApplyRangeOriginInCoord?: boolean,
     ) => {
       if (!newRange) {
         return;
@@ -54,6 +55,8 @@ export const CustomizeDataRange = ({
         newRange,
         customizedDataGrid,
         newPlotsUri,
+        undefined,
+        shouldApplyRangeOriginInCoord,
       );
       setCustomizedDataGrid(appliedRange);
       setIsLoadingApply(false);
@@ -149,9 +152,13 @@ export const CustomizeDataRange = ({
               0,
               tensorizedMatrix.shape[tensorizedMatrix.shape.length - 1] - 1,
             ];
-            await handleApplyRange(coord, forcedRange, updatedDataPlot, [
-              ...updatedDataPlot.plot.map((plot) => plot.nodeUri),
-            ]);
+            await handleApplyRange(
+              coord,
+              forcedRange,
+              updatedDataPlot,
+              [...updatedDataPlot.plot.map((plot) => plot.nodeUri)],
+              true,
+            );
           }
         }
 

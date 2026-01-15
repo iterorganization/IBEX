@@ -913,20 +913,20 @@ export async function plotNodeUriLoaded(
     if (updatedDataGridPlot?.length) {
       // Get error bands for each plots of each dataPlots when loading a config
       for (const dataPlot of updatedDataGridPlot) {
-        if (!dataPlot.displayErrorBand) {
-          // Don't get error bands when displayErrorBand is switch off (info from config)
-          continue;
+        if (dataPlot.displayErrorBand) {
+          // Get error bands only when displayErrorBand is switch on (info from config)
+          for (const plot of dataPlot.plot) {
+            const updatedDataPlot = updatedDataGridPlot.find(
+              (d) => d.i === dataPlot.i,
+            );
+            await fetchErrorBands(
+              updatedDataPlot, // dataPlot is updated directly from fetchErrorBands to include error bands
+              plot.nodeUri,
+            );
+          }
         }
-        for (const plot of dataPlot.plot) {
-          const updatedDataPlot = updatedDataGridPlot.find(
-            (d) => d.i === dataPlot.i,
-          );
-          await fetchErrorBands(
-            updatedDataPlot, // dataPlot is updated directly from fetchErrorBands to include error bands
-            plot.nodeUri,
-          );
-        }
-        // Apply range to new error bands when adding loading a config
+
+        // Apply range to coordinates, dependencies & new error bands when loading a config
         for (const coordinate of dataPlot.coordinates) {
           if (coordinate?.range) {
             const keepValueIndex = true;
@@ -936,6 +936,7 @@ export async function plotNodeUriLoaded(
               dataPlot,
               [...dataPlot.plot.map((plot) => plot.nodeUri)],
               keepValueIndex,
+              true, // apply range origin when loading a config (get coordinates for first time)
             );
           }
         }
@@ -1263,15 +1264,21 @@ export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
  * Find the maximum shape of a potentially irregular array.
  */
 function getMaxShape(arr: any[]): number[] {
-  if (!Array.isArray(arr)) return [];
-  const lengths = arr.map((sub) =>
-    Array.isArray(sub) ? getMaxShape(sub) : [],
-  );
-  const maxInner = lengths.reduce<number[]>(
-    (acc, curr) => curr.map((v, i) => Math.max(acc[i] || 0, v)),
-    [],
-  );
-  return [arr.length, ...maxInner];
+  const shape: number[] = [];
+
+  function goThrough(node: any, depth: number) {
+    if (!Array.isArray(node)) return;
+
+    // Update max shape to this length
+    shape[depth] = Math.max(shape[depth] ?? 0, node.length);
+
+    for (const item of node) {
+      goThrough(item, depth + 1);
+    }
+  }
+
+  goThrough(arr, 0);
+  return shape;
 }
 
 /**
@@ -1383,16 +1390,18 @@ async function transposeAxis(
  * Reduce size of a coordinate data by slicing to the range provided
  * @param coordinates
  * @param coordNameToUpdate
- * @param dataRangeMin
- * @param dataRangeMax
- * @param dependencyIndex optional: used for updating dependencies
- * @returns
+ * @param newRange
+ * @param dependencyIndex optional: determined the shape index of the dependency
+ * @param shouldApplyRangeOriginInCoord optional: determine if it's a new range to be applied to the data (begin to the range instead of 0)
+ * @returns Return the sliced data
  */
 const trimCoordData = async (
   coordinates: Coordinates[],
   coordNameToUpdate: string,
   newRange: [number, number],
+  oldRange: [number, number],
   dependencyIndex?: number,
+  shouldApplyRangeOriginInCoord?: boolean,
 ) => {
   const updatedCoord = coordinates.find(
     (coord) => coord.name === coordNameToUpdate,
@@ -1404,20 +1413,13 @@ const trimCoordData = async (
 
   // Get new shape to apply
   const shapeIndex = dependencyIndex ?? dataTensorized.shape.length - 1;
-  const dependencyName =
-    updatedCoord.coordinates[dependencyIndex ?? -1] ?? null;
-  const dependencyRange = dependencyName
-    ? coordinates.find((coord) => coord?.name === dependencyName)?.range
-    : null;
-  const minRangeOrigin = dependencyName
-    ? dependencyRange
-      ? dependencyRange[0]
-      : 0
-    : updatedCoord?.range
-      ? updatedCoord.range[0]
-      : 0;
+  const minRangeOrigin = oldRange ? oldRange[0] : 0;
   const originShape = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMin - minRangeOrigin : 0,
+    index === shapeIndex
+      ? shouldApplyRangeOriginInCoord
+        ? minRangeOrigin
+        : dataRangeMin - minRangeOrigin
+      : 0,
   );
   const shapeSize = dataTensorized.shape.map((el, index) =>
     index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
@@ -1517,6 +1519,7 @@ export const applyRange = async (
   customizedDataGrid: DataGridPlot,
   newPlotsUri?: string[],
   keepValueIndex?: boolean,
+  shouldApplyRangeOriginInCoord?: boolean,
 ) => {
   try {
     const updatedDataPlot = customizedDataGrid;
@@ -1532,7 +1535,9 @@ export const applyRange = async (
       updatedDataPlot.coordinates,
       coordinate.name,
       newRange,
+      oldRange,
       keepValueIndex,
+      shouldApplyRangeOriginInCoord,
     );
 
     // Trim plots
@@ -1559,7 +1564,9 @@ export async function applyRangeInCoord(
   updatedCoords: Coordinates[],
   coordNameToUpdate: string,
   newRange: [number, number],
+  oldRange: [number, number],
   keepValueIndex?: boolean,
+  shouldApplyRangeOriginInCoord?: boolean,
 ) {
   const updatedCoord = updatedCoords.find(
     (coord) => coord.name === coordNameToUpdate,
@@ -1571,6 +1578,9 @@ export async function applyRangeInCoord(
     updatedCoords,
     updatedCoord.name,
     newRange,
+    oldRange,
+    undefined,
+    shouldApplyRangeOriginInCoord,
   );
   // Format coordinate with trimmed data
   await formatTrimmedCoordinate(
@@ -1587,9 +1597,11 @@ export async function applyRangeInCoord(
       continue;
     }
 
-    const dependencyIndex = coordDependencie.coordinates.findIndex(
-      (dep) => dep === coordinate.name,
-    );
+    const dependencyIndex = (
+      JSON.parse(JSON.stringify(coordDependencie.coordinates)) as string[]
+    )
+      .reverse() // We reverse dependencies to get dependency index in the order of the matrix
+      .findIndex((dep) => dep === coordinate.name);
     if (dependencyIndex === -1) {
       // No dependencies with updated coordinate
       continue;
@@ -1599,7 +1611,9 @@ export async function applyRangeInCoord(
       updatedCoords,
       coordDependencie.name,
       newRange,
+      oldRange,
       dependencyIndex,
+      shouldApplyRangeOriginInCoord,
     );
     await formatTrimmedCoordinate(
       coordDependencie,

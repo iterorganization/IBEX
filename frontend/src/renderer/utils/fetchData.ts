@@ -1,6 +1,7 @@
 import { showNotification } from '@mantine/notifications';
 import {
   ArraySummaryResponse,
+  AxisData,
   DataIdsResponse,
   DownsamplingMethodsResponse,
   FieldValueResponse,
@@ -13,6 +14,7 @@ import {
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
+import { getTensorizedMatrix } from './plot';
 
 /**
  * Retrieves the API configuration.
@@ -223,6 +225,19 @@ export const fetchDataPlot = async (
       message: 'Data are incomplete.',
       color: 'yellow',
     });
+
+    for (const coord of response.data.coordinates) {
+      // Fill incomplete coordinates with NaN to be a matrix format
+      const tensorizedCoordinate = await getTensorizedMatrix(coord.value);
+      coord.value = (await tensorizedCoordinate.array()) as AxisData;
+      coord.shape = tensorizedCoordinate.shape;
+      coord.downsampled_shape = tensorizedCoordinate.shape;
+    }
+    // Fill incomplete data with NaN to be a matrix format
+    const dataTensorized = await getTensorizedMatrix(response.data.value);
+    response.data.value = (await dataTensorized.array()) as AxisData;
+    response.data.shape = dataTensorized.shape;
+    response.data.downsampled_shape = dataTensorized.shape;
   }
   return response;
 };
