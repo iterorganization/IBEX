@@ -299,12 +299,12 @@ export const Surface2D = ({
                         value &&
                         swapAxis(
                           itemDataGrid,
-                          active,
-                          updatedConfiguration,
                           itemDataGrid.coordinates.find(
                             (coord: Coordinates) => coord.name === value,
                           ).axeIndex,
-                          targetAxis,
+                          targetAxis === 'x' ? 0 : 1,
+                          active,
+                          updatedConfiguration,
                         )
                       }
                       size="xs"

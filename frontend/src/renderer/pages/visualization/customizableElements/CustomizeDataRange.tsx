@@ -11,6 +11,7 @@ import {
   applyRange,
   updateIndexFieldName,
   getLastIndexedField,
+  swapAxis,
 } from '../../../utils';
 import { Button, Divider, Group, NumberInput, Stack } from '@mantine/core';
 import { IconCheck, IconRestore } from '@tabler/icons-react';
@@ -68,9 +69,6 @@ export const CustomizeDataRange = ({
         const updatedDataPlot = JSON.parse(
           JSON.stringify(customizedDataGrid),
         ) as DataGridPlot;
-        const updatedCoord = updatedDataPlot.coordinates.find(
-          (coord) => coord.axeIndex === coordinate.axeIndex,
-        );
         // Step 1 => get full original data (coordinates + plots) && applyRange in coordinates having range (not main range since we'll delete it)
         let plotIndex = 0;
         for (const plot of updatedDataPlot.plot) {
@@ -97,6 +95,7 @@ export const CustomizeDataRange = ({
                 ].downsampled_shape;
               coordinate.data =
                 dataRestored.data.coordinates[coordinateIndex].value;
+              coordinate.axeIndex = coordinateIndex;
               coordinateIndex++;
             }
           }
@@ -116,9 +115,47 @@ export const CustomizeDataRange = ({
           plotIndex++;
         }
 
-        const lastTargetLastName = getLastIndexedField(updatedCoord.target);
+        // Apply swap axis if different from default
+        const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
+          (coord) => coord.axeIndex,
+        );
+        let actualAxeIndexOrder = (
+          JSON.parse(
+            JSON.stringify(updatedDataPlot.coordinates),
+          ) as Coordinates[]
+        ).map((coord) => coord.axeIndex);
+        if (
+          JSON.stringify(wantedAxeIndexOrder) !==
+          JSON.stringify(actualAxeIndexOrder)
+        ) {
+          // Get transposed order
+          let swappedDataPlot = JSON.parse(
+            JSON.stringify(updatedDataPlot),
+          ) as DataGridPlot;
+          let index = 0;
+          for (const wantedAxeIndex of wantedAxeIndexOrder) {
+            if (wantedAxeIndex !== actualAxeIndexOrder[index]) {
+              const newSwappedDataPlot = await swapAxis(
+                swappedDataPlot,
+                wantedAxeIndex,
+                actualAxeIndexOrder[index],
+              );
+              actualAxeIndexOrder = newSwappedDataPlot.coordinates.map(
+                (coord) => coord.axeIndex,
+              );
+              swappedDataPlot = newSwappedDataPlot;
+            }
+            index++;
+          }
+          updatedDataPlot.coordinates = swappedDataPlot.coordinates;
+          updatedDataPlot.plot = swappedDataPlot.plot;
+        }
 
         // Apply ranges
+        const updatedCoord = updatedDataPlot.coordinates.find(
+          (coord) => coord.axeIndex === coordinate.axeIndex,
+        );
+        const lastTargetLastName = getLastIndexedField(updatedCoord.target);
         for (const coord of updatedDataPlot.coordinates) {
           // Get full range
           const dataTensorized = await getTensorizedMatrix(coord.data);

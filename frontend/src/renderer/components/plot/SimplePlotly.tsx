@@ -326,12 +326,12 @@ export const SimplePlotly = ({
                   value &&
                   swapAxis(
                     itemDataGrid,
-                    active,
-                    updatedConfiguration,
                     itemDataGrid.coordinates.find(
                       (coord: Coordinates) => coord.name === value,
                     ).axeIndex,
-                    'x',
+                    0, // axeIndex of x is always 0
+                    active,
+                    updatedConfiguration,
                   )
                 }
                 size="xs"

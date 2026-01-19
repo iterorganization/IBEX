@@ -1131,12 +1131,11 @@ export const getTensorizedMatrix = async (matrix: AxisData) => {
 
 export const swapAxis = async (
   itemDataGrid: DataGridPlot,
-  active: Configuration,
-  updatedConfiguration: (configuration: Configuration) => void,
   axeIndexToSwap: number,
-  targetAxis: 'x' | 'y',
+  axeIndexOfTargetAxis: number,
+  active?: Configuration,
+  updatedConfiguration?: (configuration: Configuration) => void,
 ) => {
-  const axeIndexOfTargetAxis = targetAxis === 'y' ? 1 : 0;
   // Get indexes to swap
   const actualTargetAxisIndex: number = itemDataGrid.coordinates.findIndex(
     (coordinate) => coordinate.axeIndex === axeIndexOfTargetAxis,
@@ -1145,12 +1144,15 @@ export const swapAxis = async (
     (coordinate) => coordinate.axeIndex === axeIndexToSwap,
   );
 
-  const updatedDataPlotList: DataGridPlot[] = JSON.parse(
-    JSON.stringify(active.dataPlot),
-  );
-  const updatedDataPlot = updatedDataPlotList.find(
-    (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
-  );
+  const updatedDataPlotList: DataGridPlot[] =
+    active && updatedConfiguration
+      ? JSON.parse(JSON.stringify(active.dataPlot))
+      : null;
+  const updatedDataPlot = updatedDataPlotList
+    ? updatedDataPlotList.find(
+        (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
+      )
+    : (JSON.parse(JSON.stringify(itemDataGrid)) as DataGridPlot);
 
   // Swap axis
   updatedDataPlot.coordinates[actualTargetAxisIndex].axeIndex = axeIndexToSwap;
@@ -1215,7 +1217,7 @@ export const swapAxis = async (
   updatedDataPlot.xAxisData.unit = updatedDataPlot.coordinates[xIndex].unit;
 
   // Transpose yData with resetted valueIndex
-  await transposeAxis(updatedDataPlot, axeIndexToSwap, targetAxis);
+  await transposeAxis(updatedDataPlot, axeIndexToSwap, axeIndexOfTargetAxis);
 
   // Update x & y with translated dataY
   for (const plot of updatedDataPlot.plot) {
@@ -1237,11 +1239,15 @@ export const swapAxis = async (
   // Limit coordinate sliders to the max of their new shape
   limitSlidersToMaxLength(updatedDataPlot.coordinates);
 
-  const updatedActive = {
-    ...active,
-    dataPlot: updatedDataPlotList,
-  };
-  updatedConfiguration(updatedActive);
+  if (active && updatedConfiguration) {
+    const updatedActive = {
+      ...active,
+      dataPlot: updatedDataPlotList,
+    };
+    updatedConfiguration(updatedActive);
+  }
+
+  return updatedDataPlot;
 };
 
 /**
@@ -1305,42 +1311,18 @@ function reshapeMatrix(arr: any[], shape: number[], depth = 0): any[] {
   return result;
 }
 
-/**
- * Recursively removes NaNs added by reshapeMatrix.
- * - Removes NaN values from arrays.
- * - Deletes empty sub-tables after cleaning.
- */
-function removeNaNPadding(arr: any): any {
-  if (!Array.isArray(arr)) {
-    return Number.isNaN(arr) ? undefined : arr;
-  }
-
-  // Clean recursively
-  const cleaned = arr
-    .map(removeNaNPadding)
-    .filter((v) => v !== undefined && !(Array.isArray(v) && v.length === 0));
-
-  return cleaned;
-}
-
 async function transposeMatrix(yData: AxisData, newPositions: number[]) {
   // Transpose dataY
   const tensor = await getTensorizedMatrix(yData);
   const dataTransposed = tensor.transpose(newPositions);
-  const newMatrix = (await dataTransposed.array()) as AxisData;
-
-  // Restored irregular shape (suppress all NaN)
-  const restoredMatrix = removeNaNPadding(newMatrix);
-
-  return restoredMatrix;
+  return dataTransposed;
 }
 
 async function transposeAxis(
   updatedDataPlot: DataGridPlot,
   axeIndexToSwap: number,
-  targetAxis: 'x' | 'y',
+  axeIndexOfTargetAxis: number,
 ) {
-  const axeIndexOfTargetAxis = targetAxis === 'y' ? 1 : 0;
   // Modify each plot in graph
   for (const plotToTranspose of updatedDataPlot.plot) {
     // DETERMINE WHICH AXIS TO TRANSPOSE
@@ -1359,11 +1341,13 @@ async function transposeAxis(
     newPositions.reverse();
 
     // Transpose dataY matrix
-    const transposedDataY = await transposeMatrix(
+    const tensorizedDataY = await transposeMatrix(
       plotToTranspose.yData,
       newPositions,
     );
+    const transposedDataY = (await tensorizedDataY.array()) as AxisData;
     plotToTranspose.yData = transposedDataY;
+    plotToTranspose.shape = tensorizedDataY.shape;
 
     if (
       plotToTranspose?.error_bands &&
@@ -1376,10 +1360,12 @@ async function transposeAxis(
           continue;
         }
         // Transpose each error band matrix
-        const transposedErrorBand = await transposeMatrix(
+        const tensorizedErrorBand = await transposeMatrix(
           error_band.yData,
           newPositions,
         );
+        const transposedErrorBand =
+          (await tensorizedErrorBand.array()) as AxisData;
         error_band.yData = transposedErrorBand;
       }
     }
