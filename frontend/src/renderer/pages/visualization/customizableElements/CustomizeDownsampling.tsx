@@ -5,6 +5,7 @@ import {
   fetchDownsamplingMethods,
   fetchErrorBands,
   getArrayValueFromDependance,
+  getFirstArrayValueFromShape,
   getVectorData,
   normalizeIndices,
 } from '../../../utils';
@@ -73,6 +74,15 @@ export const CustomizeDownsampling = ({
             coordinate.range = [
               0,
               coordinate.shape[coordinate.shape.length - 1] - 1,
+            ];
+            const firstArrayValueFromCoord = getFirstArrayValueFromShape(
+              coordinate.data,
+              coordinate.shape,
+            );
+
+            coordinate.rangeValues = [
+              firstArrayValueFromCoord[0],
+              firstArrayValueFromCoord[firstArrayValueFromCoord.length - 1],
             ];
           }
 

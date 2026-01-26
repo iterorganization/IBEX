@@ -126,7 +126,7 @@ export const HoverButtons = React.memo(
                 const keepValueIndex = true;
                 await applyRange(
                   coordinate,
-                  coordinate.range,
+                  coordinate.rangeValues,
                   selectedDataPlot,
                   [
                     ...selectedDataPlot.plot.map(

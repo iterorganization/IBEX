@@ -118,6 +118,7 @@ export function MainLayout() {
               target: coord.target,
               valueIndex: coord.valueIndex,
               range: coord?.range,
+              rangeValues: coord?.rangeValues,
             };
           },
         ),

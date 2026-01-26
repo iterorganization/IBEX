@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { AxisData, Coordinates, DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
@@ -13,7 +13,14 @@ import {
   getLastIndexedField,
   swapAxis,
 } from '../../../utils';
-import { Button, Divider, Group, NumberInput, Stack } from '@mantine/core';
+import {
+  Button,
+  Divider,
+  Group,
+  NumberInput,
+  Stack,
+  TextInput,
+} from '@mantine/core';
 import { IconCheck, IconRestore } from '@tabler/icons-react';
 
 interface CustomizeDataRangeProps {
@@ -28,32 +35,35 @@ export const CustomizeDataRange = ({
     coordinate: Coordinates;
   }
   const CoordinateRange = ({ coordinate }: CoordinateRangeProps) => {
-    const minRange = coordinate?.range ? coordinate.range[0] : 0;
-    const maxRange = coordinate?.range
-      ? coordinate.range[1]
-      : typeof coordinate.shape !== 'string'
-        ? coordinate.shape[coordinate.shape.length - 1] - 1
-        : getFirstArrayValueFromShape(coordinate.data, coordinate.shape)
-            .length - 1;
-    const [dataRangeMin, setDataRangeMin] = useState<number>(minRange);
-    const [dataRangeMax, setDataRangeMax] = useState<number>(maxRange);
+    const coordVector = getArrayValueFromDependance(
+      customizedDataGrid.coordinates,
+      coordinate.axeIndex,
+    );
+    const minValueRange = coordinate?.rangeValues
+      ? coordinate.rangeValues[0]
+      : coordVector[0];
+    const maxValueRange = coordinate?.rangeValues
+      ? coordinate.rangeValues[1]
+      : coordVector[coordVector.length - 1];
+    const [valueRangeMin, setValueRangeMin] = useState(minValueRange);
+    const [valueRangeMax, setValueRangeMax] = useState(maxValueRange);
     const [isLoadingApply, setIsLoadingApply] = useState(false);
     const [isLoadingRestore, setIsLoadingRestore] = useState(false);
 
     const handleApplyRange = async (
       coordinate: Coordinates,
-      newRange: [number, number],
+      newValueRange: [number, number] | [string, string],
       customizedDataGrid: DataGridPlot,
       newPlotsUri?: string[],
       shouldApplyRangeOriginInCoord?: boolean,
     ) => {
-      if (!newRange) {
+      if (!newValueRange) {
         return;
       }
       setIsLoadingApply(true);
       const appliedRange = await applyRange(
         coordinate,
-        newRange,
+        newValueRange,
         customizedDataGrid,
         newPlotsUri,
         undefined,
@@ -180,18 +190,25 @@ export const CustomizeDataRange = ({
           }
         }
 
-        delete updatedCoord.range; // delete range of updatedCoord to apply full range
+        // delete range & rangeValues to apply full range
+        delete updatedCoord.range;
+        delete updatedCoord.rangeValues;
 
         for (const coord of updatedDataPlot.coordinates) {
           if (coordinate.name !== coord.name) {
             const tensorizedMatrix = await getTensorizedMatrix(coord.data);
-            const forcedRange = coord?.range || [
-              0,
-              tensorizedMatrix.shape[tensorizedMatrix.shape.length - 1] - 1,
+            const forcedRangeValues = coord?.rangeValues || [
+              getFirstArrayValueFromShape(
+                coord.data,
+                tensorizedMatrix.shape,
+              )[0],
+              getFirstArrayValueFromShape(coord.data, tensorizedMatrix.shape)[
+                tensorizedMatrix.shape[tensorizedMatrix.shape.length - 1] - 1
+              ],
             ];
             await handleApplyRange(
               coord,
-              forcedRange,
+              forcedRangeValues,
               updatedDataPlot,
               [...updatedDataPlot.plot.map((plot) => plot.nodeUri)],
               true,
@@ -211,67 +228,61 @@ export const CustomizeDataRange = ({
       }
     };
 
-    const setInDataRange = useCallback(
-      (
-        rangePosition: 'min' | 'max',
-        value: number,
-        setter: React.Dispatch<React.SetStateAction<number>>,
-      ) => {
-        let checkedValue = value;
-        if (checkedValue < minRange) {
-          checkedValue = minRange;
-        } else if (checkedValue > maxRange) {
-          checkedValue = maxRange;
-        }
-
-        if (rangePosition === 'min') {
-          if (checkedValue > dataRangeMax) {
-            checkedValue = dataRangeMax;
-          }
-        } else {
-          if (checkedValue < dataRangeMin) {
-            checkedValue = dataRangeMin;
-          }
-        }
-        setter(checkedValue);
-      },
-      [minRange, maxRange, dataRangeMin, dataRangeMax],
-    );
-
     return (
       <Group align="flex-end">
         <Group align="flex-end" justify="space-between">
-          <NumberInput
-            label="Min"
-            description="Update the min range"
-            placeholder="Update the min range"
-            value={dataRangeMin}
-            min={coordinate?.range ? coordinate.range[0] : 0}
-            max={maxRange}
-            onChange={(value: number) =>
-              setInDataRange('min', value, setDataRangeMin)
-            }
-            w={150}
-          />
-          <NumberInput
-            label="Max"
-            description="Update the max range"
-            placeholder="Update the max range"
-            value={dataRangeMax}
-            min={coordinate?.range ? coordinate.range[0] : 0}
-            max={maxRange}
-            onChange={(value: number) =>
-              setInDataRange('max', value, setDataRangeMax)
-            }
-            w={150}
-          />
+          {typeof valueRangeMin === 'number' ? (
+            <>
+              <NumberInput
+                label="Min"
+                description="Update the min range"
+                placeholder="Update the min range"
+                value={valueRangeMin}
+                onChange={(value: number) => setValueRangeMin(value)}
+                w={150}
+              />
+              <NumberInput
+                label="Max"
+                description="Update the max range"
+                placeholder="Update the max range"
+                value={valueRangeMax}
+                onChange={(value: number) => setValueRangeMax(value)}
+                w={150}
+              />
+            </>
+          ) : (
+            <>
+              <TextInput
+                label="Min"
+                description="Update the min range"
+                placeholder="Update the min range"
+                value={valueRangeMin}
+                onChange={(event) =>
+                  setValueRangeMin(event.currentTarget.value)
+                }
+                w={150}
+              />
+              <TextInput
+                label="Max"
+                description="Update the max range"
+                placeholder="Update the max range"
+                value={valueRangeMax}
+                onChange={(event) =>
+                  setValueRangeMax(event.currentTarget.value)
+                }
+                w={150}
+              />
+            </>
+          )}
         </Group>
         <Group align="flex-end" justify="space-between">
           <Button
-            onClick={() =>
+            onClick={async () =>
               handleApplyRange(
                 coordinate,
-                [dataRangeMin, dataRangeMax],
+                [valueRangeMin, valueRangeMax] as
+                  | [number, number]
+                  | [string, string],
                 customizedDataGrid,
               )
             }

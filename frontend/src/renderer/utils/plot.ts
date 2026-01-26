@@ -443,7 +443,7 @@ export const handleExistingPlot = async (
       if (coordinate?.range) {
         updatedPlot = await applyRange(
           coordinate,
-          coordinate.range,
+          coordinate.rangeValues,
           updatedPlot,
           [defaultUri],
         );
@@ -932,7 +932,7 @@ export async function plotNodeUriLoaded(
             const keepValueIndex = true;
             await applyRange(
               coordinate,
-              coordinate.range,
+              coordinate.rangeValues,
               dataPlot,
               [...dataPlot.plot.map((plot) => plot.nodeUri)],
               keepValueIndex,
@@ -1384,6 +1384,7 @@ async function transposeAxis(
 const trimCoordData = async (
   coordinates: Coordinates[],
   coordNameToUpdate: string,
+  newValueRange: [number, number] | [string, string],
   newRange: [number, number],
   oldRange: [number, number],
   dependencyIndex?: number,
@@ -1414,6 +1415,7 @@ const trimCoordData = async (
   if (dependencyIndex === undefined) {
     // Update the new range when updating the main coordinate
     updatedCoord.range = newRange;
+    updatedCoord.rangeValues = newValueRange;
   }
 
   return tf.slice(dataTensorized, originShape, shapeSize);
@@ -1499,9 +1501,115 @@ const formatTrimmedCoordinate = async (
   }
 };
 
+export const getRangeIndex = async (
+  newValueRange: [number, number] | [string, string],
+  updatedDataPlot: DataGridPlot,
+  coordinate: Coordinates,
+  shouldApplyRangeOriginInCoord?: boolean,
+) => {
+  // Sort value range inputs
+  if (typeof newValueRange[0] === 'number') {
+    newValueRange.sort();
+  } else {
+    const coordVector = getArrayValueFromDependance(
+      updatedDataPlot.coordinates,
+      coordinate.axeIndex,
+    );
+    const firstIndex = coordVector.findIndex(
+      (value) => value === newValueRange[0],
+    );
+    const secondIndex = coordVector.findIndex(
+      (value) => value === newValueRange[1],
+    );
+    if (firstIndex !== -1 && secondIndex !== -1 && firstIndex > secondIndex) {
+      const temp = newValueRange[0];
+      newValueRange[0] = newValueRange[1];
+      newValueRange[1] = temp;
+    }
+  }
+
+  const coordToUpdate = updatedDataPlot.coordinates.find(
+    (coord) => coord.name === coordinate.name,
+  );
+  const coordVector = getArrayValueFromDependance(
+    updatedDataPlot.coordinates,
+    coordToUpdate.axeIndex,
+  );
+  let newRange: [number, number] = coordinate?.range || [
+    0,
+    coordVector.length - 1,
+  ];
+
+  const rangeMatched = [];
+  if (typeof newValueRange[0] === 'number') {
+    // if(typeof getFirstArrayValueFromShape(coordToUpdate.data, coordToUpdate.shape)[0] === 'number'){ // ! ANCIEN qd check type sur tableau
+    const min = newValueRange[0] as number;
+    const max = newValueRange[1] as number;
+
+    for (let i = 0; i < coordVector.length; i++) {
+      // Get min range
+      if (
+        rangeMatched.length === 0 &&
+        (coordVector[i] as number) >= min &&
+        (coordVector[i] as number) <= max
+      ) {
+        rangeMatched.push(shouldApplyRangeOriginInCoord ? i : newRange[0] + i);
+      }
+
+      // Get max range
+      if (
+        rangeMatched.length === 1 &&
+        (coordVector[i] as number) > max &&
+        i !== 0
+      ) {
+        rangeMatched.push(
+          shouldApplyRangeOriginInCoord ? i - 1 : newRange[0] + i - 1,
+        );
+        break;
+      }
+    }
+    if (rangeMatched.length === 2) {
+      newRange = rangeMatched as [number, number];
+    } else if (rangeMatched.length === 1) {
+      newRange[0] = rangeMatched[0];
+    }
+  } else if (typeof newValueRange[0] === 'string') {
+    const firstIndex = coordVector.findIndex((val) => val === newValueRange[0]);
+    const secondIndex = coordVector.findIndex(
+      (val) => val === newValueRange[1],
+    );
+    if (firstIndex !== -1) {
+      rangeMatched.push(
+        shouldApplyRangeOriginInCoord ? firstIndex : newRange[0] + firstIndex,
+      );
+    } else {
+      rangeMatched.push(shouldApplyRangeOriginInCoord ? 0 : newRange[0]);
+    }
+
+    if (secondIndex !== -1) {
+      rangeMatched.push(
+        shouldApplyRangeOriginInCoord ? secondIndex : newRange[0] + secondIndex,
+      );
+    } else {
+      rangeMatched.push(
+        shouldApplyRangeOriginInCoord
+          ? coordVector.length - 1
+          : newRange[0] + coordVector.length - 1,
+      );
+    }
+
+    if (rangeMatched.length === 2) {
+      newRange = rangeMatched as [number, number];
+    } else if (rangeMatched.length === 1) {
+      newRange[0] = rangeMatched[0];
+    }
+  }
+  return newRange;
+};
+
 export const applyRange = async (
   coordinate: Coordinates,
-  newRange: [number, number],
+  newValueRange: [number, number] | [string, string],
   customizedDataGrid: DataGridPlot,
   newPlotsUri?: string[],
   keepValueIndex?: boolean,
@@ -1516,10 +1624,19 @@ export const applyRange = async (
       (coord) => coord.axeIndex === coordinate.axeIndex,
     )?.range;
 
+    // get newRange
+    const newRange = await getRangeIndex(
+      newValueRange,
+      updatedDataPlot,
+      coordinate,
+      shouldApplyRangeOriginInCoord,
+    );
+
     // Trim coordinate
     await applyRangeInCoord(
       updatedDataPlot.coordinates,
       coordinate.name,
+      newValueRange,
       newRange,
       oldRange,
       keepValueIndex,
@@ -1546,9 +1663,20 @@ export const applyRange = async (
   }
 };
 
+/**
+ * Update the coordinate to apply the range
+ * @param updatedCoords
+ * @param coordNameToUpdate
+ * @param newValueRange
+ * @param newRange
+ * @param oldRange
+ * @param keepValueIndex
+ * @param shouldApplyRangeOriginInCoord
+ */
 export async function applyRangeInCoord(
   updatedCoords: Coordinates[],
   coordNameToUpdate: string,
+  newValueRange: [number, number] | [string, string],
   newRange: [number, number],
   oldRange: [number, number],
   keepValueIndex?: boolean,
@@ -1563,6 +1691,7 @@ export async function applyRangeInCoord(
   const trimmed = await trimCoordData(
     updatedCoords,
     updatedCoord.name,
+    newValueRange,
     newRange,
     oldRange,
     undefined,
@@ -1596,6 +1725,7 @@ export async function applyRangeInCoord(
     const trimmedDep = await trimCoordData(
       updatedCoords,
       coordDependencie.name,
+      newValueRange,
       newRange,
       oldRange,
       dependencyIndex,
