@@ -50,7 +50,11 @@ export const SimplePlotly = ({
       rangemode: 'normal',
       showline: true,
       zeroline: false,
-      type: (itemDataGrid?.xAxisData?.type as AxisType) || 'linear',
+      type:
+        (itemDataGrid?.xAxisData?.type as AxisType) ||
+        typeof itemDataGrid.plot[0].x[0] === 'string'
+          ? 'category'
+          : 'linear',
     },
     yaxis: {
       title: {
@@ -64,6 +68,9 @@ export const SimplePlotly = ({
       showline: true,
       zeroline: false,
       type: (itemDataGrid?.yAxisData?.type as AxisType) || 'linear',
+    },
+    yaxis2: {
+      type: (itemDataGrid?.y2AxisData?.type as AxisType) || 'linear',
     },
     modebar: {
       orientation: 'v',

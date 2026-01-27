@@ -15,6 +15,7 @@ import { VerticalSlider } from '../verticalSlider';
 import {
   compareByAxeIndex,
   getArrayValueFromDependance,
+  getFirstArrayValueFromShape,
   isMatrixPlottable,
   swapAxis,
 } from '../../utils';
@@ -157,12 +158,24 @@ export const Surface2D = ({
     };
     setXAxis(xAxisAtHeatmap);
 
+    const yCoord = itemDataGrid.coordinates.find(
+      (yCoord) => yCoord.axeIndex === 1,
+    );
     const yAxisAtHeatmap = {
-      name: itemDataGrid.coordinates.find((yCoord) => yCoord.axeIndex === 1)
-        .name,
-      unit: itemDataGrid.coordinates.find((yCoord) => yCoord.axeIndex === 1)
-        .unit,
+      name: yCoord.name,
+      unit: yCoord.unit,
     };
+    setLayoutPlot((prevLayout) => ({
+      ...prevLayout,
+      yaxis: {
+        ...prevLayout.yaxis,
+        type:
+          typeof getFirstArrayValueFromShape(yCoord.data, yCoord.shape)[0] ===
+          'string'
+            ? 'category'
+            : 'linear',
+      },
+    }));
     setYAxis(yAxisAtHeatmap);
   }, [itemDataGrid.plot, itemDataGrid.coordinates, plotIndex]);
 

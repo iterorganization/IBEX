@@ -33,7 +33,8 @@ export function usePlotLayout({
       ...prevLayout,
       xaxis: {
         ...prevLayout.xaxis,
-        type: (itemDataGrid?.xAxisData?.type as AxisType) || 'linear',
+        type:
+          (itemDataGrid?.xAxisData?.type as AxisType) || prevLayout.xaxis?.type,
       },
     }));
   }, [itemDataGrid.xAxisData?.type, setLayoutPlot]);
@@ -44,7 +45,8 @@ export function usePlotLayout({
       ...prevLayout,
       yaxis: {
         ...prevLayout.yaxis,
-        type: (itemDataGrid?.yAxisData?.type as AxisType) || 'linear',
+        type:
+          (itemDataGrid?.yAxisData?.type as AxisType) || prevLayout.yaxis?.type,
       },
     }));
   }, [itemDataGrid.yAxisData?.type, setLayoutPlot]);
@@ -55,8 +57,32 @@ export function usePlotLayout({
       ...prevLayout,
       yaxis2: {
         ...prevLayout.yaxis2,
-        type: (itemDataGrid?.y2AxisData?.type as AxisType) || 'linear',
+        type:
+          (itemDataGrid?.y2AxisData?.type as AxisType) ||
+          prevLayout.yaxis2?.type,
       },
     }));
   }, [itemDataGrid.y2AxisData?.type, setLayoutPlot]);
+
+  useEffect(() => {
+    const newTypeOfX = typeof itemDataGrid.plot[0].x[0];
+    if (newTypeOfX === 'string') {
+      // Update x axis to category type if it become a string
+      setLayoutPlot((prevLayout) => ({
+        ...prevLayout,
+        xaxis: { ...prevLayout.xaxis, type: 'category' },
+      }));
+      itemDataGrid.xAxisData.type = 'category';
+    } else if (
+      itemDataGrid.xAxisData?.type === 'category' &&
+      newTypeOfX === 'number'
+    ) {
+      // Update x axis to linear type if it become a number
+      setLayoutPlot((prevLayout) => ({
+        ...prevLayout,
+        xaxis: { ...prevLayout.xaxis, type: 'linear' },
+      }));
+      itemDataGrid.xAxisData.type = 'linear';
+    }
+  }, [itemDataGrid.xAxisData.name]);
 }
