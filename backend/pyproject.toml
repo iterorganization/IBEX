@@ -80,6 +80,9 @@ benchmark = [
 [project.urls]
 homepage = "https://github.com/iterorganization/IBEX"
 
+[project.scripts]
+run_ibex_service = "ibex.main:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ibex*"]

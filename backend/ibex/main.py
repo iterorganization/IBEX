@@ -1,40 +1,73 @@
-"""IBEX FastApi entrypoint"""
+#!/bin/env python3
+# -*- coding: utf-8 -*-
 
-from fastapi import FastAPI  # type: ignore
-import logging  # type: ignore
+import argparse  # type: ignore
 
-from ibex.endpoints.data import router as data_router
-from ibex.endpoints.data_entry import router as data_entry_router
-from ibex.endpoints.ids_info import router as ids_info_router
-from ibex.endpoints.info import router as info_router
+import sys
+import time
 
-from ibex.data_source.exception import IbexException
+import uvicorn                 # type: ignore
+from fastapi import FastAPI    # type: ignore
 
+from ibex.app import app
 
-from .exception_handlers import general_exception_handler
+def port_from_cmdln():
+    """
+    Reads port number from commandline
 
-logger = logging.getLogger(__name__)
+    Returns:
+    tuple:
+    - api_host (str): Host address provided by the user. 127.0.0.1 otherwise.
+    - api_port (int): The port provided by the user. 0 otherwise.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=0,
+        help="""Specify port number to start server on {0..65535}""",
+    )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="""Specify host of backend server. Default: 127.0.0.1""",
+    )
+    args = parser.parse_args(args=sys.argv[1:])
 
-app = FastAPI()
+    api_port = args.port
+    api_host = args.host
 
-app.include_router(data_entry_router)
-app.include_router(ids_info_router)
-app.include_router(data_router)
-app.include_router(info_router)
+    if api_port < 0 or api_port > 65535:
+        print(
+            f"Provided port number was {args.port} while it has to be in range (0..65535).",
+            file=sys.stderr,
+        )
+        exit(-1)
 
-app.add_exception_handler(Exception, general_exception_handler)
-app.add_exception_handler(ValueError, general_exception_handler)
-app.add_exception_handler(KeyError, general_exception_handler)
-app.add_exception_handler(RuntimeError, general_exception_handler)
-app.add_exception_handler(NotImplementedError, general_exception_handler)
+    return api_host, api_port
 
-app.add_exception_handler(IbexException, general_exception_handler)
+def main():
+    host, port = port_from_cmdln()
 
+    config = uvicorn.Config(app, host=host, port=port)
+    server = uvicorn.Server(config)
 
-try:
-    # add ALException handler only if imas-python was used as data source
-    import imas
+    # Start the server in a background thread or process
+    import threading
+    thread = threading.Thread(target=server.run)
+    thread.start()
 
-    app.add_exception_handler(imas.exception.ALException, general_exception_handler)
-except ImportError:
-    ...
+    # Wait until the server is started
+    while not server.started:
+        time.sleep(0.3)
+        pass
+
+    # Access the bound sockets
+    sockets = server.servers[0].sockets
+    port = sockets[0].getsockname()[1]
+    print(f"Server is running on port {port}")
+
+if __name__ == "__main__":
+    main()

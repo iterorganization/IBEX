@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# IBEX launch script. It assumes both ibex and run_ibex_service executables are in PATH
+
 set -e
 
 # Find and print 3 random unused TCP ports in the dynamic/private range (49152–65535)
@@ -25,25 +27,14 @@ get_free_ports() {
   echo
 }
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "0. Load modules..."
-module purge
-module load IMAS-Python IDStools nodejs
-
-PYTHON_VERSION=$(python --version | cut -d ' ' -f 2 | cut -d '.' -f1,2)
-export PYTHONPATH=${SCRIPT_DIR}/ibex_venv/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH}
-
 echo "1. Launch backend server..."
 
 read -r -a found_ports < <(get_free_ports)
 echo "Selected free ports: ${found_ports[@]}"
 echo "Setting IBEX BACKEND PORT = ${found_ports[0]}"
 
-${SCRIPT_DIR}/backend/bin/run_ibex_service -p ${found_ports[0]} &
+run_ibex_service -p ${found_ports[0]} &
 BACKEND_PID=$!
-cd "$SCRIPT_DIR"
 
 echo "2. Configuring frontend"
 
@@ -68,10 +59,9 @@ cat > ~/.config/ibex/config.json <<EOF
 }
 EOF
 
-echo "3. Launch frontend server..."
-"$SCRIPT_DIR/frontend/out/ibex-linux-x64/ibex" &
+echo "3. Launch IBEX frontend..."
+run_ibex_frontend &
 FRONTEND_PID=$!
-cd "$SCRIPT_DIR"
 
 # Wait for both processes to finish
 wait $FRONTEND_PID
