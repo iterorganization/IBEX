@@ -616,6 +616,8 @@ export const fetchErrorBands = async (
 
     const lowerResponse = await fetchFieldValue(
       normalizeIndices(plot.nodeUri) + '_error_lower',
+      downsamplingMethod,
+      downsamplingSize,
     );
     const defaultLowerYValue = getVectorData(
       dataPlot.coordinates,
