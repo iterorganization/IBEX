@@ -13,12 +13,11 @@ authors = [
 description = "Data visualization for IMAS IDS data"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.7"
-license-files = ["LICENSE.md"]
+license-files = ["LICENSE.txt"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Framework :: FastAPI",
-    "Framework :: Flake8",
     "Framework :: Pytest",
     "Framework :: Sphinx",
     "Intended Audience :: Developers",
@@ -37,26 +36,31 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Software Development :: Libraries",
-    "Topic :: Software Development :: Libraries :: Python Modules"
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"
 ]
 dynamic = ["version"]
 dependencies = [
+    "imas-python",
+    "imas-idstools",
     "uvicorn",
     "fastapi[standard]==0.115.14",
     "packaging",
-    "imas-python",
     "tsdownsample",
     "orjson",
     "autodoc_pydantic",
-    #"IDStools",
-    #"imas-core",
 ]
 
 [project.optional-dependencies]
 # these self-dependencies are available since pip 21.2
 all = [
+    "ibex[test]",
     "ibex[linting]",
     "ibex[docs]",
+]
+
+test = [
+    "pytest",
 ]
 
 linting = [
@@ -74,7 +78,7 @@ benchmark = [
 ]
 
 [project.urls]
-homepage = "https://git.iter.org/projects/IMEX/repos/ibex"
+homepage = "https://github.com/iterorganization/IBEX"
 
 [tool.setuptools.packages.find]
 where = ["."]

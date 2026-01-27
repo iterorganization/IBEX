@@ -10,7 +10,7 @@ def test_node_info_coordinates(entry_path):
 
     for path, coordinates in test_dict.items():
         parameters = {
-            "uri": f"imas:mdsplus?path={entry_path}{path}",
+            "uri": f"imas:hdf5?path={entry_path}{path}",
         }
         response = pytest.test_client.get("/ids_info/node_info", params=parameters)
 
@@ -23,7 +23,7 @@ def test_node_info_coordinates(entry_path):
 
 def test_node_info_empty_path(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles",
     }
     response = pytest.test_client.get("/ids_info/node_info", params=parameters)
 
@@ -43,7 +43,7 @@ def test_node_info_empty_path(entry_path):
 
 def test_find_paths(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}",
+        "uri": f"imas:hdf5?path={entry_path}",
         "searched_node": "version_put",
     }
     response = pytest.test_client.get("/ids_info/find_paths", params=parameters)
@@ -58,7 +58,7 @@ def test_find_paths(entry_path):
 
 def test_array_summary(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
     }
     response = pytest.test_client.get("/ids_info/array_summary", params=parameters)
 
@@ -71,7 +71,7 @@ def test_array_summary(entry_path):
 
 def test_show_error_bars_option(entry_path):
     parameters = {
-        "uri": f"imas:mdsplus?path={entry_path}#core_profiles/vacuum_toroidal_field",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/vacuum_toroidal_field",
         "show_error_bars": False,
     }
     response = pytest.test_client.get("/ids_info/node_info", params=parameters)
@@ -82,7 +82,7 @@ def test_show_error_bars_option(entry_path):
             x in child["name"] for x in ["_error_upper", "_error_lower", "_error_index"]
         ), f"Error bars filtering failed. Node {child['name']} should not be returned."
 
-    parameters = {"uri": f"imas:mdsplus?path={entry_path}#core_profiles/vacuum_toroidal_field", "show_error_bars": True}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/vacuum_toroidal_field", "show_error_bars": True}
     response = pytest.test_client.get("/ids_info/node_info", params=parameters)
     assert response.status_code == 200
     assert "r0_error_upper" in [

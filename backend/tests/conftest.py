@@ -12,7 +12,7 @@ pytest.test_client = TestClient(app)
 def entry_path(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("testdb")
 
-    entry = imas.DBEntry(f"imas:mdsplus?path={tmp_path}", mode="w")
+    entry = imas.DBEntry(f"imas:hdf5?path={tmp_path}", mode="w")
     core_profiles = entry.factory.core_profiles()
 
     core_profiles.ids_properties.homogeneous_time = 1
