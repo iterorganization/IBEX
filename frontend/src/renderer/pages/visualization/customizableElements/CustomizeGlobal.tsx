@@ -70,7 +70,11 @@ export const CustomizeGlobal = ({
           description="Customize the type of x axis"
           placeholder="Customize the type of x axis"
           data={getSelectableData(typeOfXData)}
-          value={customizedDataGrid?.xAxisData?.type}
+          value={
+            customizedDataGrid?.xAxisData?.type ||
+            getSelectableData(typeOfXData).find((el) => el.disabled === false)
+              .value
+          }
           onChange={(value) =>
             value &&
             setCustomizedDataGrid({
@@ -85,7 +89,11 @@ export const CustomizeGlobal = ({
           description="Customize the type of y axis"
           placeholder="Customize the type of y axis"
           data={getSelectableData(typeOfYData)}
-          value={customizedDataGrid?.yAxisData?.type || 'linear'}
+          value={
+            customizedDataGrid?.yAxisData?.type ||
+            getSelectableData(typeOfYData).find((el) => el.disabled === false)
+              .value
+          }
           onChange={(value) =>
             value &&
             setCustomizedDataGrid({
@@ -101,7 +109,12 @@ export const CustomizeGlobal = ({
             description="Customize the type of y2 axis"
             placeholder="Customize the type of y2 axis"
             data={getSelectableData(typeOfY2Data)}
-            value={customizedDataGrid?.y2AxisData?.type || 'linear'}
+            value={
+              customizedDataGrid?.y2AxisData?.type ||
+              getSelectableData(typeOfY2Data).find(
+                (el) => el.disabled === false,
+              ).value
+            }
             onChange={(value) =>
               value &&
               setCustomizedDataGrid({

@@ -780,7 +780,7 @@ export async function plotNodeUriLoaded(
         const updatedXAxisData: Axis = dataGrid.xAxisData;
 
         const updatedPlot: DataPlotly[] = [];
-        for (const plot of dataGrid.plot) {
+        for (const [index, plot] of dataGrid.plot.entries()) {
           if (!plot.nodeUri) {
             updatedPlot.push(plot);
             continue;
@@ -855,6 +855,14 @@ export async function plotNodeUriLoaded(
                 lastField,
                 matchingCoord.valueIndex,
               );
+
+              if (response.data.coordinates.length > 0 && index === 0) {
+                // Update x axis informations to plot right x axis title in a saved file with transposition (useless if transposition will be restored at load)
+                updatedXAxisData.name = response.data.coordinates[0].name;
+                updatedXAxisData.unit = response.data.coordinates[0].unit;
+                updatedXAxisData.path = response.data.coordinates[0].path;
+                delete updatedXAxisData.type;
+              }
 
               matchingCoordList.push(matchingCoord);
             }
