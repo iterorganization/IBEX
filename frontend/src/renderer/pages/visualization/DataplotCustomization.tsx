@@ -223,12 +223,12 @@ export const DataplotCustomization = () => {
     // Get child elements from the legend
     const legends = customContainer.querySelectorAll<SVGGElement>('g.layers');
 
+    const updatedPlotColors = JSON.parse(
+      JSON.stringify(customizedDataGrid),
+    ) as DataGridPlot;
     if (legends?.length) {
+      // When we have a color legend (so several plots)
       let plotIndex = 0;
-      const updatedPlotColors = JSON.parse(
-        JSON.stringify(customizedDataGrid),
-      ) as DataGridPlot;
-
       let shouldUpdateColors = false;
       for (const plot of updatedPlotColors.plot) {
         // Get from DOM & set color in plot.line for each plots
@@ -255,9 +255,13 @@ export const DataplotCustomization = () => {
       if (!shouldUpdateColors) {
         return;
       }
-
-      setCustomizedDataGrid(updatedPlotColors);
+    } else if (updatedPlotColors.plot.length === 1) {
+      // When we have only one plot, thee is no legend so we set manualy to the first plotly color
+      updatedPlotColors.plot[0].line = {
+        color: 'rgb(31, 119, 180)',
+      } as PlotLine;
     }
+    setCustomizedDataGrid(updatedPlotColors);
   };
 
   useEffect(() => {

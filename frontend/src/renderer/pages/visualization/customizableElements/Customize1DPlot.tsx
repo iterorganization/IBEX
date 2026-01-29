@@ -71,9 +71,10 @@ export const Customize1DPlot = ({
       JSON.stringify(customizedDataGrid),
     ) as DataGridPlot;
 
-    updatedDataPlot.plot.find(
+    const plotToUpdate = updatedDataPlot.plot.find(
       (plot) => plot.name === selectedPlot.name,
-    ).line.shape = newShape;
+    );
+    plotToUpdate.line = { ...plotToUpdate?.line, shape: newShape };
 
     setCustomizedDataGrid({
       ...customizedDataGrid,
