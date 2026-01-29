@@ -39,14 +39,14 @@ export const CustomizeDataRange = ({
       customizedDataGrid.coordinates,
       coordinate.axeIndex,
     );
-    const minValueRange = coordinate?.rangeValues
+    const minRangeValue = coordinate?.rangeValues
       ? coordinate.rangeValues[0]
       : coordVector[0];
-    const maxValueRange = coordinate?.rangeValues
+    const maxRangeValue = coordinate?.rangeValues
       ? coordinate.rangeValues[1]
       : coordVector[coordVector.length - 1];
-    const [valueRangeMin, setValueRangeMin] = useState(minValueRange);
-    const [valueRangeMax, setValueRangeMax] = useState(maxValueRange);
+    const [typedMinRange, setTypedMinRange] = useState(minRangeValue);
+    const [typedMaxRange, setTypedMaxRange] = useState(maxRangeValue);
     const [isLoadingApply, setIsLoadingApply] = useState(false);
     const [isLoadingRestore, setIsLoadingRestore] = useState(false);
 
@@ -60,6 +60,15 @@ export const CustomizeDataRange = ({
       if (!newValueRange) {
         return;
       }
+
+      // Ensure number ranges are numbers and force to 0 if not
+      if (typeof minRangeValue !== typeof newValueRange[0]) {
+        newValueRange[0] = 0;
+      }
+      if (typeof maxRangeValue !== typeof newValueRange[1]) {
+        newValueRange[1] = 0;
+      }
+
       setIsLoadingApply(true);
       const appliedRange = await applyRange(
         coordinate,
@@ -231,22 +240,22 @@ export const CustomizeDataRange = ({
     return (
       <Group align="flex-end">
         <Group align="flex-end" justify="space-between">
-          {typeof valueRangeMin === 'number' ? (
+          {typeof minRangeValue === 'number' ? (
             <>
               <NumberInput
                 label="Min"
                 description="Update the min range"
                 placeholder="Update the min range"
-                value={valueRangeMin}
-                onChange={(value: number) => setValueRangeMin(value)}
+                value={typedMinRange}
+                onChange={(value: number) => setTypedMinRange(value)}
                 w={150}
               />
               <NumberInput
                 label="Max"
                 description="Update the max range"
                 placeholder="Update the max range"
-                value={valueRangeMax}
-                onChange={(value: number) => setValueRangeMax(value)}
+                value={typedMaxRange}
+                onChange={(value: number) => setTypedMaxRange(value)}
                 w={150}
               />
             </>
@@ -256,9 +265,9 @@ export const CustomizeDataRange = ({
                 label="Min"
                 description="Update the min range"
                 placeholder="Update the min range"
-                value={valueRangeMin}
+                value={typedMinRange}
                 onChange={(event) =>
-                  setValueRangeMin(event.currentTarget.value)
+                  setTypedMinRange(event.currentTarget.value)
                 }
                 w={150}
               />
@@ -266,9 +275,9 @@ export const CustomizeDataRange = ({
                 label="Max"
                 description="Update the max range"
                 placeholder="Update the max range"
-                value={valueRangeMax}
+                value={typedMaxRange}
                 onChange={(event) =>
-                  setValueRangeMax(event.currentTarget.value)
+                  setTypedMaxRange(event.currentTarget.value)
                 }
                 w={150}
               />
@@ -280,7 +289,7 @@ export const CustomizeDataRange = ({
             onClick={async () =>
               handleApplyRange(
                 coordinate,
-                [valueRangeMin, valueRangeMax] as
+                [typedMinRange, typedMaxRange] as
                   | [number, number]
                   | [string, string],
                 customizedDataGrid,
