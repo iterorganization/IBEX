@@ -1331,7 +1331,7 @@ async function transposeAxis(
       JSON.stringify(updatedDataPlot.coordinates),
     )
       .map((coord: Coordinates) => coord.axeIndex)
-      .sort()
+      .sort((a: number, b: number) => a - b)
       .reverse(); // Reverse to get axeIndex order
     // SWAP axeIndexOfTargetAxis with axeIndexToSwap
     const tempSwap = newPositions[axeIndexOfTargetAxis];
@@ -1509,7 +1509,7 @@ export const getRangeIndex = async (
 ) => {
   // Sort value range inputs
   if (typeof newValueRange[0] === 'number') {
-    newValueRange.sort();
+    (newValueRange as [number, number]).sort((a, b) => a - b);
   } else {
     const coordVector = getArrayValueFromDependance(
       updatedDataPlot.coordinates,
@@ -1542,7 +1542,6 @@ export const getRangeIndex = async (
 
   const rangeMatched = [];
   if (typeof newValueRange[0] === 'number') {
-    // if(typeof getFirstArrayValueFromShape(coordToUpdate.data, coordToUpdate.shape)[0] === 'number'){ // ! ANCIEN qd check type sur tableau
     const min = newValueRange[0] as number;
     const max = newValueRange[1] as number;
 
