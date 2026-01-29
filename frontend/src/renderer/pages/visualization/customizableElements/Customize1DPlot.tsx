@@ -123,7 +123,10 @@ export const Customize1DPlot = ({
         label="Plot shape"
         description="Customize the shape"
         placeholder="Customize the shape"
-        data={['linear', 'hv']}
+        data={[
+          { value: 'linear', label: 'linear' },
+          { value: 'hv', label: 'hv (Horizontal-Vertical)' },
+        ]}
         value={selectedPlot?.line?.shape || 'linear'}
         onChange={(value) => updatePlotShape(value)}
         maw={200}

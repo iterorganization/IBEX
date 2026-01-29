@@ -12,6 +12,8 @@ import {
 import { showNotification } from '@mantine/notifications';
 import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { OptionWithTooltip } from '../../../types/components/select';
+import { RenderSelectOption } from '../../../components/select';
 
 interface CustomizeDownsamplingProps {
   customizedDataGrid: DataGridPlot;
@@ -21,7 +23,9 @@ export const CustomizeDownsampling = ({
   customizedDataGrid,
   setCustomizedDataGrid,
 }: CustomizeDownsamplingProps) => {
-  const [downsamplingList, setDownsamplingList] = useState<string[]>([]);
+  const [downsamplingList, setDownsamplingList] = useState<OptionWithTooltip[]>(
+    [],
+  );
   const [downsamplingSize, setDownsamplingSize] = useState<number>(1000);
   const [downsamplingMethod, setDownsamplingMethod] = useState<string | null>(
     null,
@@ -132,9 +136,13 @@ export const CustomizeDownsampling = ({
   useEffect(() => {
     const getDownsamplingList = async () => {
       const methodsRes = await fetchDownsamplingMethods();
-      setDownsamplingList(
-        methodsRes.downsampling_methods.map((method) => method.name),
+      const options: OptionWithTooltip[] = methodsRes.downsampling_methods.map(
+        (item) => ({
+          value: item.name,
+          tooltip: item.description,
+        }),
       );
+      setDownsamplingList(options);
     };
     getDownsamplingList();
   }, []);
@@ -161,8 +169,19 @@ export const CustomizeDownsampling = ({
           description="Select the method"
           placeholder="Select the method"
           value={downsamplingMethod || 'None'}
-          data={downsamplingList}
+          data={downsamplingList.map((meth) => meth.value)}
           onChange={setDownsamplingMethod}
+          renderOption={(option) => {
+            const selectedOption = downsamplingList.find(
+              (meth) => option.option.value === meth.value,
+            );
+            return (
+              <RenderSelectOption
+                option={selectedOption}
+                checked={option.checked}
+              />
+            );
+          }}
           w="45%"
           maw={200}
         />
