@@ -48,6 +48,7 @@ const Customization = ({
     component: JSX.Element;
     icon?: JSX.Element;
     disabled?: boolean;
+    tooltip?: string;
   };
   const accordionItems: accordionItemsType[] = [
     {
@@ -87,7 +88,11 @@ const Customization = ({
         />
       ),
       icon: (
-        <ActionIcon variant="filled" component="span">
+        <ActionIcon
+          variant="filled"
+          component="span"
+          disabled={customizedDataGrid.coordinates.length < 2}
+        >
           <svg width="50" height="50" viewBox="0 0 50 50">
             <rect x="0" y="0" width="15" height="15" fill="#440154" />
             <rect x="17" y="0" width="15" height="15" fill="#31688e" />
@@ -103,6 +108,8 @@ const Customization = ({
           </svg>
         </ActionIcon>
       ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't display heatmap",
     },
     {
       value: 'Axis range',
@@ -132,7 +139,11 @@ const Customization = ({
   const items = accordionItems.map((item) => (
     <Tooltip
       key={item.value}
-      label={item?.disabled ? 'This feature will be available soon' : ''}
+      label={
+        item?.disabled
+          ? item?.tooltip || 'This feature will be available soon'
+          : ''
+      }
       position="bottom-start"
       opened={item?.disabled ? null : false}
     >
