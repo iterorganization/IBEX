@@ -249,6 +249,7 @@ export const CustomizeDataRange = ({
                 value={typedMinRange}
                 onChange={(value: number) => setTypedMinRange(value)}
                 w={150}
+                hideControls
               />
               <NumberInput
                 label="Max"
@@ -257,6 +258,7 @@ export const CustomizeDataRange = ({
                 value={typedMaxRange}
                 onChange={(value: number) => setTypedMaxRange(value)}
                 w={150}
+                hideControls
               />
             </>
           ) : (
