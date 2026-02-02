@@ -1,3 +1,5 @@
+import { NodeInfoTypeEnum } from './nodes';
+
 export type URIData = {
   name: string;
   uri: string;
@@ -11,6 +13,7 @@ export type URISelectionData = URIData & {
 export type URITreeNodeData = {
   name: string;
   uri: string;
+  type: NodeInfoTypeEnum;
 };
 
 export type URIExistsResponse = {

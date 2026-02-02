@@ -6,7 +6,6 @@ import {
   Text,
   Tooltip,
   Tree,
-  TreeNodeData,
   UseTreeReturnType,
   useTree,
 } from '@mantine/core';
@@ -29,7 +28,7 @@ import { hasUserSelectedText } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface NodeIconProps {
-  node: TreeNodeData;
+  node: CustomTreeNodeData;
   type: NodeInfoTypeEnum;
   uriLabel: string;
   expanded: boolean;
@@ -52,6 +51,7 @@ interface TreeLibraryProps {
 }
 
 interface ElementProps extends RenderTreeNodePayload {
+  node: CustomTreeNodeData;
   type: NodeInfoTypeEnum;
   uriLabel: string;
   selectedNode: string | null;
@@ -218,6 +218,7 @@ function NodeIcon({
           const newCheckedNode: URITreeNodeData = {
             name: uriLabel,
             uri: node.value,
+            type: node.type,
           };
           checkedNodes.push(newCheckedNode);
         }
@@ -440,19 +441,22 @@ export const TreeLibrary = ({
         data={treeData}
         className={classes.tree}
         expandOnClick={false}
-        renderNode={(payload) => (
-          <Element
-            {...payload}
-            type={(payload.node as CustomTreeNodeData).type}
-            uriLabel={(payload.node as CustomTreeNodeData).uriLabel}
-            selectedNode={selectedNode}
-            tree={tree}
-            checkedNodes={checkedNodes}
-            setSelectedNode={setSelectedNode}
-            handleSelectChildren={handleSelectChildren}
-            getCheckedNodes={getCheckedNodes}
-          />
-        )}
+        renderNode={(payload) => {
+          return (
+            <Element
+              {...payload}
+              node={payload.node as CustomTreeNodeData}
+              type={(payload.node as CustomTreeNodeData).type}
+              uriLabel={(payload.node as CustomTreeNodeData).uriLabel}
+              selectedNode={selectedNode}
+              tree={tree}
+              checkedNodes={checkedNodes}
+              setSelectedNode={setSelectedNode}
+              handleSelectChildren={handleSelectChildren}
+              getCheckedNodes={getCheckedNodes}
+            />
+          );
+        }}
       />
     </ScrollArea>
   );

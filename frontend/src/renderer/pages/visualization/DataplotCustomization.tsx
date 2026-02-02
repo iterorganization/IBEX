@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SimplePlotly, Surface2D, TabsListCustom } from '../../components';
+import { SimplePlotly, Heatmap2D, TabsListCustom } from '../../components';
 import {
   Configuration,
   DataGridPlot,
@@ -373,7 +373,7 @@ export const DataplotCustomization = () => {
                     <Grid type="container" ref={customContainerRef}>
                       <Grid.Col span={6}>
                         {selectedAccordion === 'Heatmap' ? (
-                          <Surface2D
+                          <Heatmap2D
                             itemDataGrid={customizedDataGrid}
                             width={WIDTH_PLOT}
                             height={HEIGHT_PLOT}

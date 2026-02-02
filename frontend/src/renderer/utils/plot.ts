@@ -186,6 +186,7 @@ export const handleNewPlot = async (
     response.data.downsampled_method,
     response.data.description,
   );
+  updatedPlot.dataType = nodes[0].type;
   updatedActive.dataPlot.push(updatedPlot);
   return updatedActive;
 };
@@ -541,6 +542,7 @@ export const fetchErrorBandsInConfig = async (
           const newCheckedNode = {
             name: updatedPlot.labelUri,
             uri: normalizeIndices(error_band.path),
+            type: selectedDataPlot.dataType,
           };
           const exists = updatedCheckedNodeURI.some(
             (node) =>
@@ -726,6 +728,7 @@ export function formatConfigBeforeLoadingURIs(
     (data): DataGridPlot => ({
       ...data,
       isEditing: false,
+      dataType: data.dataType,
       static: false,
       coordinates:
         data.coordinates && data.coordinates.length > 0

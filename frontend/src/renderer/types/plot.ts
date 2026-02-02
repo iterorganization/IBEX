@@ -1,5 +1,6 @@
 import { Data, ErrorBar } from 'plotly.js';
 import { Layout } from 'react-grid-layout';
+import { NodeInfoTypeEnum } from './nodes';
 
 export interface Axis {
   name: string;
@@ -87,12 +88,15 @@ export interface BaseDataGridPlot {
 export interface DataGridPlot extends Layout, BaseDataGridPlot {
   plot: DataPlotly[];
   isEditing: boolean;
+  dataType?: NodeInfoTypeEnum;
   coordinates?: Coordinates[];
   downsampled_method?: string;
   downsampled_size?: number;
+  selectedPlotMode?: 'Heatmap' | '1D';
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
+  dataType: NodeInfoTypeEnum;
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
 }
