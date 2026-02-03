@@ -1412,13 +1412,29 @@ const trimCoordData = async (
     index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
   );
 
+  const trimmed = tf.slice(dataTensorized, originShape, shapeSize);
+
   if (dependencyIndex === undefined) {
     // Update the new range when updating the main coordinate
     updatedCoord.range = newRange;
-    updatedCoord.rangeValues = newValueRange;
+    if (typeof newValueRange[0] === 'string') {
+      // Set first and last value from sliced data in rangeValues
+      const axisData = (await trimmed.array()) as AxisData;
+      const firstArrayValue = getFirstArrayValueFromShape(
+        axisData,
+        trimmed.shape,
+      ) as unknown as string[];
+      updatedCoord.rangeValues = [
+        firstArrayValue[0],
+        firstArrayValue[firstArrayValue.length - 1],
+      ];
+    } else {
+      // Set typed number in value range
+      updatedCoord.rangeValues = newValueRange;
+    }
   }
 
-  return tf.slice(dataTensorized, originShape, shapeSize);
+  return trimmed;
 };
 
 /**
@@ -1507,27 +1523,6 @@ export const getRangeIndex = async (
   coordinate: Coordinates,
   shouldApplyRangeOriginInCoord?: boolean,
 ) => {
-  // Sort value range inputs
-  if (typeof newValueRange[0] === 'number') {
-    (newValueRange as [number, number]).sort((a, b) => a - b);
-  } else {
-    const coordVector = getArrayValueFromDependance(
-      updatedDataPlot.coordinates,
-      coordinate.axeIndex,
-    );
-    const firstIndex = coordVector.findIndex(
-      (value) => value === newValueRange[0],
-    );
-    const secondIndex = coordVector.findIndex(
-      (value) => value === newValueRange[1],
-    );
-    if (firstIndex !== -1 && secondIndex !== -1 && firstIndex > secondIndex) {
-      const temp = newValueRange[0];
-      newValueRange[0] = newValueRange[1];
-      newValueRange[1] = temp;
-    }
-  }
-
   const coordToUpdate = updatedDataPlot.coordinates.find(
     (coord) => coord.name === coordinate.name,
   );

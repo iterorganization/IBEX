@@ -51,7 +51,7 @@ export const CustomizeDataRange = ({
     const [isLoadingRestore, setIsLoadingRestore] = useState(false);
 
     const handleApplyRange = async (
-      coordinate: Coordinates,
+      coordinateToApply: Coordinates,
       newValueRange: [number, number] | [string, string],
       customizedDataGrid: DataGridPlot,
       newPlotsUri?: string[],
@@ -61,30 +61,115 @@ export const CustomizeDataRange = ({
         return;
       }
 
-      // Ensure number ranges are numbers and force to 0 if not
-      if (typeof minRangeValue !== typeof newValueRange[0]) {
-        newValueRange[0] = 0;
-      }
-      if (typeof maxRangeValue !== typeof newValueRange[1]) {
-        newValueRange[1] = 0;
+      if (coordinate.name === coordinateToApply.name) {
+        // Ensure min and max typed have the expected type (we force to 0 if numbers aren't)
+        if (typeof minRangeValue !== typeof newValueRange[0]) {
+          newValueRange[0] = 0;
+        }
+        if (typeof maxRangeValue !== typeof newValueRange[1]) {
+          newValueRange[1] = 0;
+        }
       }
 
+      // Sort value range inputs
+      if (typeof newValueRange[0] === 'number') {
+        (newValueRange as [number, number]).sort((a, b) => a - b);
+      } else {
+        const coordVector = getArrayValueFromDependance(
+          customizedDataGrid.coordinates,
+          coordinateToApply.axeIndex,
+        );
+        const firstIndex = coordVector.findIndex(
+          (value) => value === newValueRange[0],
+        );
+        const secondIndex = coordVector.findIndex(
+          (value) => value === newValueRange[1],
+        );
+        if (
+          firstIndex !== -1 &&
+          secondIndex !== -1 &&
+          firstIndex > secondIndex
+        ) {
+          const temp = newValueRange[0];
+          newValueRange[0] = newValueRange[1];
+          newValueRange[1] = temp;
+        }
+      }
+
+      // Check old range to restore data if needed
       setIsLoadingApply(true);
+      if (
+        // Check if numbers min or max are out of actual range
+        (coordinateToApply?.rangeValues &&
+          typeof newValueRange[0] === 'number' &&
+          ((newValueRange[0] as number) <
+            (coordinateToApply.rangeValues[0] as number) ||
+            newValueRange[1] > coordinateToApply.rangeValues[1])) || // Check if strings min or max are not included in actual range
+        (coordinateToApply?.rangeValues &&
+          typeof newValueRange[0] === 'string' &&
+          (!(
+            getFirstArrayValueFromShape(
+              coordinateToApply.data,
+              coordinateToApply.shape,
+            ) as unknown as string[]
+          ).find((value: string) => value === newValueRange[0]) ||
+            !(
+              getFirstArrayValueFromShape(
+                coordinateToApply.data,
+                coordinateToApply.shape,
+              ) as unknown as string[]
+            ).find((value: string) => value === newValueRange[1])))
+      ) {
+        // Restore automatically range before applying new range if types range is out of actual range
+        const appliedRange = await handleRestoreAndApply(
+          newValueRange,
+          newPlotsUri,
+          shouldApplyRangeOriginInCoord,
+        );
+        setCustomizedDataGrid(appliedRange);
+      } else {
+        const appliedRange = await applyRange(
+          coordinateToApply,
+          newValueRange,
+          customizedDataGrid,
+          newPlotsUri,
+          undefined,
+          shouldApplyRangeOriginInCoord,
+        );
+        setCustomizedDataGrid(appliedRange);
+      }
+      setIsLoadingApply(false);
+    };
+
+    const handleRestoreRange = async () => {
+      setIsLoadingRestore(true);
+      await restoreRange();
+      setIsLoadingRestore(false);
+    };
+
+    const handleRestoreAndApply = async (
+      newValueRange: [number, number] | [string, string],
+      newPlotsUri: string[],
+      shouldApplyRangeOriginInCoord: boolean,
+    ) => {
+      const restoredDataGrid = await restoreRange();
+      const restoredCoordinate = restoredDataGrid.coordinates.find(
+        (coord) => coord.axeIndex === coordinate.axeIndex,
+      );
+
       const appliedRange = await applyRange(
-        coordinate,
+        restoredCoordinate,
         newValueRange,
-        customizedDataGrid,
+        restoredDataGrid,
         newPlotsUri,
         undefined,
         shouldApplyRangeOriginInCoord,
       );
-      setCustomizedDataGrid(appliedRange);
-      setIsLoadingApply(false);
+      return appliedRange;
     };
 
     const restoreRange = async () => {
       try {
-        setIsLoadingRestore(true);
         const updatedDataPlot = JSON.parse(
           JSON.stringify(customizedDataGrid),
         ) as DataGridPlot;
@@ -225,15 +310,15 @@ export const CustomizeDataRange = ({
           }
         }
 
-        setCustomizedDataGrid({
+        const newCustomizedDataGrid = {
           ...customizedDataGrid,
           coordinates: updatedDataPlot.coordinates,
           plot: updatedDataPlot.plot,
-        });
+        } as DataGridPlot;
+        setCustomizedDataGrid(newCustomizedDataGrid);
+        return newCustomizedDataGrid;
       } catch (error) {
         console.error('Error restoring the range: ', error);
-      } finally {
-        setIsLoadingRestore(false);
       }
     };
 
@@ -303,7 +388,7 @@ export const CustomizeDataRange = ({
             Apply
           </Button>
           <Button
-            onClick={restoreRange}
+            onClick={handleRestoreRange}
             disabled={!coordinate?.range}
             loading={isLoadingRestore}
             variant="outline"
