@@ -844,5 +844,5 @@ class IMASPythonSource(DataSourceInterface):
                         arr[i] = replace_to
                 # exception occurs for numpy values e.g. numpy.float64
                 except AttributeError:
-                    if x == imas.ids_defs.EMPTY_FLOAT or x == imas.ids_defs.EMPTY_INT:
+                    if x == imas.ids_defs.EMPTY_FLOAT or x == imas.ids_defs.EMPTY_INT or x == imas.ids_defs.EMPTY_COMPLEX:
                         arr[i] = replace_to
