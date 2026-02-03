@@ -37,6 +37,8 @@ from ibex.data_source.exception import (
     InvalidParametersException,
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
+from ibex.core.utils import IMAS_URI
+from ibex.data_source.imas_python_source_utils import convert_ids_data_into_numpy_array, resample_data, union_arrays
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -575,6 +577,7 @@ class IMASPythonSource(DataSourceInterface):
         ids: str,
         node_path: str,
         occurrence: int = 0,
+        interpolate_over: List[str] | None = None,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
     ):
@@ -764,7 +767,33 @@ class IMASPythonSource(DataSourceInterface):
                         }
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
-            data_to_be_returned = ids_data
+            data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
+
+            # ============= BEGIN resample data onto new time vector =============
+
+            if interpolate_over:
+                if first_value.metadata.ndim == 1 and coordinates_to_be_returned[0]["name"] == "time":
+                    #1 collect all time vectors
+                    time_vectors = []
+
+                    time_vectors.append(coordinates_to_be_returned[0]["value"])
+                    for interpolation_uri in interpolate_over:
+                        uri = IMAS_URI(interpolation_uri)
+                        time_vectors.append(self.get_data(uri=uri.uri_entry_identifiers, ids=uri.ids_name, node_path="time", occurrence=uri.occurrence)["value"])
+
+                    #2 calculate common time vector
+                    common_tv = union_arrays(time_vectors)
+
+                    #3 interpolate data_to_be_returned
+                    data_to_be_returned = resample_data(data=data_to_be_returned,original_x=coordinates_to_be_returned[0]["value"], target_x=common_tv)
+
+                    #4 replace `time` coordinate with new time vector
+                    coordinates_to_be_returned[0]["value"] = common_tv
+
+                    if not coordinates_to_be_returned[0]["shape"] == "irregular":
+                        coordinates_to_be_returned[0]["shape"] = np.asarray(coordinates_to_be_returned[0]["value"]).shape
+
+            # ============= END resample data onto new time vector =============
 
             if first_value.metadata.ndim == 2:
                 # Transform 2D arrays.

@@ -6,6 +6,8 @@ from imas.ids_primitive import IDSNumericArray
 from ibex.data_source.exception import NotAnArrayException
 
 import numpy as np  # type: ignore
+from dataclasses import dataclass
+import re
 
 
 def find_first_value_in_list(data: list):
@@ -202,3 +204,59 @@ def downsample_data(data: List, target_size: int, method: str | None = None, x=N
             return x, data[s_ds]
 
     return x, data[s_ds]
+
+@dataclass
+class IMAS_URI:
+    """
+    Helper class to extract arguments from imas uri
+    """
+
+    #: Full URI containing pulse file identifier, ids name and path to node
+    full_uri: str = ""
+
+    #: pulse file identifier extracted from full URI
+    uri_entry_identifiers: str = ""
+    #: fragment part from full URI containing ids name and path to node
+    uri_fragment: str = ""
+    #: ids name extracted from full URI
+    ids_name: str = ""
+    #: path to node extracted from full URI
+    node_path: str = ""
+    #: ids occurrence number extracted from full URI
+    occurrence: int = 0
+
+    def __init__(self, full_uri):
+        """
+        IMAS_URI constructor
+        :param full_uri: pulsefile uri along with #fragment part
+        """
+
+        self.full_uri = full_uri
+
+        if "#" not in self.full_uri:
+            self.uri_entry_identifiers = self.full_uri
+            return
+
+        self.uri_entry_identifiers, self.uri_fragment = self.full_uri.split("#", 1)
+
+        pattern = r"^(?P<idsname>[^:/]+)(?::(?P<occurrence>[^/]*))?(?:/(?P<node_path>.*))?$"
+
+        match = re.match(pattern, self.uri_fragment)
+
+        if not match:
+            return
+
+        self.ids_name = match.group("idsname") if match.group("idsname") else ""
+        self.occurrence = match.group("occurrence") if match.group("occurrence") else 0
+        self.node_path = match.group("node_path") if match.group("node_path") else ""
+
+    def __str__(self):
+        return (
+            f"FULL URI   : {self.full_uri}\n"
+            f"URI        : {self.uri_entry_identifiers}\n"
+            f"FRAGMENT   : {self.uri_fragment}\n"
+            f"IDS        : {self.ids_name}\n"
+            f"OCCURRENCE : {self.occurrence}\n"
+            f"NODE_PATH  : {self.node_path}\n"
+        )
+
