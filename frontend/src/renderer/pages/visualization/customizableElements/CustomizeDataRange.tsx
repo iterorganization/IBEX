@@ -98,27 +98,53 @@ export const CustomizeDataRange = ({
 
       // Check old range to restore data if needed
       setIsLoadingApply(true);
+
+      let minStringValue, maxStringValue: string;
+      if (
+        coordinateToApply?.rangeValues &&
+        typeof newValueRange[0] === 'string'
+      ) {
+        // Get min and max by checking if they are included in axis
+        minStringValue = (
+          getFirstArrayValueFromShape(
+            coordinateToApply.data,
+            coordinateToApply.shape,
+          ) as unknown as string[]
+        ).find(
+          (value: string) =>
+            newValueRange[0] !== '' &&
+            value.includes(newValueRange[0] as string),
+        );
+        maxStringValue = (
+          getFirstArrayValueFromShape(
+            coordinateToApply.data,
+            coordinateToApply.shape,
+          ) as unknown as string[]
+        ).find(
+          (value: string) =>
+            newValueRange[1] !== '' &&
+            value.includes(newValueRange[1] as string),
+        );
+
+        if (minStringValue) {
+          newValueRange[0] = minStringValue;
+        }
+        if (maxStringValue) {
+          newValueRange[1] = maxStringValue;
+        }
+      }
+
       if (
         // Check if numbers min or max are out of actual range
         (coordinateToApply?.rangeValues &&
           typeof newValueRange[0] === 'number' &&
           ((newValueRange[0] as number) <
             (coordinateToApply.rangeValues[0] as number) ||
-            newValueRange[1] > coordinateToApply.rangeValues[1])) || // Check if strings min or max are not included in actual range
+            newValueRange[1] > coordinateToApply.rangeValues[1])) ||
+        // Check if strings min or max are not included in actual range
         (coordinateToApply?.rangeValues &&
           typeof newValueRange[0] === 'string' &&
-          (!(
-            getFirstArrayValueFromShape(
-              coordinateToApply.data,
-              coordinateToApply.shape,
-            ) as unknown as string[]
-          ).find((value: string) => value === newValueRange[0]) ||
-            !(
-              getFirstArrayValueFromShape(
-                coordinateToApply.data,
-                coordinateToApply.shape,
-              ) as unknown as string[]
-            ).find((value: string) => value === newValueRange[1])))
+          (!minStringValue || !maxStringValue))
       ) {
         // Restore automatically range before applying new range if types range is out of actual range
         const appliedRange = await handleRestoreAndApply(

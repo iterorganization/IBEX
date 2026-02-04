@@ -1568,9 +1568,13 @@ export const getRangeIndex = async (
       newRange[0] = rangeMatched[0];
     }
   } else if (typeof newValueRange[0] === 'string') {
-    const firstIndex = coordVector.findIndex((val) => val === newValueRange[0]);
-    const secondIndex = coordVector.findIndex(
-      (val) => val === newValueRange[1],
+    const firstIndex = (coordVector as string[]).findIndex(
+      (val) =>
+        newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
+    );
+    const secondIndex = (coordVector as string[]).findIndex(
+      (val) =>
+        newValueRange[1] !== '' && val.includes(newValueRange[1] as string),
     );
     if (firstIndex !== -1) {
       rangeMatched.push(
