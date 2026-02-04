@@ -20,6 +20,9 @@ IBEX (IMAS variaBles EXplorer) is a general purpose graphical tool for exploring
     
     # this script packs frontend and prepares site-packages with backend
     ./install.sh
+
+    # test if it runs successfully
+    ./frontend/out/ibex-linux-x64/ibex
 ```
 
 ### Run IBEX on SDCC
