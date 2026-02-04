@@ -1,8 +1,25 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session, dialog } from 'electron';
 import { createWindow } from './window';
 import ipc from './ipc';
 import { config } from 'dotenv';
+import { BackendManager } from './backend-manager';
+import fs from 'fs';
+import path from 'path';
 
+const ensureCwd = (): void => {
+  try {
+    const current = process.cwd();
+    if (!fs.existsSync(current)) {
+      throw new Error('cwd does not exist');
+    }
+  } catch {
+    const fallback = app.getPath('userData');
+    fs.mkdirSync(fallback, { recursive: true });
+    process.chdir(fallback);
+  }
+};
+
+ensureCwd();
 config();
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -13,8 +30,33 @@ if (isSquirrelStartup) {
   app.quit();
 }
 
-app.whenReady().then(() => {
+const backendManager = new BackendManager();
+
+app.whenReady().then(async () => {
   console.info('App is ready, environment:', process.env.NODE_ENV);
+
+  const backendResult = await backendManager.startBackend();
+
+  if (!backendResult.success) {
+    const response = await dialog.showMessageBox({
+      type: 'error',
+      title: 'Backend Startup Failed',
+      message: 'Failed to start the backend server.',
+      detail: 'Check the console for detailed error messages.',
+      buttons: ['Continue Anyway', 'Exit'],
+      defaultId: 1,
+    });
+
+    if (response.response === 1) {
+      app.quit();
+      return;
+    }
+  } else {
+    console.info(`Backend server started successfully at ${backendResult.url}`);
+    // Store backend URL in environment for the renderer process to access
+    process.env.IBEX_BACKEND_URL = backendResult.url;
+  }
+
   createWindow();
 
   ipc.initialize();
@@ -34,6 +76,7 @@ app.whenReady().then(() => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    backendManager.stopBackend();
     app.quit();
   }
 });
@@ -44,4 +87,9 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+app.on('before-quit', async () => {
+  console.info('Application is quitting, stopping backend...');
+  await backendManager.stopBackend();
 });

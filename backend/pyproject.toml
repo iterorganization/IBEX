@@ -43,6 +43,7 @@ dynamic = ["version"]
 dependencies = [
     "imas-python",
     "imas-idstools",
+    "click",
     "uvicorn",
     "fastapi[standard]==0.115.14",
     "packaging",
