@@ -401,6 +401,10 @@ class IMASPythonSource(DataSourceInterface):
         while isinstance(first_value, list):
             first_value = first_value[0]
 
+        self._replace_empty_numbers(data_to_be_returned)
+        if self._is_empty(data_to_be_returned):
+            raise NoDataException(f"No data for {node_path}")
+
         if first_value.metadata.ndim == 1 and downsampling_method is not None:
             _, data_to_be_returned = downsample_data(
                 data=data_to_be_returned, target_size=downsampled_size, method=downsampling_method
@@ -596,18 +600,7 @@ class IMASPythonSource(DataSourceInterface):
             ids_data = self._get_raw_data(ids_obj, path_elements)
             self._check_data_is_leaf_node(ids_data)
 
-            # function to check if list is essentially empty (contains only empty lists or empty strings)
-            def is_empty(seq):
-                if isinstance(seq, (IDSNumericArray, IDSString0D, IDSString1D, IDSComplex0D, IDSFloat0D, IDSInt0D)):
-                    return not seq.has_value
-                if isinstance(seq, np.ndarray):
-                    return seq.size == 0
-                elif isinstance(seq, list):
-                    return all(map(is_empty, seq))
-                else:
-                    return False
-
-            if is_empty(ids_data):
+            if self._is_empty(ids_data):
                 raise NoDataException(f"No data for {node_path}")
             coordinates_to_be_returned = []
 
@@ -825,3 +818,31 @@ class IMASPythonSource(DataSourceInterface):
                     new_shape_factors_list.append(coord_name)
                 coordinate["coordinates"] = new_shape_factors_list
         return result
+
+
+    def _is_empty(self, seq):
+        """Checks if list is essentially empty (contains only empty lists or empty strings)"""
+        if isinstance(seq, (IDSNumericArray, IDSString0D, IDSString1D, IDSComplex0D, IDSFloat0D, IDSInt0D)):
+            return not seq.has_value
+        if isinstance(seq, np.ndarray):
+            return seq.size == 0
+        if isinstance(seq, list):
+            return all(map(self._is_empty, seq))
+        if np.isnan(seq):
+            return True
+        else:
+            return False
+
+    def _replace_empty_numbers(self, arr, replace_to=np.nan):
+        for i, x in enumerate(arr):
+            if isinstance(x, list):
+                self._replace_empty_numbers(x, replace_to)
+            else:
+
+                try:
+                    if not x.has_value:
+                        arr[i] = replace_to
+                # exception occurs for numpy values e.g. numpy.float64
+                except AttributeError:
+                    if x == imas.ids_defs.EMPTY_FLOAT or x == imas.ids_defs.EMPTY_INT or x == imas.ids_defs.EMPTY_COMPLEX:
+                        arr[i] = replace_to
