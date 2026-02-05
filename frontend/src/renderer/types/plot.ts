@@ -84,6 +84,7 @@ export interface BaseDataGridPlot {
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
   displayGrid: boolean;
+  synchronizedGrids: string[];
   downsampled_method?: string;
   downsampled_size?: number;
   xAxisData?: Axis;

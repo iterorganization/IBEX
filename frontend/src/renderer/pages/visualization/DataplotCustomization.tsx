@@ -23,6 +23,7 @@ import { CustomizeDownsampling, CustomizeGlobal } from './customizableElements';
 import { CustomizeHeatmap } from './customizableElements/CustomizeHeatmap';
 import { Customize1DPlot } from './customizableElements/Customize1DPlot';
 import { CustomizeDataRange } from './customizableElements/CustomizeDataRange';
+import { CustomizeSynchronization } from './customizableElements/CustomizeSynchronization';
 interface CustomizationProps {
   customizedDataGrid: DataGridPlot;
   selectedAccordion: string | null;
@@ -131,8 +132,12 @@ const Customization = ({
     },
     {
       value: 'Dataplots synchronization',
-      component: <></>,
-      disabled: true,
+      component: (
+        <CustomizeSynchronization
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
     },
   ];
 
