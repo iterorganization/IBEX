@@ -1568,14 +1568,22 @@ export const getRangeIndex = async (
       newRange[0] = rangeMatched[0];
     }
   } else if (typeof newValueRange[0] === 'string') {
+    // Get index of first occurence
     const firstIndex = (coordVector as string[]).findIndex(
       (val) =>
         newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
     );
-    const secondIndex = (coordVector as string[]).findIndex(
-      (val) =>
-        newValueRange[1] !== '' && val.includes(newValueRange[1] as string),
-    );
+    // Get index of last occurence
+    let secondIndex = (JSON.parse(JSON.stringify(coordVector)) as string[])
+      .reverse()
+      .findIndex(
+        (val) =>
+          newValueRange[1] !== '' && val.includes(newValueRange[1] as string),
+      );
+    if (secondIndex !== -1) {
+      secondIndex = coordVector.length - 1 - secondIndex;
+    }
+
     if (firstIndex !== -1) {
       rangeMatched.push(
         shouldApplyRangeOriginInCoord ? firstIndex : newRange[0] + firstIndex,
