@@ -17,17 +17,6 @@ echo "3. Installing backend"
 pip install --upgrade pip setuptools wheel
 cd "$SCRIPT_DIR/backend" && pip install .
 cd "$SCRIPT_DIR"
-
-# Create standalone backend binary
-pip install pyinstaller
-pyinstaller --onefile \
-  --hidden-import=uvicorn \
-  --hidden-import=fastapi \
-  --hidden-import=imas \
-  --hidden-import=imas_data_dictionaries \
-  --collect-all imas_data_dictionaries \
-  backend/bin/run_ibex_service
-
 echo "5. Installing frontend dependencies..."
 cd "$SCRIPT_DIR/frontend"
 npm install

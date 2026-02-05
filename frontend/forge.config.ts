@@ -67,24 +67,6 @@ const config: ForgeConfig = {
     }),
   ],
   hooks: {
-    postPackage: async (config: any, options: any) => {
-      const backendBinarySource = path.resolve(__dirname, '..', 'dist', 'run_ibex_service');
-      const outputPath = options.outputPaths[0];
-      const backendDistDest = path.join(outputPath, 'resources', 'backend', 'dist');
-      const backendBinaryDest = path.join(backendDistDest, 'run_ibex_service');
-
-      if (fs.existsSync(backendBinarySource)) {
-        try {
-          fs.mkdirSync(backendDistDest, { recursive: true });
-          fs.copyFileSync(backendBinarySource, backendBinaryDest);
-          fs.chmodSync(backendBinaryDest, 0o755);
-        } catch (error) {
-          console.error(`[postPackage] ✗ Failed to copy backend binary: ${error}`);
-        }
-      } else {
-        console.warn(`[postPackage] ⚠ Warning: backend binary not found at ${backendBinarySource}`);
-      }
-    },
     preMake: async () => {
       const outDir = path.resolve(__dirname, 'out');
       const backendLicense = path.resolve(__dirname, '..', 'backend', 'LICENSE.txt');

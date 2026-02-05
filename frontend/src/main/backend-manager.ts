@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { app } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -12,7 +12,7 @@ export class BackendManager {
   private backendReady: boolean = false;
 
   constructor() {
-    // No need to detect Python anymore - we use PyInstaller binary
+    // Backend command detection happens in getBackendCommand
   }
 
   private async isPortInUse(port: number, host: string = '127.0.0.1'): Promise<boolean> {
@@ -29,15 +29,9 @@ export class BackendManager {
     });
   }
 
-  private getBackendBinaryPath(): string {
-    if (app.isPackaged) {
-      // In production, backend binary is bundled in resources
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return path.join((process as any).resourcesPath, 'backend', 'dist', 'run_ibex_service');
-    } else {
-      // In development, backend binary is in dist folder
-      return path.join(app.getAppPath(), '..', '..', 'dist', 'run_ibex_service');
-    }
+  private getBackendCommand(): string {
+    // run_ibex_service is always available in PATH
+    return 'run_ibex_service';
   }
 
   private async waitForBackend(maxRetries: number = 30): Promise<boolean> {
@@ -77,35 +71,18 @@ export class BackendManager {
       }
     }
 
-    // Get path to PyInstaller binary
-    const binaryPath = this.getBackendBinaryPath();
+    const backendCommand = this.getBackendCommand();
+    const backendArgs = ['--host', this.backendHost, '--port', this.backendPort.toString()];
     
-    console.info(`Starting backend service: ${binaryPath}`);
-    
-    // Check if binary exists
-    if (!fs.existsSync(binaryPath)) {
-      console.error(`Backend binary not found at: ${binaryPath}`);
-      return {
-        success: false,
-        port: 0,
-        url: '',
-      };
-    }
-
-    // Make binary executable
-    try {
-      fs.chmodSync(binaryPath, 0o755);
-    } catch (error) {
-      console.warn(`Could not chmod binary: ${error}`);
-    }
+    console.info(`Starting backend service: ${backendCommand} ${backendArgs.join(' ')}`);
 
     return new Promise((resolve) => {
       let errorOutput = '';
       
-      // Start the backend service binary
+      // Start the backend service
       this.backendProcess = spawn(
-        binaryPath,
-        ['--host', this.backendHost, '--port', this.backendPort.toString()],
+        backendCommand,
+        backendArgs,
         {
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,

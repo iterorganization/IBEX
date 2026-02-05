@@ -107,3 +107,6 @@ exclude = ["venv", "_version.py", "versioneer.py"]
 omit = [
     "ibex/_version.py",
     ]
+
+[tool.setuptools.data-files]
+"bin" = ["bin/*"]

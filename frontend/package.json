@@ -1,7 +1,7 @@
 {
   "name": "ibex",
   "productName": "ibex",
-  "version": "0.1.0+30.g9d665d2",
+  "version": "0.1.0+31.g69c0fc4.dirty",
   "description": "My Electron application description",
   "main": ".webpack/main",
   "scripts": {
