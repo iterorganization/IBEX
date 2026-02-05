@@ -11,7 +11,6 @@ import { getConfigSync } from './src/config';
 import { mainConfig } from './webpack.main.config';
 import { rendererConfig } from './webpack.renderer.config';
 import path from 'path';
-import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -20,18 +19,14 @@ const configVaribles = getConfigSync();
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    extraResource: [
-      path.resolve(__dirname, '..', 'templates'),
-      path.resolve(__dirname, '..', 'backend'),
-    ],
+    extraResource: [path.resolve(__dirname, '..', 'templates')],
   },
   rebuildConfig: {},
   makers: [
-    // new MakerSquirrel({}),  // Windows only
-    // new MakerZIP({}, ['darwin']),  // macOS only
-    new MakerRpm({}),  // RedHat/Fedora/CentOS
-    // Uncomment for Debian/Ubuntu if dpkg and fakeroot are installed:
-    // new MakerDeb({}),
+    new MakerSquirrel({}),
+    new MakerZIP({}, ['darwin']),
+    new MakerRpm({}),
+    new MakerDeb({}),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
@@ -66,28 +61,6 @@ const config: ForgeConfig = {
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
   ],
-  hooks: {
-    preMake: async () => {
-      const outDir = path.resolve(__dirname, 'out');
-      const backendLicense = path.resolve(__dirname, '..', 'backend', 'LICENSE.txt');
-
-      if (!fs.existsSync(outDir) || !fs.existsSync(backendLicense)) {
-        return;
-      }
-
-      const candidates = fs
-        .readdirSync(outDir)
-        .map((name) => path.join(outDir, name, 'resources', 'backend'))
-        .filter((p) => fs.existsSync(p));
-
-      for (const backendDir of candidates) {
-        const licenseDest = path.join(backendDir, 'LICENSE.txt');
-        if (!fs.existsSync(licenseDest)) {
-          fs.copyFileSync(backendLicense, licenseDest);
-        }
-      }
-    },
-  },
 };
 
 export default config;

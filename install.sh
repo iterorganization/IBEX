@@ -24,10 +24,6 @@ npm install
 # replace version in package.json with current version
 python -c "import json;import ibex; filename='package.json'; data=json.load(open(filename)); data['version']=ibex.__version__; json.dump(data, open(filename, 'w'), indent=2)"
 
-
-export TMPDIR="$SCRIPT_DIR/tmp/ibex-build"
-export ELECTRON_PACKAGER_TEMP_DIR="$SCRIPT_DIR/tmp/electron-packager"
-mkdir -p "$TMPDIR" "$ELECTRON_PACKAGER_TEMP_DIR"
-npm run package
+TMPDIR=~/tmp/ibex-build npm run package
 chmod 755 "$SCRIPT_DIR/frontend/out/ibex-linux-x64"
 chmod -R 755 "$SCRIPT_DIR/frontend/out/ibex-linux-x64/ibex"

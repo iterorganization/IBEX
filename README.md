@@ -10,9 +10,35 @@ IBEX (IMAS variaBles EXplorer) is a general purpose graphical tool for exploring
 
 [Backend readme](backend/README.md)
 
-## Installation
+## Quick Start
 
-### Central installation on SDCC
+### Prerequisites
+- Python 3.9+
+- Node.js 16+
+
+### Installation & Build
+
+```bash
+git clone <ibex_repo>
+cd ibex/backend
+python -m venv ibex_venv
+source ibex_venv/bin/activate
+pip install .
+
+cd ../frontend
+npm install
+npm run build
+```
+
+### Run IBEX
+
+```bash
+./out/ibex-linux-x64/ibex
+```
+
+## Developer Installation
+
+### installation on SDCC
 
 ```commandline
     git clone <ibex_repo>
