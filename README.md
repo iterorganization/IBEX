@@ -27,7 +27,7 @@ pip install .
 
 cd ../frontend
 npm install
-npm run build
+npm run package
 ```
 
 ### Run IBEX
