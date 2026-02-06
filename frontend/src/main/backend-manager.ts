@@ -104,7 +104,7 @@ export class BackendManager {
   }
 
   async startBackend(): Promise<{ success: boolean; port: number; url: string }> {
-    // === REMOTE BACKEND LOGIC ===
+    // REMOTE BACKEND
     if (this.remoteBackendUrl) {
       try {
         const url = new URL(this.remoteBackendUrl);
@@ -126,7 +126,7 @@ export class BackendManager {
       }
     }
 
-    // === LOCAL BACKEND LOGIC (existing code) ===
+    // LOCAL BACKEND
     try {
       this.backendPort = await this.findFreePort(BackendManager.BASE_PORT);
       console.info(`Found free port for backend: ${this.backendPort}`);
