@@ -10,22 +10,70 @@ export class BackendManager {
   private backendPort: number = 8000;
   private backendHost: string = '127.0.0.1';
   private backendReady: boolean = false;
+  private static readonly BASE_PORT = 8000;
+  private remoteBackendUrl: string | null = null;
 
   constructor() {
-    // Backend command detection happens in getBackendCommand
+    // Check for a remote backend URL from environment variables
+    this.remoteBackendUrl = process.env.IBEX_BACKEND_URL || null;
+    if (this.remoteBackendUrl) {
+      console.info(`Remote backend URL configured: ${this.remoteBackendUrl}`);
+    } else {
+      console.info('No remote backend URL configured. Will start a local backend.');
+    }
+  }
+
+  private async findFreePort(startPort: number): Promise<number> {
+    let port = startPort;
+    while (true) {
+      if (!(await this.isPortInUse(port, this.backendHost))) {
+        // Check if we can bind to it briefly
+        try {
+          return await new Promise((resolve, reject) => {
+            const server = net.createServer();
+            server.listen(port, this.backendHost, () => {
+              server.once('close', () => resolve(port));
+              server.close();
+            });
+            server.on('error', () => resolve(this.findFreePort(port + 1)));
+          });
+        } catch (error) {
+          // Port might be taken between check and use, try next
+          port++;
+        }
+      } else {
+        port++;
+      }
+      if (port > 65535) {
+        throw new Error('No free ports available.');
+      }
+    }
   }
 
   private async isPortInUse(port: number, host: string = '127.0.0.1'): Promise<boolean> {
     return new Promise((resolve) => {
-      const server = net.createServer();
-      server.once('error', () => {
-        resolve(true); // Port is in use
+      const socket = new net.Socket();
+
+      const timeout = 200;
+      socket.setTimeout(timeout);
+
+      socket.on('connect', () => {
+        socket.destroy();
+        resolve(true);
       });
-      server.once('listening', () => {
-        server.close();
-        resolve(false); // Port is available
+
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
       });
-      server.listen(port, host);
+
+      socket.on('error', (err) => {
+        // An ECONNREFUSED error means the port is not in use.
+        // Any other error could be something else, but for this purpose, we can treat it as 'not in use'.
+        resolve(false);
+      });
+
+      socket.connect(port, host);
     });
   }
 
@@ -56,19 +104,35 @@ export class BackendManager {
   }
 
   async startBackend(): Promise<{ success: boolean; port: number; url: string }> {
-    // Check if service is already running on the port
-    const portInUse = await this.isPortInUse(this.backendPort, this.backendHost);
-    if (portInUse) {
-      console.info(`Backend service already running on port ${this.backendPort}`);
-      const ready = await this.waitForBackend();
-      if (ready) {
-        const url = `http://${this.backendHost}:${this.backendPort}`;
-        return {
-          success: true,
-          port: this.backendPort,
-          url,
-        };
+    // === REMOTE BACKEND LOGIC ===
+    if (this.remoteBackendUrl) {
+      try {
+        const url = new URL(this.remoteBackendUrl);
+        this.backendHost = url.hostname;
+        this.backendPort = parseInt(url.port, 10);
+
+        console.info(`Attempting to connect to remote backend at ${this.getBackendUrl()}`);
+        const ready = await this.waitForBackend();
+        if (ready) {
+          console.info('Successfully connected to remote backend.');
+          return { success: true, port: this.backendPort, url: this.getBackendUrl() };
+        } else {
+          console.error('Could not connect to the remote backend.');
+          return { success: false, port: this.backendPort, url: this.getBackendUrl() };
+        }
+      } catch (error) {
+        console.error('Invalid remote backend URL provided.', error);
+        return { success: false, port: 0, url: '' };
       }
+    }
+
+    // === LOCAL BACKEND LOGIC (existing code) ===
+    try {
+      this.backendPort = await this.findFreePort(BackendManager.BASE_PORT);
+      console.info(`Found free port for backend: ${this.backendPort}`);
+    } catch (error) {
+      console.error('Failed to find a free port for the backend.', error);
+      return { success: false, port: 0, url: '' };
     }
 
     const backendCommand = this.getBackendCommand();
@@ -102,14 +166,6 @@ export class BackendManager {
       this.backendProcess.stdout?.on('data', (data: Buffer) => {
         const output = data.toString();
         console.info(`[Backend] ${output}`);
-        
-        // Check if server started successfully and extract port
-        if (output.includes('running on') || output.includes('Server is running')) {
-          const match = output.match(/port\s+(\d+)/) || output.match(/:(\d+)/);
-          if (match) {
-            this.backendPort = parseInt(match[1], 10);
-          }
-        }
       });
 
       this.backendProcess.stderr?.on('data', (data: Buffer) => {
