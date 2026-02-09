@@ -1,6 +1,7 @@
 import { showNotification } from '@mantine/notifications';
 import {
   ArraySummaryResponse,
+  AxisData,
   DataIdsResponse,
   DownsamplingMethodsResponse,
   FieldValueResponse,
@@ -13,6 +14,7 @@ import {
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
+import { getTensorizedMatrix } from './plot';
 
 /**
  * Retrieves the API configuration.
@@ -35,12 +37,17 @@ const getConfig = async () => {
 const handleError = (error: unknown, context: string, code?: number) => {
   if (error instanceof Error) {
     if (
-      code === 404 &&
-      error.toString().includes('has no attribute') &&
-      (error.toString().includes('_error_upper') ||
-        error.toString().includes('_error_lower'))
+      // Occurs when having at least one plot with error bands and adding a plot without upper / lower in tree
+      (code === 404 &&
+        error.toString().includes('has no attribute') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower'))) || // Occurs when calling automatically error bands without data
+      (code === 464 &&
+        error.toString().includes('No data for') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower')))
     ) {
-      // Prevent from showing notification when no error band founded (error 404)
+      // Prevent from showing notification when no error band founded
       throw error;
     }
 
@@ -161,7 +168,6 @@ export const fetchDataPlot = async (
   downsamplingMethod?: string,
   downsamplingSize?: number,
 ) => {
-  // TODO récupérer les coordinates.range si existant pour mettre en forme avec les ranges (load newplot, existingplot)
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
   let firstMethod: string;
@@ -219,6 +225,19 @@ export const fetchDataPlot = async (
       message: 'Data are incomplete.',
       color: 'yellow',
     });
+
+    for (const coord of response.data.coordinates) {
+      // Fill incomplete coordinates with NaN to be a matrix format
+      const tensorizedCoordinate = await getTensorizedMatrix(coord.value);
+      coord.value = (await tensorizedCoordinate.array()) as AxisData;
+      coord.shape = tensorizedCoordinate.shape;
+      coord.downsampled_shape = tensorizedCoordinate.shape;
+    }
+    // Fill incomplete data with NaN to be a matrix format
+    const dataTensorized = await getTensorizedMatrix(response.data.value);
+    response.data.value = (await dataTensorized.array()) as AxisData;
+    response.data.shape = dataTensorized.shape;
+    response.data.downsampled_shape = dataTensorized.shape;
   }
   return response;
 };
@@ -235,10 +254,26 @@ export const fetchDownsamplingMethods = async () => {
 /**
  * Retrieves field values for a given URI.
  */
-export const fetchFieldValue = async (uri: string) => {
-  return fetchFromApi<FieldValueResponse>(
-    `/data/field_value/?uri=${encodeURIComponent(uri)}`,
-  );
+export const fetchFieldValue = async (
+  uri: string,
+  downsamplingMethod?: string,
+  downsamplingSize?: number,
+) => {
+  const downsampled_size = downsamplingSize || 1000;
+  let response: FieldValueResponse;
+  if (downsamplingMethod) {
+    // TODO : this is a temporary solution to get downsampled value without using field_value route. We should use this route as soon as downsampling will be fixed
+    const dataPlotResponse = await fetchFromApi<PlotDataResponse>(
+      `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+    );
+
+    response = { value: dataPlotResponse.data.value } as FieldValueResponse;
+  } else {
+    response = await fetchFromApi<FieldValueResponse>(
+      `/data/field_value/?uri=${encodeURIComponent(uri)}`,
+    );
+  }
+  return response;
 };
 
 /**

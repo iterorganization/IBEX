@@ -105,7 +105,7 @@ const Customization = ({
       ),
     },
     {
-      value: 'Data range',
+      value: 'Axis range',
       component: (
         <CustomizeDataRange
           customizedDataGrid={customizedDataGrid}

@@ -234,7 +234,8 @@ export const handleExistingPlot = async (
     // For each dataPlot call fetchDataPlot to get data from BE
     const response = await fetchDataPlot(
       defaultUri,
-      findDataPlot.downsampled_method,
+      findDataPlot?.downsampled_method,
+      findDataPlot?.downsampled_size,
     );
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
@@ -368,7 +369,7 @@ export const handleExistingPlot = async (
     if (response.data.coordinates.length > 0) {
       defaultXValue = getFirstArrayValueFromShape(
         response.data.coordinates[0].value,
-        response.data.coordinates[0].shape as number[],
+        response.data.coordinates[0].downsampled_shape as number[],
       );
     }
 
@@ -388,7 +389,7 @@ export const handleExistingPlot = async (
         defaultUri,
         response.data.ndim,
         yDataResponsePath,
-        response.data.shape as number[],
+        response.data.downsampled_shape as number[],
         node.name,
         response.data.unit,
         response.data.downsampled_method,
@@ -409,7 +410,7 @@ export const handleExistingPlot = async (
         defaultUri,
         response.data.ndim,
         yDataResponsePath,
-        response.data.shape as number[],
+        response.data.downsampled_shape as number[],
         node.name,
         response.data.unit,
         response.data.downsampled_method,
@@ -425,6 +426,7 @@ export const handleExistingPlot = async (
       updatedActive.checkedNodeURI = nodes.filter((n) => n !== node);
     }
 
+    // For each dataPlot get error bands
     if (updatedPlot) {
       updatedActive.dataPlot = [
         ...(updatedActive.dataPlot || []).filter(
@@ -434,9 +436,21 @@ export const handleExistingPlot = async (
       ];
     }
 
-    // For each dataPlot get error bands
-    await fetchErrorBandsInConfig(updatedActive, node.uri);
+    await fetchErrorBandsInConfig(updatedActive, defaultUri);
+
+    // Apply range to new error bands when adding another plot
+    for (const coordinate of updatedPlot.coordinates) {
+      if (coordinate?.range) {
+        updatedPlot = await applyRange(
+          coordinate,
+          coordinate.rangeValues,
+          updatedPlot,
+          [defaultUri],
+        );
+      }
+    }
   }
+
   return updatedActive;
 };
 
@@ -509,9 +523,11 @@ export const fetchErrorBandsInConfig = async (
   }
 
   try {
-    dataPlotWithErrBands = await fetchErrorBands(active.dataPlot, data.i, uri);
+    dataPlotWithErrBands = active.dataPlot;
+    const updatedDataPlot = dataPlotWithErrBands.find((d) => d.i === data.i);
+    const errBandsResponse = await fetchErrorBands(updatedDataPlot, uri);
 
-    if (dataPlotWithErrBands) {
+    if (errBandsResponse) {
       const plot = selectedDataPlot.plot.find(
         (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
       );
@@ -550,25 +566,24 @@ export const fetchErrorBandsInConfig = async (
 
 /**
  * Get & return error bands of provided uri & dataPlot id
- * @param dataPlot
- * @param dataPlotId
- * @param uri
+ * @param dataPlot Datagrid containing the targeted uri
+ * @param uri Uri to get the data
+ * @param forcedDownsamplingMethod Forced downsample method (optional)
+ * @param forcedDownsamplingSize Forced downsample size (optional)
+ * @returns
  */
 export const fetchErrorBands = async (
-  dataPlot: DataGridPlot[],
-  dataPlotId: string,
+  dataPlot: DataGridPlot,
   uri: string,
+  forcedDownsamplingMethod?: string,
+  forcedDownsamplingSize?: number,
 ) => {
-  const data = dataPlot.find((d) => d.i === dataPlotId);
-
-  const selectedDataPlot = dataPlot.find((dataPlot) => dataPlot.i === data.i);
-
-  if (!selectedDataPlot.displayErrorBand) {
+  if (!dataPlot.displayErrorBand) {
     // Stop error bands when the dataPlot switch is off
     return;
   }
 
-  const plot = selectedDataPlot.plot.find(
+  const plot = dataPlot.plot.find(
     (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
   );
   if (!plot) {
@@ -577,12 +592,19 @@ export const fetchErrorBands = async (
   }
 
   try {
+    const downsamplingMethod: string =
+      forcedDownsamplingMethod || dataPlot?.downsampled_method;
+    const downsamplingSize: number =
+      forcedDownsamplingSize || dataPlot?.downsampled_size;
+
     // Get error bands
     const upperResponse = await fetchFieldValue(
       normalizeIndices(plot.nodeUri) + '_error_upper',
+      downsamplingMethod,
+      downsamplingSize,
     );
     const defaultUpperYValue = getVectorData(
-      data.coordinates,
+      dataPlot.coordinates,
       upperResponse.value,
     );
     await formatErrorBands(
@@ -596,7 +618,7 @@ export const fetchErrorBands = async (
       normalizeIndices(plot.nodeUri) + '_error_lower',
     );
     const defaultLowerYValue = getVectorData(
-      data.coordinates,
+      dataPlot.coordinates,
       lowerResponse.value,
     );
     await formatErrorBands(
@@ -613,6 +635,13 @@ export const fetchErrorBands = async (
   }
 };
 
+/**
+ * Format plot to includes error bands values
+ * @param foundedPlot The plot to format
+ * @param yValue
+ * @param yData
+ * @param nodeUri
+ */
 const formatErrorBands = (
   foundedPlot: DataPlotly,
   yValue: number[],
@@ -682,8 +711,6 @@ const formatErrorBands = (
     path: normalizeIndices(nodeUri),
     yData: yData,
   });
-
-  return foundedPlot;
 };
 
 /**
@@ -706,7 +733,6 @@ export function formatConfigBeforeLoadingURIs(
                   ...coord,
                   name: '',
                   shape: [],
-                  downsampled_shape: [],
                   coordinates: [],
                   data: [],
                   axeIndex: index,
@@ -775,8 +801,11 @@ export async function plotNodeUriLoaded(
               continue;
             }
 
-            const response = await fetchDataPlot(defaultUri);
-
+            const response = await fetchDataPlot(
+              defaultUri,
+              dataGrid?.downsampled_method,
+              dataGrid?.downsampled_size,
+            );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
               errorHasOccurred = true;
@@ -800,14 +829,12 @@ export async function plotNodeUriLoaded(
               const lastField = getLastIndexedField(responseCoordinates.target);
               if (!lastField) continue;
 
-              // If coordinates exist, update the data and shape
+              // If coordinates exist, update it with response from BE
               matchingCoord.data = responseCoordinates.value;
               matchingCoord.name = responseCoordinates.name;
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
-              matchingCoord.shape = responseCoordinates.shape;
-              matchingCoord.downsampled_shape =
-                responseCoordinates.downsampled_shape;
+              matchingCoord.shape = responseCoordinates.downsampled_shape;
               matchingCoord.coordinates = responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
@@ -860,7 +887,7 @@ export async function plotNodeUriLoaded(
               description: response.data.description,
               dimensions: response.data.ndim,
               path: yResponsePath,
-              shape: response.data.shape as number[],
+              shape: response.data.downsampled_shape as number[],
               yData: response.data.value,
               x: defaultXValue,
               y: defaultYValue,
@@ -877,7 +904,7 @@ export async function plotNodeUriLoaded(
           ...dataGrid,
           xAxisData: updatedXAxisData,
           plot: updatedPlot,
-        };
+        } as DataGridPlot;
 
         return dataGridUpdated;
       }),
@@ -886,16 +913,32 @@ export async function plotNodeUriLoaded(
     if (updatedDataGridPlot?.length) {
       // Get error bands for each plots of each dataPlots when loading a config
       for (const dataPlot of updatedDataGridPlot) {
-        if (!dataPlot.displayErrorBand) {
-          // Don't get error bands when displayErrorBand is switch off (info from config)
-          continue;
+        if (dataPlot.displayErrorBand) {
+          // Get error bands only when displayErrorBand is switch on (info from config)
+          for (const plot of dataPlot.plot) {
+            const updatedDataPlot = updatedDataGridPlot.find(
+              (d) => d.i === dataPlot.i,
+            );
+            await fetchErrorBands(
+              updatedDataPlot, // dataPlot is updated directly from fetchErrorBands to include error bands
+              plot.nodeUri,
+            );
+          }
         }
-        for (const plot of dataPlot.plot) {
-          await fetchErrorBands(
-            updatedDataGridPlot, // dataPlot list is updated directly from fetchErrorBands to include error bands
-            dataPlot.i,
-            plot.nodeUri,
-          );
+
+        // Apply range to coordinates, dependencies & new error bands when loading a config
+        for (const coordinate of dataPlot.coordinates) {
+          if (coordinate?.range) {
+            const keepValueIndex = true;
+            await applyRange(
+              coordinate,
+              coordinate.rangeValues,
+              dataPlot,
+              [...dataPlot.plot.map((plot) => plot.nodeUri)],
+              keepValueIndex,
+              true, // apply range origin when loading a config (get coordinates for first time)
+            );
+          }
         }
       }
     }
@@ -1088,12 +1131,11 @@ export const getTensorizedMatrix = async (matrix: AxisData) => {
 
 export const swapAxis = async (
   itemDataGrid: DataGridPlot,
-  active: Configuration,
-  updatedConfiguration: (configuration: Configuration) => void,
   axeIndexToSwap: number,
-  targetAxis: 'x' | 'y',
+  axeIndexOfTargetAxis: number,
+  active?: Configuration,
+  updatedConfiguration?: (configuration: Configuration) => void,
 ) => {
-  const axeIndexOfTargetAxis = targetAxis === 'y' ? 1 : 0;
   // Get indexes to swap
   const actualTargetAxisIndex: number = itemDataGrid.coordinates.findIndex(
     (coordinate) => coordinate.axeIndex === axeIndexOfTargetAxis,
@@ -1102,12 +1144,15 @@ export const swapAxis = async (
     (coordinate) => coordinate.axeIndex === axeIndexToSwap,
   );
 
-  const updatedDataPlotList: DataGridPlot[] = JSON.parse(
-    JSON.stringify(active.dataPlot),
-  );
-  const updatedDataPlot = updatedDataPlotList.find(
-    (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
-  );
+  const updatedDataPlotList: DataGridPlot[] =
+    active && updatedConfiguration
+      ? JSON.parse(JSON.stringify(active.dataPlot))
+      : null;
+  const updatedDataPlot = updatedDataPlotList
+    ? updatedDataPlotList.find(
+        (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
+      )
+    : (JSON.parse(JSON.stringify(itemDataGrid)) as DataGridPlot);
 
   // Swap axis
   updatedDataPlot.coordinates[actualTargetAxisIndex].axeIndex = axeIndexToSwap;
@@ -1172,7 +1217,7 @@ export const swapAxis = async (
   updatedDataPlot.xAxisData.unit = updatedDataPlot.coordinates[xIndex].unit;
 
   // Transpose yData with resetted valueIndex
-  await transposeAxis(updatedDataPlot, axeIndexToSwap, targetAxis);
+  await transposeAxis(updatedDataPlot, axeIndexToSwap, axeIndexOfTargetAxis);
 
   // Update x & y with translated dataY
   for (const plot of updatedDataPlot.plot) {
@@ -1194,11 +1239,15 @@ export const swapAxis = async (
   // Limit coordinate sliders to the max of their new shape
   limitSlidersToMaxLength(updatedDataPlot.coordinates);
 
-  const updatedActive = {
-    ...active,
-    dataPlot: updatedDataPlotList,
-  };
-  updatedConfiguration(updatedActive);
+  if (active && updatedConfiguration) {
+    const updatedActive = {
+      ...active,
+      dataPlot: updatedDataPlotList,
+    };
+    updatedConfiguration(updatedActive);
+  }
+
+  return updatedDataPlot;
 };
 
 /**
@@ -1221,15 +1270,21 @@ export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
  * Find the maximum shape of a potentially irregular array.
  */
 function getMaxShape(arr: any[]): number[] {
-  if (!Array.isArray(arr)) return [];
-  const lengths = arr.map((sub) =>
-    Array.isArray(sub) ? getMaxShape(sub) : [],
-  );
-  const maxInner = lengths.reduce<number[]>(
-    (acc, curr) => curr.map((v, i) => Math.max(acc[i] || 0, v)),
-    [],
-  );
-  return [arr.length, ...maxInner];
+  const shape: number[] = [];
+
+  function goThrough(node: any, depth: number) {
+    if (!Array.isArray(node)) return;
+
+    // Update max shape to this length
+    shape[depth] = Math.max(shape[depth] ?? 0, node.length);
+
+    for (const item of node) {
+      goThrough(item, depth + 1);
+    }
+  }
+
+  goThrough(arr, 0);
+  return shape;
 }
 
 /**
@@ -1256,42 +1311,18 @@ function reshapeMatrix(arr: any[], shape: number[], depth = 0): any[] {
   return result;
 }
 
-/**
- * Recursively removes NaNs added by reshapeMatrix.
- * - Removes NaN values from arrays.
- * - Deletes empty sub-tables after cleaning.
- */
-function removeNaNPadding(arr: any): any {
-  if (!Array.isArray(arr)) {
-    return Number.isNaN(arr) ? undefined : arr;
-  }
-
-  // Clean recursively
-  const cleaned = arr
-    .map(removeNaNPadding)
-    .filter((v) => v !== undefined && !(Array.isArray(v) && v.length === 0));
-
-  return cleaned;
-}
-
 async function transposeMatrix(yData: AxisData, newPositions: number[]) {
   // Transpose dataY
   const tensor = await getTensorizedMatrix(yData);
   const dataTransposed = tensor.transpose(newPositions);
-  const newMatrix = (await dataTransposed.array()) as AxisData;
-
-  // Restored irregular shape (suppress all NaN)
-  const restoredMatrix = removeNaNPadding(newMatrix);
-
-  return restoredMatrix;
+  return dataTransposed;
 }
 
 async function transposeAxis(
   updatedDataPlot: DataGridPlot,
   axeIndexToSwap: number,
-  targetAxis: 'x' | 'y',
+  axeIndexOfTargetAxis: number,
 ) {
-  const axeIndexOfTargetAxis = targetAxis === 'y' ? 1 : 0;
   // Modify each plot in graph
   for (const plotToTranspose of updatedDataPlot.plot) {
     // DETERMINE WHICH AXIS TO TRANSPOSE
@@ -1300,7 +1331,7 @@ async function transposeAxis(
       JSON.stringify(updatedDataPlot.coordinates),
     )
       .map((coord: Coordinates) => coord.axeIndex)
-      .sort()
+      .sort((a: number, b: number) => a - b)
       .reverse(); // Reverse to get axeIndex order
     // SWAP axeIndexOfTargetAxis with axeIndexToSwap
     const tempSwap = newPositions[axeIndexOfTargetAxis];
@@ -1310,11 +1341,13 @@ async function transposeAxis(
     newPositions.reverse();
 
     // Transpose dataY matrix
-    const transposedDataY = await transposeMatrix(
+    const tensorizedDataY = await transposeMatrix(
       plotToTranspose.yData,
       newPositions,
     );
+    const transposedDataY = (await tensorizedDataY.array()) as AxisData;
     plotToTranspose.yData = transposedDataY;
+    plotToTranspose.shape = tensorizedDataY.shape;
 
     if (
       plotToTranspose?.error_bands &&
@@ -1327,10 +1360,12 @@ async function transposeAxis(
           continue;
         }
         // Transpose each error band matrix
-        const transposedErrorBand = await transposeMatrix(
+        const tensorizedErrorBand = await transposeMatrix(
           error_band.yData,
           newPositions,
         );
+        const transposedErrorBand =
+          (await tensorizedErrorBand.array()) as AxisData;
         error_band.yData = transposedErrorBand;
       }
     }
@@ -1341,16 +1376,19 @@ async function transposeAxis(
  * Reduce size of a coordinate data by slicing to the range provided
  * @param coordinates
  * @param coordNameToUpdate
- * @param dataRangeMin
- * @param dataRangeMax
- * @param dependencyIndex optional: used for updating dependencies
- * @returns
+ * @param newRange
+ * @param dependencyIndex optional: determined the shape index of the dependency
+ * @param shouldApplyRangeOriginInCoord optional: determine if it's a new range to be applied to the data (begin to the range instead of 0)
+ * @returns Return the sliced data
  */
 const trimCoordData = async (
   coordinates: Coordinates[],
   coordNameToUpdate: string,
+  newValueRange: [number, number] | [string, string],
   newRange: [number, number],
+  oldRange: [number, number],
   dependencyIndex?: number,
+  shouldApplyRangeOriginInCoord?: boolean,
 ) => {
   const updatedCoord = coordinates.find(
     (coord) => coord.name === coordNameToUpdate,
@@ -1362,33 +1400,52 @@ const trimCoordData = async (
 
   // Get new shape to apply
   const shapeIndex = dependencyIndex ?? dataTensorized.shape.length - 1;
-  const dependencyName =
-    updatedCoord.coordinates[dependencyIndex ?? -1] ?? null;
-  const dependencyRange = dependencyName
-    ? coordinates.find((coord) => coord?.name === dependencyName)?.range
-    : null;
-  const minRangeOrigin = dependencyName
-    ? dependencyRange
-      ? dependencyRange[0]
-      : 0
-    : updatedCoord?.range
-      ? updatedCoord.range[0]
-      : 0;
+  const minRangeOrigin = oldRange ? oldRange[0] : 0;
   const originShape = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMin - minRangeOrigin : 0,
+    index === shapeIndex
+      ? shouldApplyRangeOriginInCoord
+        ? minRangeOrigin
+        : dataRangeMin - minRangeOrigin
+      : 0,
   );
   const shapeSize = dataTensorized.shape.map((el, index) =>
     index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
   );
 
+  const trimmed = tf.slice(dataTensorized, originShape, shapeSize);
+
   if (dependencyIndex === undefined) {
     // Update the new range when updating the main coordinate
     updatedCoord.range = newRange;
+    if (typeof newValueRange[0] === 'string') {
+      // Set first and last value from sliced data in rangeValues
+      const axisData = (await trimmed.array()) as AxisData;
+      const firstArrayValue = getFirstArrayValueFromShape(
+        axisData,
+        trimmed.shape,
+      ) as unknown as string[];
+      updatedCoord.rangeValues = [
+        firstArrayValue[0],
+        firstArrayValue[firstArrayValue.length - 1],
+      ];
+    } else {
+      // Set typed number in value range
+      updatedCoord.rangeValues = newValueRange;
+    }
   }
 
-  return tf.slice(dataTensorized, originShape, shapeSize);
+  return trimmed;
 };
 
+/**
+ * Trim a plot data
+ * @param updatedPlot
+ * @param coordinates
+ * @param axeIndexToUpdate
+ * @param newRange
+ * @param oldRange
+ * @returns
+ */
 const trimPlotData = async (
   updatedPlot: DataPlotly | ErrorBandData,
   coordinates: Coordinates[],
@@ -1430,6 +1487,7 @@ const formatTrimmedCoordinate = async (
   updatedCoord: Coordinates,
   trimmed: tf.Tensor<tf.Rank>,
   coordinateAffectingDependency?: Coordinates,
+  keepValueIndex?: boolean,
 ) => {
   const depValues = (await trimmed.array()) as AxisData;
   // Update data
@@ -1437,31 +1495,198 @@ const formatTrimmedCoordinate = async (
 
   // Update shapes
   updatedCoord.shape = trimmed.shape;
-  updatedCoord.downsampled_shape = trimmed.shape;
 
-  // Update valueIndex, target & path
-  updatedCoord.valueIndex = 0;
-  const lastTargetLastName = getLastIndexedField(
-    coordinateAffectingDependency?.target ?? updatedCoord.target,
-  );
-  const updatedPath = updateIndexFieldName(
-    updatedCoord.path,
-    lastTargetLastName,
-    0,
-  );
-  const updatedTarget = updateIndexFieldName(
-    updatedCoord.target,
-    lastTargetLastName,
-    0,
-  );
-  updatedCoord.path = updatedPath;
-  updatedCoord.target = updatedTarget;
+  if (!keepValueIndex) {
+    // Update valueIndex, target & path
+    updatedCoord.valueIndex = 0;
+    const lastTargetLastName = getLastIndexedField(
+      coordinateAffectingDependency?.target ?? updatedCoord.target,
+    );
+    const updatedPath = updateIndexFieldName(
+      updatedCoord.path,
+      lastTargetLastName,
+      0,
+    );
+    const updatedTarget = updateIndexFieldName(
+      updatedCoord.target,
+      lastTargetLastName,
+      0,
+    );
+    updatedCoord.path = updatedPath;
+    updatedCoord.target = updatedTarget;
+  }
 };
 
+export const getRangeIndex = async (
+  newValueRange: [number, number] | [string, string],
+  updatedDataPlot: DataGridPlot,
+  coordinate: Coordinates,
+  shouldApplyRangeOriginInCoord?: boolean,
+) => {
+  const coordToUpdate = updatedDataPlot.coordinates.find(
+    (coord) => coord.name === coordinate.name,
+  );
+  const coordVector = getArrayValueFromDependance(
+    updatedDataPlot.coordinates,
+    coordToUpdate.axeIndex,
+  );
+  let newRange: [number, number] = coordinate?.range || [
+    0,
+    coordVector.length - 1,
+  ];
+
+  const rangeMatched = [];
+  if (typeof newValueRange[0] === 'number') {
+    const min = newValueRange[0] as number;
+    const max = newValueRange[1] as number;
+
+    for (let i = 0; i < coordVector.length; i++) {
+      // Get min range
+      if (
+        rangeMatched.length === 0 &&
+        (coordVector[i] as number) >= min &&
+        (coordVector[i] as number) <= max
+      ) {
+        rangeMatched.push(shouldApplyRangeOriginInCoord ? i : newRange[0] + i);
+      }
+
+      // Get max range
+      if (
+        rangeMatched.length === 1 &&
+        (coordVector[i] as number) > max &&
+        i !== 0
+      ) {
+        rangeMatched.push(
+          shouldApplyRangeOriginInCoord ? i - 1 : newRange[0] + i - 1,
+        );
+        break;
+      }
+    }
+    if (rangeMatched.length === 2) {
+      newRange = rangeMatched as [number, number];
+    } else if (rangeMatched.length === 1) {
+      newRange[0] = rangeMatched[0];
+    }
+  } else if (typeof newValueRange[0] === 'string') {
+    // Get index of first occurence
+    const firstIndex = (coordVector as string[]).findIndex(
+      (val) =>
+        newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
+    );
+    // Get index of last occurence
+    let secondIndex = (JSON.parse(JSON.stringify(coordVector)) as string[])
+      .reverse()
+      .findIndex(
+        (val) =>
+          newValueRange[1] !== '' && val.includes(newValueRange[1] as string),
+      );
+    if (secondIndex !== -1) {
+      secondIndex = coordVector.length - 1 - secondIndex;
+    }
+
+    if (firstIndex !== -1) {
+      rangeMatched.push(
+        shouldApplyRangeOriginInCoord ? firstIndex : newRange[0] + firstIndex,
+      );
+    } else {
+      rangeMatched.push(shouldApplyRangeOriginInCoord ? 0 : newRange[0]);
+    }
+
+    if (secondIndex !== -1) {
+      rangeMatched.push(
+        shouldApplyRangeOriginInCoord ? secondIndex : newRange[0] + secondIndex,
+      );
+    } else {
+      rangeMatched.push(
+        shouldApplyRangeOriginInCoord
+          ? coordVector.length - 1
+          : newRange[0] + coordVector.length - 1,
+      );
+    }
+
+    if (rangeMatched.length === 2) {
+      newRange = rangeMatched as [number, number];
+    } else if (rangeMatched.length === 1) {
+      newRange[0] = rangeMatched[0];
+    }
+  }
+  return newRange;
+};
+
+export const applyRange = async (
+  coordinate: Coordinates,
+  newValueRange: [number, number] | [string, string],
+  customizedDataGrid: DataGridPlot,
+  newPlotsUri?: string[],
+  keepValueIndex?: boolean,
+  shouldApplyRangeOriginInCoord?: boolean,
+) => {
+  try {
+    const updatedDataPlot = customizedDataGrid;
+    const coordinates = JSON.parse(
+      JSON.stringify(updatedDataPlot.coordinates),
+    ) as Coordinates[];
+    const oldRange = coordinates.find(
+      (coord) => coord.axeIndex === coordinate.axeIndex,
+    )?.range;
+
+    // get newRange
+    const newRange = await getRangeIndex(
+      newValueRange,
+      updatedDataPlot,
+      coordinate,
+      shouldApplyRangeOriginInCoord,
+    );
+
+    // Trim coordinate
+    await applyRangeInCoord(
+      updatedDataPlot.coordinates,
+      coordinate.name,
+      newValueRange,
+      newRange,
+      oldRange,
+      keepValueIndex,
+      shouldApplyRangeOriginInCoord,
+    );
+
+    // Trim plots
+    await applyRangeInPlot(
+      updatedDataPlot.coordinates,
+      updatedDataPlot.plot,
+      coordinate.axeIndex,
+      newRange,
+      oldRange,
+      newPlotsUri,
+    );
+
+    return {
+      ...customizedDataGrid,
+      coordinates: updatedDataPlot.coordinates,
+      plot: updatedDataPlot.plot,
+    } as DataGridPlot;
+  } catch (error) {
+    console.error('Error applying the range: ', error);
+  }
+};
+
+/**
+ * Update the coordinate to apply the range
+ * @param updatedCoords
+ * @param coordNameToUpdate
+ * @param newValueRange
+ * @param newRange
+ * @param oldRange
+ * @param keepValueIndex
+ * @param shouldApplyRangeOriginInCoord
+ */
 export async function applyRangeInCoord(
   updatedCoords: Coordinates[],
   coordNameToUpdate: string,
+  newValueRange: [number, number] | [string, string],
   newRange: [number, number],
+  oldRange: [number, number],
+  keepValueIndex?: boolean,
+  shouldApplyRangeOriginInCoord?: boolean,
 ) {
   const updatedCoord = updatedCoords.find(
     (coord) => coord.name === coordNameToUpdate,
@@ -1472,10 +1697,19 @@ export async function applyRangeInCoord(
   const trimmed = await trimCoordData(
     updatedCoords,
     updatedCoord.name,
+    newValueRange,
     newRange,
+    oldRange,
+    undefined,
+    shouldApplyRangeOriginInCoord,
   );
   // Format coordinate with trimmed data
-  await formatTrimmedCoordinate(updatedCoord, trimmed);
+  await formatTrimmedCoordinate(
+    updatedCoord,
+    trimmed,
+    undefined,
+    keepValueIndex,
+  );
 
   // Trim coordinates having dependencies
   for (const coordDependencie of updatedCoords) {
@@ -1484,9 +1718,11 @@ export async function applyRangeInCoord(
       continue;
     }
 
-    const dependencyIndex = coordDependencie.coordinates.findIndex(
-      (dep) => dep === coordinate.name,
-    );
+    const dependencyIndex = (
+      JSON.parse(JSON.stringify(coordDependencie.coordinates)) as string[]
+    )
+      .reverse() // We reverse dependencies to get dependency index in the order of the matrix
+      .findIndex((dep) => dep === coordinate.name);
     if (dependencyIndex === -1) {
       // No dependencies with updated coordinate
       continue;
@@ -1495,10 +1731,18 @@ export async function applyRangeInCoord(
     const trimmedDep = await trimCoordData(
       updatedCoords,
       coordDependencie.name,
+      newValueRange,
       newRange,
+      oldRange,
       dependencyIndex,
+      shouldApplyRangeOriginInCoord,
     );
-    await formatTrimmedCoordinate(coordDependencie, trimmedDep, updatedCoord);
+    await formatTrimmedCoordinate(
+      coordDependencie,
+      trimmedDep,
+      updatedCoord,
+      keepValueIndex,
+    );
   }
 }
 
@@ -1508,11 +1752,18 @@ export async function applyRangeInPlot(
   axeIndexToUpdate: number,
   newRange: [number, number],
   oldRange?: [number, number],
+  newPlotsUri?: string[],
 ) {
   for (const updatedPlot of updatedPlots) {
     // Update plot.x with trimmed coordinates
     const newX = getArrayValueFromDependance(coordinates, 0);
     updatedPlot.x = newX;
+
+    let rangeAlreadyAppliedInPlot = true;
+    if (newPlotsUri && newPlotsUri.includes(updatedPlot.nodeUri)) {
+      // Boolean used for determined if range has already been applied in this plot
+      rangeAlreadyAppliedInPlot = false;
+    }
 
     // Trim plot.yData
     const trimmed = await trimPlotData(
@@ -1520,7 +1771,7 @@ export async function applyRangeInPlot(
       JSON.parse(JSON.stringify(coordinates)),
       axeIndexToUpdate,
       newRange,
-      oldRange,
+      rangeAlreadyAppliedInPlot === true ? oldRange : null,
     );
     const newYData = (await trimmed.array()) as AxisData;
     updatedPlot.yData = newYData;
@@ -1532,25 +1783,36 @@ export async function applyRangeInPlot(
 
     // Trim error bands if existing
     if (updatedPlot?.error_bands) {
-      for (const error_bands of updatedPlot.error_bands) {
+      for (const error_band of updatedPlot.error_bands) {
         if (
           updatedPlot.error_y.type === 'data' &&
-          ((error_bands.path.endsWith('error_upper') &&
+          ((error_band.path.endsWith('_error_upper') &&
             updatedPlot.error_y.array.length === 0) ||
-            (error_bands.path.endsWith('error_lower') &&
+            (error_band.path.endsWith('_error_lower') &&
               updatedPlot.error_y.arrayminus.length === 0))
         ) {
           continue;
         }
+        const upperOrLower = error_band.path.endsWith('_error_upper')
+          ? '_error_upper'
+          : '_error_lower';
+        if (
+          newPlotsUri &&
+          newPlotsUri.includes(updatedPlot.nodeUri + upperOrLower)
+        ) {
+          // Check if error band has already been applied
+          rangeAlreadyAppliedInPlot = false;
+        }
+
         const trimmed = await trimPlotData(
-          error_bands,
+          error_band,
           JSON.parse(JSON.stringify(coordinates)),
           axeIndexToUpdate,
           newRange,
-          oldRange,
+          rangeAlreadyAppliedInPlot === true ? oldRange : null,
         );
         const newYData = (await trimmed.array()) as AxisData;
-        error_bands.yData = newYData;
+        error_band.yData = newYData;
       }
       const swapped_error_y = getErrorYVectors(updatedPlot, coordinates);
       updatedPlot.error_y = swapped_error_y;

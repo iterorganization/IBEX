@@ -18,11 +18,11 @@ export interface BaseCoordinates {
   target: string;
   valueIndex: number;
   range?: [number, number];
+  rangeValues?: [number, number] | [string, string];
 }
 
 export interface Coordinates extends BaseCoordinates {
   name: string;
-  downsampled_shape: number[];
   shape: number[] | 'irregular';
   coordinates: string[];
   data: AxisData;
@@ -77,6 +77,8 @@ export interface BaseDataGridPlot {
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
   displayGrid: boolean;
+  downsampled_method?: string;
+  downsampled_size?: number;
   xAxisData?: Axis;
   yAxisData?: Axis;
   y2AxisData?: Axis;
@@ -87,6 +89,7 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   isEditing: boolean;
   coordinates?: Coordinates[];
   downsampled_method?: string;
+  downsampled_size?: number;
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
