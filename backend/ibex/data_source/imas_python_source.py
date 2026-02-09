@@ -592,6 +592,10 @@ class IMASPythonSource(DataSourceInterface):
         :return: Dictionary containing data values, metadata and coordinates.
         """
 
+        if downsampling_method is not None and downsampling_method.lower() != "none":
+            if downsampled_size%4 != 0:
+                raise InvalidParametersException("Target size for downsampling must be dividable by 4")
+
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
 
