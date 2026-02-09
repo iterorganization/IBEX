@@ -108,5 +108,5 @@ omit = [
     "ibex/_version.py",
     ]
 
-[tool.setuptools.data-files]
-"bin" = ["bin/*"]
+[project.scripts]
+run_ibex_service = "ibex.cli:main"
