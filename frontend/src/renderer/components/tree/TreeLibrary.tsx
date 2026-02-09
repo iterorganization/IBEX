@@ -11,7 +11,7 @@ import {
 } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  IconBraces,
+  IconMathFunction,
   IconFileUnknown,
   IconFolder,
   IconFolderOpen,
@@ -312,7 +312,7 @@ function NodeIcon({
         <IconTypography {...commonProps} className={classes.forcedWidth} />,
       ),
       [NodeInfoTypeEnum.COMPLEX]: getCheckboxIcon(
-        <IconBraces {...commonProps} className={classes.forcedWidth} />,
+        <IconMathFunction {...commonProps} className={classes.forcedWidth} />,
       ),
     };
 
