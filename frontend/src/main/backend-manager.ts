@@ -19,7 +19,9 @@ export class BackendManager {
     if (this.remoteBackendUrl) {
       console.info(`Remote backend URL configured: ${this.remoteBackendUrl}`);
     } else {
-      console.info('No remote backend URL configured. Will start a local backend.');
+      console.info(
+        'No remote backend URL configured. Will start a local backend.',
+      );
     }
   }
 
@@ -50,7 +52,10 @@ export class BackendManager {
     }
   }
 
-  private async isPortInUse(port: number, host: string = '127.0.0.1'): Promise<boolean> {
+  private async isPortInUse(
+    port: number,
+    host: string = '127.0.0.1',
+  ): Promise<boolean> {
     return new Promise((resolve) => {
       const socket = new net.Socket();
 
@@ -84,7 +89,7 @@ export class BackendManager {
 
   private async waitForBackend(maxRetries: number = 30): Promise<boolean> {
     const url = `http://${this.backendHost}:${this.backendPort}/info/version`;
-    
+
     for (let i = 0; i < maxRetries; i++) {
       try {
         const response = await axios.get(url, { timeout: 1000 });
@@ -95,15 +100,19 @@ export class BackendManager {
         }
       } catch (error) {
         // Backend not ready yet, wait and retry
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
-    
+
     console.error('Backend failed to start within timeout period');
     return false;
   }
 
-  async startBackend(): Promise<{ success: boolean; port: number; url: string }> {
+  async startBackend(): Promise<{
+    success: boolean;
+    port: number;
+    url: string;
+  }> {
     // REMOTE BACKEND
     if (this.remoteBackendUrl) {
       try {
@@ -111,14 +120,24 @@ export class BackendManager {
         this.backendHost = url.hostname;
         this.backendPort = parseInt(url.port, 10);
 
-        console.info(`Attempting to connect to remote backend at ${this.getBackendUrl()}`);
+        console.info(
+          `Attempting to connect to remote backend at ${this.getBackendUrl()}`,
+        );
         const ready = await this.waitForBackend();
         if (ready) {
           console.info('Successfully connected to remote backend.');
-          return { success: true, port: this.backendPort, url: this.getBackendUrl() };
+          return {
+            success: true,
+            port: this.backendPort,
+            url: this.getBackendUrl(),
+          };
         } else {
           console.error('Could not connect to the remote backend.');
-          return { success: false, port: this.backendPort, url: this.getBackendUrl() };
+          return {
+            success: false,
+            port: this.backendPort,
+            url: this.getBackendUrl(),
+          };
         }
       } catch (error) {
         console.error('Invalid remote backend URL provided.', error);
@@ -136,22 +155,25 @@ export class BackendManager {
     }
 
     const backendCommand = this.getBackendCommand();
-    const backendArgs = ['--host', this.backendHost, '--port', this.backendPort.toString()];
-    
-    console.info(`Starting backend service: ${backendCommand} ${backendArgs.join(' ')}`);
+    const backendArgs = [
+      '--host',
+      this.backendHost,
+      '--port',
+      this.backendPort.toString(),
+    ];
+
+    console.info(
+      `Starting backend service: ${backendCommand} ${backendArgs.join(' ')}`,
+    );
 
     return new Promise((resolve) => {
       let errorOutput = '';
-      
+
       // Start the backend service
-      this.backendProcess = spawn(
-        backendCommand,
-        backendArgs,
-        {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: false,
-        }
-      );
+      this.backendProcess = spawn(backendCommand, backendArgs, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false,
+      });
 
       if (!this.backendProcess) {
         console.error('Failed to spawn backend process');
@@ -192,7 +214,7 @@ export class BackendManager {
       setTimeout(async () => {
         const ready = await this.waitForBackend();
         const url = `http://${this.backendHost}:${this.backendPort}`;
-        
+
         if (ready) {
           resolve({
             success: true,

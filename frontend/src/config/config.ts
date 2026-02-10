@@ -28,7 +28,7 @@ const getConfigPath = (): string => {
 export const getConfigSync = (): TConfig => {
   // Check if backend URL is provided by Electron main process
   const backendUrl = process.env.IBEX_BACKEND_URL;
-  
+
   if (backendUrl) {
     console.info(`Using backend URL from Electron: ${backendUrl}`);
     return {
