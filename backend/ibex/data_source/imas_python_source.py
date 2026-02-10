@@ -791,7 +791,7 @@ class IMASPythonSource(DataSourceInterface):
                         _, data_to_be_returned = downsample_data(
                             data_to_be_returned, target_size=downsampled_size, method=downsampling_method
                         )
-                    except Exception as e:
+                    except BaseException as e:
                         raise InvalidParametersException(f"Downsampling failed: {e}") from None
             # serialize coordinates and update shapes (they could be changed by downsampling)
             for c in coordinates_to_be_returned:
