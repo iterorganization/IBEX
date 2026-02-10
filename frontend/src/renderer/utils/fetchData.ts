@@ -327,5 +327,5 @@ export const fetchArraySummary = async (uri: string) => {
  * Return backend version.
  */
 export const fetchInfoVersion = async () => {
-  return fetchFromApi<InfoVersionResponse>(`/info/version/`);
+  return fetchFromApi<InfoVersionResponse>(`/info/version`);
 };
