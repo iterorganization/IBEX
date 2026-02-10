@@ -7,11 +7,12 @@ import {
   DataPlotly,
   GridLayoutPlotProps,
   URITreeNodeData,
-} from 'src/renderer/types';
+} from '../../../renderer/types';
 import { Center, Container, Text } from '@mantine/core';
 import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import {
+  containsFloat,
   getArrayValueFromDependance,
   getErrorYVectors,
   getLastIndexedField,
@@ -200,7 +201,10 @@ export const GridLayoutPlot = ({
       selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
     } else {
       selectedDataPlot.selectedPlotMode =
-        data.coordinates.length >= 2 && data.dataType === 'FLT'
+        data.coordinates.length >= 2 &&
+        containsFloat(
+          data.coordinates.find((coord) => coord.axeIndex === 1).data,
+        )
           ? 'Heatmap'
           : '1D';
     }
@@ -216,7 +220,12 @@ export const GridLayoutPlot = ({
     if (data?.selectedPlotMode) {
       setIs3DView(data.selectedPlotMode === 'Heatmap');
     } else {
-      setIs3DView(data.coordinates.length >= 2 && data.dataType === 'FLT');
+      setIs3DView(
+        data.coordinates.length >= 2 &&
+          containsFloat(
+            data.coordinates.find((coord) => coord.axeIndex === 1).data,
+          ),
+      );
     }
   }, []);
 
