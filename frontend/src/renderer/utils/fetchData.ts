@@ -218,8 +218,8 @@ export const fetchDataPlot = async (
     response.data.downsampled_method = firstMethod || downsamplingMethod;
   }
 
-  if (response.data.shape === 'irregular' && response.data.ndim === 1) {
-    // Alert when getting irregular shape in 1D cases
+  if (response.data.shape === 'irregular') {
+    // Alert when getting irregular shape
     showNotification({
       title: 'Warning',
       message: 'Data are incomplete.',
