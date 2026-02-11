@@ -1,7 +1,4 @@
-import { spawn, ChildProcess, execSync } from 'child_process';
-import { app } from 'electron';
-import * as path from 'path';
-import * as fs from 'fs';
+import { spawn, ChildProcess } from 'child_process';
 import * as net from 'net';
 import axios from 'axios';
 
@@ -31,7 +28,7 @@ export class BackendManager {
       if (!(await this.isPortInUse(port, this.backendHost))) {
         // Check if we can bind to it briefly
         try {
-          return await new Promise((resolve, reject) => {
+          return await new Promise((resolve) => {
             const server = net.createServer();
             server.listen(port, this.backendHost, () => {
               server.once('close', () => resolve(port));
@@ -39,7 +36,7 @@ export class BackendManager {
             });
             server.on('error', () => resolve(this.findFreePort(port + 1)));
           });
-        } catch (error) {
+        } catch {
           // Port might be taken between check and use, try next
           port++;
         }
@@ -72,7 +69,7 @@ export class BackendManager {
         resolve(false);
       });
 
-      socket.on('error', (err) => {
+      socket.on('error', () => {
         // An ECONNREFUSED error means the port is not in use.
         // Any other error could be something else, but for this purpose, we can treat it as 'not in use'.
         resolve(false);
@@ -98,7 +95,7 @@ export class BackendManager {
           this.backendReady = true;
           return true;
         }
-      } catch (error) {
+      } catch {
         // Backend not ready yet, wait and retry
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
@@ -167,8 +164,6 @@ export class BackendManager {
     );
 
     return new Promise((resolve) => {
-      let errorOutput = '';
-
       // Start the backend service
       this.backendProcess = spawn(backendCommand, backendArgs, {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -193,7 +188,6 @@ export class BackendManager {
       this.backendProcess.stderr?.on('data', (data: Buffer) => {
         const output = data.toString();
         console.error(`[Backend Error] ${output}`);
-        errorOutput += output;
       });
 
       this.backendProcess.on('error', (error: Error) => {

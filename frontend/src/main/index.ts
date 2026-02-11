@@ -4,7 +4,6 @@ import ipc from './ipc';
 import { config } from 'dotenv';
 import { BackendManager } from './backend-manager';
 import fs from 'fs';
-import path from 'path';
 
 const ensureCwd = (): void => {
   try {
