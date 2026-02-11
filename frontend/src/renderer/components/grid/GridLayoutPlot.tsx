@@ -320,16 +320,9 @@ export const GridLayoutPlot = ({
    */
   const handleInspectMetadata = useCallback(
     (id: string) => {
-      const updatedDataPlot: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
-      updatedDataPlot.find((dataPlot) => dataPlot.i === id).isEditing = false;
-
       const updatedActive: Configuration = {
         ...active,
         metadataGridLayout: id,
-        dataPlot: updatedDataPlot,
-        checkedNodeURI: [],
       };
       updatedConfiguration(updatedActive);
     },
@@ -341,19 +334,9 @@ export const GridLayoutPlot = ({
    */
   const handleCustomization = useCallback(
     (id: string) => {
-      const updatedDataPlotList: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
-      const updatedDataPlot = updatedDataPlotList.find(
-        (dataPlot: DataGridPlot) => dataPlot.i === id,
-      );
-      updatedDataPlot.isEditing = false;
-
       const updatedActive: Configuration = {
         ...active,
         customizedGridLayout: id,
-        dataPlot: updatedDataPlotList,
-        checkedNodeURI: [],
       };
       updatedConfiguration(updatedActive);
     },

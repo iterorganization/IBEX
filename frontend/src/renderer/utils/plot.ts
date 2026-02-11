@@ -589,8 +589,7 @@ export const fetchErrorBands = async (
     (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
   );
   if (!plot) {
-    // No matching data: return dataPlot with no updates
-    return dataPlot;
+    return;
   }
 
   try {
