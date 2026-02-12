@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "1. Loading required modules..."
-module load IMAS-Python IDStools nodejs
+module load Python nodejs 
 
 echo "2. Setting up Python virtual environment..."
 cd "$SCRIPT_DIR"
@@ -14,10 +14,9 @@ python -m venv ibex_venv
 source ibex_venv/bin/activate
 
 echo "3. Installing backend"
-pip install click uvicorn
-cd "$SCRIPT_DIR/backend"
-pip install .
-
+pip install --upgrade pip setuptools wheel
+cd "$SCRIPT_DIR/backend" && pip install .
+cd "$SCRIPT_DIR"
 echo "5. Installing frontend dependencies..."
 cd "$SCRIPT_DIR/frontend"
 npm install

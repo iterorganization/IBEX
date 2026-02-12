@@ -4,7 +4,6 @@ import { useCallback, useState, useRef, useEffect } from 'react';
 import { Configuration, DataGridPlot } from 'src/renderer/types';
 import GridLayout, { Layout } from 'react-grid-layout';
 import { GridLayoutPlot } from '../../components';
-import { fetchDownsamplingMethods } from '../../utils';
 
 interface VisualizationPlotProps {
   extended?: boolean;
@@ -24,7 +23,6 @@ export const VisualizationPlot = ({
   const colsNumber = 12;
   const colWidth = gridWith / colsNumber;
   const rowHeight = 30;
-  const [downsamplingList, setDownsamplingList] = useState<string[]>([]);
 
   /**
    * Handle the mouse down event
@@ -83,19 +81,6 @@ export const VisualizationPlot = ({
   );
 
   /*
-   * Get downsampling methods to show in select
-   */
-  useEffect(() => {
-    const getDownsamplingList = async () => {
-      const methodsRes = await fetchDownsamplingMethods();
-      setDownsamplingList(
-        methodsRes.downsampling_methods.map((method) => method.name),
-      );
-    };
-    getDownsamplingList();
-  }, []);
-
-  /*
    * Scroll to the bottom of the scroll area when new data is added or removed
    */
   useEffect(() => {
@@ -149,7 +134,6 @@ export const VisualizationPlot = ({
                   data={plotData}
                   colWidth={colWidth}
                   rowHeight={rowHeight}
-                  downsamplingList={downsamplingList}
                 />
               </Paper>
             );

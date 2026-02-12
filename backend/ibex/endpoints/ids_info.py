@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/ids_info/node_info/",
+    "/ids_info/node_info",
     status_code=200,
     response_model=NodeInfoResponse,
     responses={
@@ -42,7 +42,7 @@ def node_info(uri: str, show_error_bars: bool = False) -> dict:
 
 
 @router.get(
-    "/ids_info/find_paths/",
+    "/ids_info/find_paths",
     status_code=200,
     response_model=FindPathsResponse,
     responses={
@@ -76,7 +76,7 @@ def find_field(uri: str, searched_node: str, show_error_bars: bool = False) -> d
 
 
 @router.get(
-    "/ids_info/array_summary/",
+    "/ids_info/array_summary",
     status_code=200,
     response_model=ArraySummaryResponse,
     responses={

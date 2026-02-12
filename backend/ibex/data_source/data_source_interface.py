@@ -6,6 +6,13 @@ from typing import Sequence, Optional, List
 
 class DataSourceInterface(ABC):
     @abstractmethod
+    def data_serializer_custom(self, obj):
+        """
+        Custom data sub-serializer. Replaces arbitrary objects with ones supported by ORJSON serializer (IDSNumericArray -> np.array).
+        """
+        ...
+
+    @abstractmethod
     def data_entry_exists(self, uri: str) -> bool:
         """
         Check if data entry can be opened

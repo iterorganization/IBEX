@@ -3,6 +3,7 @@ import { useIbexStore } from '../../stores';
 import { VisualizationTree } from './VisualizationTree';
 import { VisualizationPlot } from './VisualizationPlot';
 import { VisualizationMetaData } from './VisualizationMetaData';
+import { DataplotCustomization } from './DataplotCustomization';
 import { useDisclosure } from '@mantine/hooks';
 
 export const Visualization = () => {
@@ -44,8 +45,10 @@ export const Visualization = () => {
             data-testid="visualization-right-panel"
           >
             <Paper shadow="md" h={HEIGHT} radius="md">
-              {active?.gridLayoutSelected ? (
+              {active?.metadataGridLayout ? (
                 <VisualizationMetaData data-testid="visualization-metadata" />
+              ) : active?.customizedGridLayout ? (
+                <DataplotCustomization />
               ) : (
                 <VisualizationPlot
                   extended={!opened}

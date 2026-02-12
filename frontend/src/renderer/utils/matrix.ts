@@ -22,6 +22,11 @@ export const getFirstArrayValueFromShape = (
   return firstArrayValue as number[];
 };
 
+/**
+ * Get vector from coordinates dependencies
+ * @param coordinates
+ * @param axeIndexWanted
+ */
 export const getArrayValueFromDependance = (
   coordinates: Coordinates[],
   axeIndexWanted: number,
@@ -46,7 +51,6 @@ export const getArrayValueFromDependance = (
     // get shape when irregular data
     tensor = tf.tensor(wantedCoordinate.data);
   }
-
   for (const shapeElement of wantedCoordinate.shape === 'irregular'
     ? tensor.shape
     : wantedCoordinate.shape) {

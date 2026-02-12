@@ -34,6 +34,7 @@ export const generateNewGrid = (
     title: '',
     isTitleOverwritten: false,
     displayErrorBand: true,
+    displayGrid: true,
     i: generateUuid(),
     isEditing: true,
     static: true,

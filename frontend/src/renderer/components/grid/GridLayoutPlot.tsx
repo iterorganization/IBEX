@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import {
   Axis,
   Configuration,
@@ -13,12 +7,12 @@ import {
   DataPlotly,
   GridLayoutPlotProps,
   URITreeNodeData,
-} from 'src/renderer/types';
-import { Center, Container, ScrollArea, Tabs, Text } from '@mantine/core';
-import { SimplePlotly, Surface2D } from '../plot';
+} from '../../../renderer/types';
+import { Center, Container, Text } from '@mantine/core';
+import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import {
-  fetchDataPlot,
+  containsFloat,
   getArrayValueFromDependance,
   getErrorYVectors,
   getLastIndexedField,
@@ -27,7 +21,6 @@ import {
   normalizeIndices,
   updateIndexFieldName,
 } from '../../utils';
-import { showNotification } from '@mantine/notifications';
 import { MetaDataInfos } from '../../pages/visualization/VisualizationMetaData';
 import { HoverButtons } from './HoverButtons';
 
@@ -35,19 +28,14 @@ export const GridLayoutPlot = ({
   data,
   colWidth,
   rowHeight,
-  downsamplingList,
 }: GridLayoutPlotProps) => {
   const { active, updatedConfiguration } = useIbexStore();
-  const gridSliderRef = useRef<HTMLDivElement>(null);
   const [heightGrid, setHeightGrid] = useState(
     data.h * rowHeight + (23 * (data.h * rowHeight)) / 100,
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
   const [is3DView, setIs3DView] = useState<boolean>(false);
   const [active3DTab, setActive3DTab] = useState<string>('0');
-  const [downsamplingMethod, setDownsamplingMethod] = useState<string | null>(
-    null,
-  );
   const [metadataTabsValue, setMetadataTabsValue] = useState<string>(
     data.plot[0]?.path || '',
   );
@@ -202,87 +190,48 @@ export const GridLayoutPlot = ({
     }
   }, [data.plot]);
 
-  useEffect(() => {
-    // Update downsampled method after a timeout
-    if (data.downsampled_method) {
-      setDownsamplingMethod(data.downsampled_method);
+  const updateSelectedPlotMode = (is3DView: boolean, active: Configuration) => {
+    const updatedDataPlot: DataGridPlot[] = JSON.parse(
+      JSON.stringify(active.dataPlot),
+    );
+    const selectedDataPlot = updatedDataPlot.find(
+      (dataPlot) => dataPlot.i === data.i,
+    );
+    if (selectedDataPlot?.selectedPlotMode) {
+      selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
+    } else {
+      selectedDataPlot.selectedPlotMode =
+        data.coordinates.length >= 2 &&
+        containsFloat(
+          data.coordinates.find((coord) => coord.axeIndex === 1).data,
+        )
+          ? 'Heatmap'
+          : '1D';
     }
-  }, [data.downsampled_method]);
 
-  useEffect(() => {
-    const getDataPlotDownsampled = async () => {
-      try {
-        const updatedDataPlotList: DataGridPlot[] = JSON.parse(
-          JSON.stringify(active.dataPlot),
-        );
-        const updatedDataPlot = updatedDataPlotList.find(
-          (dataPlotToUpdate) => dataPlotToUpdate.i === data.i,
-        );
-
-        let plotIndex = 0;
-        for (const plot of updatedDataPlot.plot) {
-          const dataPlotDownsampled = await fetchDataPlot(
-            plot.nodeUri.replace(/\[\d+\]/g, '[:]'),
-            downsamplingMethod,
-          );
-
-          // Update coordinates with downsampled data only once because each plots have same coordinates
-          if (plotIndex === 0) {
-            let coordinateIndex = 0;
-            for (const coordinate of updatedDataPlot.coordinates) {
-              coordinate.downsampled_shape =
-                dataPlotDownsampled.data.coordinates[
-                  coordinateIndex
-                ].downsampled_shape;
-              coordinate.data =
-                dataPlotDownsampled.data.coordinates[coordinateIndex].value;
-              coordinateIndex++;
-            }
-
-            // Update downsampled method
-            updatedDataPlot.downsampled_method =
-              dataPlotDownsampled.data.downsampled_method;
-          }
-
-          // Update plot with downsampled data
-          plot.shape = dataPlotDownsampled.data.downsampled_shape;
-          // Get x axis switch coordinates dependances
-          plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-          plot.yData = dataPlotDownsampled.data.value;
-          // Get y axis
-          const vectorData = getVectorData(
-            updatedDataPlot.coordinates,
-            plot.yData,
-          );
-          plot.y = vectorData;
-
-          plotIndex++;
-        }
-
-        // Save new configuration with sampled data
-        const updatedActive = {
-          ...active,
-          dataPlot: updatedDataPlotList,
-        };
-        updatedConfiguration(updatedActive);
-      } catch (error) {
-        console.error('Error getting downsampled data: ', error);
-        showNotification({
-          title: 'Error',
-          message: `Unable to get downsampled data.`,
-          color: 'red',
-        });
-      }
+    const updatedActive: Configuration = {
+      ...active,
+      dataPlot: updatedDataPlot,
     };
-
-    if (downsamplingMethod) {
-      getDataPlotDownsampled();
-    }
-  }, [downsamplingMethod]);
+    updatedConfiguration(updatedActive);
+  };
 
   useLayoutEffect(() => {
-    setIs3DView(data.coordinates.length >= 2);
+    if (data?.selectedPlotMode) {
+      setIs3DView(data.selectedPlotMode === 'Heatmap');
+    } else {
+      setIs3DView(
+        data.coordinates.length >= 2 &&
+          containsFloat(
+            data.coordinates.find((coord) => coord.axeIndex === 1).data,
+          ),
+      );
+    }
   }, []);
+
+  useEffect(() => {
+    updateSelectedPlotMode(is3DView, active);
+  }, [is3DView]);
 
   /**
    * Handle the delete grid event
@@ -325,6 +274,7 @@ export const GridLayoutPlot = ({
         ? findPlot.plot.map((item) => ({
             uri: normalizeIndices(item.nodeUri),
             name: item.labelUri,
+            type: findPlot.dataType,
           }))
         : [];
 
@@ -338,6 +288,7 @@ export const GridLayoutPlot = ({
             const newCheckedNode = {
               name: plot.labelUri,
               uri: normalizeIndices(error_band.path),
+              type: findPlot.dataType,
             };
             const exists = checkedNodeURI.some(
               (node) =>
@@ -369,16 +320,23 @@ export const GridLayoutPlot = ({
    */
   const handleInspectMetadata = useCallback(
     (id: string) => {
-      const updatedDataPlot: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
-      updatedDataPlot.find((dataPlot) => dataPlot.i === id).isEditing = false;
-
       const updatedActive: Configuration = {
         ...active,
-        gridLayoutSelected: id,
-        dataPlot: updatedDataPlot,
-        checkedNodeURI: [],
+        metadataGridLayout: id,
+      };
+      updatedConfiguration(updatedActive);
+    },
+    [active],
+  );
+
+  /**
+   * Customize plot
+   */
+  const handleCustomization = useCallback(
+    (id: string) => {
+      const updatedActive: Configuration = {
+        ...active,
+        customizedGridLayout: id,
       };
       updatedConfiguration(updatedActive);
     },
@@ -390,12 +348,10 @@ export const GridLayoutPlot = ({
       {active.dataURI.length > 0 && (
         <HoverButtons
           data={data}
-          downsamplingMethod={downsamplingMethod}
-          downsamplingList={downsamplingList}
           shouldDisplayMetadata={shouldDisplayMetadata}
-          setDownsamplingMethod={setDownsamplingMethod}
           handleEditGrid={handleEditGrid}
           handleInspectMetadata={handleInspectMetadata}
+          handleCustomization={handleCustomization}
           handleDeleteGrid={handleDeleteGrid}
           is3DView={is3DView}
           setIs3DView={setIs3DView}
@@ -410,66 +366,29 @@ export const GridLayoutPlot = ({
           <Text>Current configuration has no data. Please, select URIs.</Text>
         </Center>
       ) : !data.coordinates.length || shouldDisplayMetadata ? (
-        // Show metadata when not enough coordinates to plot
         <Container pt="40px" p="1rem">
-          <Tabs
-            value={metadataTabsValue}
-            onChange={(value) => setMetadataTabsValue(value)}
-          >
-            <ScrollArea
-              key={`tabScrollBar_${active.checkedNodeURI.length}`}
-              type="hover"
-              scrollHideDelay={0} // keep visible scrollbar only during hover
-              scrollbarSize={6}
-              offsetScrollbars
-              style={{ maxWidth: '100%' }}
-            >
-              <Tabs.List
-                style={{
-                  flexWrap: 'nowrap',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {data.plot.length > 0 &&
-                  data.plot.map((item: DataPlotly, index) => (
-                    <Tabs.Tab
-                      key={`metadata_${index}`}
-                      value={item.path}
-                      disabled={
-                        !data.isEditing && metadataTabsValue !== item.path
-                      }
-                    >
-                      {item.name}
-                    </Tabs.Tab>
-                  ))}
-              </Tabs.List>
-            </ScrollArea>
-
-            {data &&
-              data.plot.map((plot: DataPlotly, index) => {
-                return (
-                  <Tabs.Panel key={`metadata_${index}`} value={plot.path}>
-                    <MetaDataInfos
-                      gridLayoutKey={data.i}
-                      data={plot}
-                      yAxis={
-                        plot.yaxis !== '' ? data.y2AxisData : data.yAxisData
-                      }
-                      height={(heightGrid - 56).toString()} // 56px is equivalent to paddings (40px from top + 1rem from bottom)
-                      tabsSelected={plot.path}
-                    />
-                  </Tabs.Panel>
-                );
-              })}
-          </Tabs>
+          {data.plot.map((plot: DataPlotly, index) => {
+            return (
+              index.toString() === active3DTab && (
+                <MetaDataInfos
+                  gridLayoutKey={data.i}
+                  data={plot}
+                  yAxis={plot.yaxis !== '' ? data.y2AxisData : data.yAxisData}
+                  height={(heightGrid - 72).toString()} // 72px is equivalent to paddings (40px from top + 2rem for y padding)
+                  tabsSelected={plot.path}
+                />
+              )
+            );
+          })}
         </Container>
       ) : is3DView ? (
         // Show heatmap
-        <Surface2D
+        <Heatmap2D
           itemDataGrid={data}
           width={widthGrid}
-          height={heightGrid - 10}
+          height={heightGrid}
           plotIndex={active3DTab}
+          showSliders={true}
           handleUpdateCoordinate={handleUpdateCoordinate}
         />
       ) : (
@@ -478,7 +397,7 @@ export const GridLayoutPlot = ({
           itemDataGrid={data}
           width={widthGrid}
           height={heightGrid}
-          sliderRef={gridSliderRef}
+          showSliders={true}
           is3DView={is3DView}
           handleUpdateCoordinate={handleUpdateCoordinate}
         />

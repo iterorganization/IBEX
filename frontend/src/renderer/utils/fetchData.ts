@@ -1,6 +1,7 @@
 import { showNotification } from '@mantine/notifications';
 import {
   ArraySummaryResponse,
+  AxisData,
   DataIdsResponse,
   DownsamplingMethodsResponse,
   FieldValueResponse,
@@ -13,6 +14,7 @@ import {
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
+import { getTensorizedMatrix } from './plot';
 
 /**
  * Retrieves the API configuration.
@@ -35,12 +37,17 @@ const getConfig = async () => {
 const handleError = (error: unknown, context: string, code?: number) => {
   if (error instanceof Error) {
     if (
-      code === 404 &&
-      error.toString().includes('has no attribute') &&
-      (error.toString().includes('_error_upper') ||
-        error.toString().includes('_error_lower'))
+      // Occurs when having at least one plot with error bands and adding a plot without upper / lower in tree
+      (code === 404 &&
+        error.toString().includes('has no attribute') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower'))) || // Occurs when calling automatically error bands without data
+      (code === 464 &&
+        error.toString().includes('No data for') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower')))
     ) {
-      // Prevent from showing notification when no error band founded (error 404)
+      // Prevent from showing notification when no error band founded
       throw error;
     }
 
@@ -136,7 +143,7 @@ export const fetchNodeInfos = async (
   showErrorBars: boolean,
 ) => {
   return fetchFromApi<NodeInfoResponse>(
-    `/ids_info/node_info/?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
+    `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
 };
 
@@ -149,7 +156,7 @@ export const fetchFindPaths = async (
   showErrorBars: boolean,
 ) => {
   return fetchFromApi<SearchNodeResponse>(
-    `/ids_info/find_paths/?uri=${encodeURIComponent(uri)}&searched_node=${encodeURIComponent(value)}&show_error_bars=${showErrorBars}`,
+    `/ids_info/find_paths?uri=${encodeURIComponent(uri)}&searched_node=${encodeURIComponent(value)}&show_error_bars=${showErrorBars}`,
   );
 };
 
@@ -159,30 +166,34 @@ export const fetchFindPaths = async (
 export const fetchDataPlot = async (
   uri: string,
   downsamplingMethod?: string,
+  downsamplingSize?: number,
 ) => {
-  const downsampled_size = 1000;
+  const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
   let firstMethod: string;
 
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data/?uri=${encodeURIComponent(uri)}`,
-        30000,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}`,
+        5000,
       );
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error.name === 'AbortError' || error.name === 'SyntaxError') {
+        // "SyntaxError" can be triggered when too heavy (eof error)
         // Use first downsampling method by default to fetch data
         const methods = await fetchDownsamplingMethods();
-        firstMethod = methods?.downsampling_methods.slice(0)[1].name;
+        firstMethod =
+          methods?.downsampling_methods.find((meth) => meth.name === 'M4')
+            ?.name || methods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
         );
       }
     }
@@ -207,13 +218,26 @@ export const fetchDataPlot = async (
     response.data.downsampled_method = firstMethod || downsamplingMethod;
   }
 
-  if (response.data.shape === 'irregular' && response.data.ndim === 1) {
-    // Alert when getting irregular shape in 1D cases
+  if (response.data.shape === 'irregular') {
+    // Alert when getting irregular shape
     showNotification({
       title: 'Warning',
       message: 'Data are incomplete.',
       color: 'yellow',
     });
+
+    for (const coord of response.data.coordinates) {
+      // Fill incomplete coordinates with NaN to be a matrix format
+      const tensorizedCoordinate = await getTensorizedMatrix(coord.value);
+      coord.value = (await tensorizedCoordinate.array()) as AxisData;
+      coord.shape = tensorizedCoordinate.shape;
+      coord.downsampled_shape = tensorizedCoordinate.shape;
+    }
+    // Fill incomplete data with NaN to be a matrix format
+    const dataTensorized = await getTensorizedMatrix(response.data.value);
+    response.data.value = (await dataTensorized.array()) as AxisData;
+    response.data.shape = dataTensorized.shape;
+    response.data.downsampled_shape = dataTensorized.shape;
   }
   return response;
 };
@@ -230,10 +254,23 @@ export const fetchDownsamplingMethods = async () => {
 /**
  * Retrieves field values for a given URI.
  */
-export const fetchFieldValue = async (uri: string) => {
-  return fetchFromApi<FieldValueResponse>(
-    `/data/field_value/?uri=${encodeURIComponent(uri)}`,
-  );
+export const fetchFieldValue = async (
+  uri: string,
+  downsamplingMethod?: string,
+  downsamplingSize?: number,
+) => {
+  const downsampled_size = downsamplingSize || 1000;
+  let response: FieldValueResponse;
+  if (downsamplingMethod) {
+    response = await fetchFromApi<FieldValueResponse>(
+      `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+    );
+  } else {
+    response = await fetchFromApi<FieldValueResponse>(
+      `/data/field_value?uri=${encodeURIComponent(uri)}`,
+    );
+  }
+  return response;
 };
 
 /**
@@ -241,7 +278,7 @@ export const fetchFieldValue = async (uri: string) => {
  */
 export const fetchDataIds = async (uri: string) => {
   return fetchFromApi<DataIdsResponse>(
-    `/data_entry/list_idses/?uri=${encodeURIComponent(uri)}`,
+    `/data_entry/list_idses?uri=${encodeURIComponent(uri)}`,
   );
 };
 
@@ -250,7 +287,7 @@ export const fetchDataIds = async (uri: string) => {
  */
 export const fetchURIFromPath = async (path: string) => {
   return fetchFromApi<URIFromPathResponse>(
-    `/data_entry/uri_from_path/?path=${encodeURIComponent(path)}`,
+    `/data_entry/uri_from_path?path=${encodeURIComponent(path)}`,
   );
 };
 
@@ -259,7 +296,7 @@ export const fetchURIFromPath = async (path: string) => {
  */
 export const fetchURIExists = async (uri: string) => {
   return fetchFromApi<URIExistsResponse>(
-    `/data_entry/exists/?uri=${encodeURIComponent(uri)}`,
+    `/data_entry/exists?uri=${encodeURIComponent(uri)}`,
   );
 };
 
@@ -270,7 +307,7 @@ export const fetchDataEntries = async (
   dataEntriesParameters: FormDbEntries,
 ) => {
   return fetchFromApi<URDataEntriesResponse>(
-    `/data_entry/available_entries/?user=${dataEntriesParameters.user}&backend=${dataEntriesParameters.backend}&database=${dataEntriesParameters.database}&version=${dataEntriesParameters.version}`,
+    `/data_entry/available_entries?user=${dataEntriesParameters.user}&backend=${dataEntriesParameters.backend}&database=${dataEntriesParameters.database}&version=${dataEntriesParameters.version}`,
   );
 };
 
@@ -279,7 +316,7 @@ export const fetchDataEntries = async (
  */
 export const fetchArraySummary = async (uri: string) => {
   return fetchFromApi<ArraySummaryResponse>(
-    `/ids_info/array_summary/?uri=${encodeURIComponent(uri)}`,
+    `/ids_info/array_summary?uri=${encodeURIComponent(uri)}`,
   );
 };
 
@@ -287,5 +324,5 @@ export const fetchArraySummary = async (uri: string) => {
  * Return backend version.
  */
 export const fetchInfoVersion = async () => {
-  return fetchFromApi<InfoVersionResponse>(`/info/version/`);
+  return fetchFromApi<InfoVersionResponse>(`/info/version`);
 };

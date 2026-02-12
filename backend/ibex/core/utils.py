@@ -143,13 +143,14 @@ class DownsamplingMethods(Enum):
         raise ValueError(f"Downsampling method: {name} is not recognised by IBEX backend")
 
 
-def downsample_data(data: List, target_size: int, method: str | None = None, x=None):
+def downsample_data(data: List, target_size: int, method: str | None = None, x=None, single_x_axis=True):
     """
     Downsamples list of values
     :param data: data to be down-sampled
     :param target_size: desired size of data (in elements per dimension)
     :param method: Downsampling method. One of DownsamplingMethods (Enum) possible values or None
     :param x: x-axis values (coordinate) to be downsampled
+    :param single_x_axis: determines if there is common x axis for all np.arrays in data (e.g. single time vector for all)
 
     Returns tuple (downsapled_coordinate, downsampled_data)
     """
@@ -165,19 +166,23 @@ def downsample_data(data: List, target_size: int, method: str | None = None, x=N
         downsampled_x = []
         downsampled_data = []
 
-        if x is not None:
+        if single_x_axis or x is None:
+            for _data in data:
+                _x1, _data1 = downsample_data(_data, target_size, method, x=x)
+                downsampled_x = _x1
+                downsampled_data.append(_data1)
+            if isinstance(downsampled_x, (np.ndarray, IDSNumericArray)):
+                downsampled_x = downsampled_x.tolist()
+            return downsampled_x or None, downsampled_data
+
+        else:  # x is not None
             for _x, _data in zip(x, data):
                 _x1, _data1 = downsample_data(_data, target_size, method, _x)
                 downsampled_x.append(_x1)
                 downsampled_data.append(_data1)
-        else:
-            for _data in data:
-                _, _data1 = downsample_data(_data, target_size, method)
-                downsampled_data.append(_data1)
+        return downsampled_x, downsampled_data
 
-        return downsampled_x or None, downsampled_data
-
-    if not isinstance(data, IDSNumericArray) and not isinstance(data, np.ndarray):
+    if not isinstance(data, (IDSNumericArray, np.ndarray)):
         raise TypeError("Cannot downsample not-IDSNumericArray data")
 
     # ====== handle actual data (np.ndarray or IDSNumericArray) ======
@@ -191,6 +196,9 @@ def downsample_data(data: List, target_size: int, method: str | None = None, x=N
     s_ds = downsampling_function(data, n_out=target_size)
 
     if x is not None:
-        return x[s_ds], data[s_ds]
+        try:
+            return x[s_ds], data[s_ds]
+        except IndexError:  # raised when X a scalar
+            return x, data[s_ds]
 
     return x, data[s_ds]

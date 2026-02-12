@@ -15,7 +15,8 @@ export interface Configuration extends BaseConfiguration {
   dataPlot: DataGridPlot[];
   path?: string;
   saved?: boolean;
-  gridLayoutSelected?: string | null;
+  metadataGridLayout?: string | null;
+  customizedGridLayout?: string | null;
 }
 
 export interface ConfigurationToSave extends BaseConfiguration {

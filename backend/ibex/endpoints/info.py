@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/info/version/",
+    "/info/version",
     status_code=200,
     response_model=VersionResponse,
     responses={
@@ -38,7 +38,7 @@ def version() -> dict:
 
 
 @router.get(
-    "/info/downsampling_methods/",
+    "/info/downsampling_methods",
     status_code=200,
     response_model=DownsamplingMethodsResponse,
     responses={

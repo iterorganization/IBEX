@@ -1,10 +1,12 @@
 import { Data, ErrorBar } from 'plotly.js';
 import { Layout } from 'react-grid-layout';
+import { NodeInfoTypeEnum } from './nodes';
 
 export interface Axis {
   name: string;
   unit: string;
   path?: string;
+  type?: string;
 }
 
 export type AxisData =
@@ -16,11 +18,12 @@ export interface BaseCoordinates {
   path: string;
   target: string;
   valueIndex: number;
+  range?: [number, number];
+  rangeValues?: [number, number] | [string, string];
 }
 
 export interface Coordinates extends BaseCoordinates {
   name: string;
-  downsampled_shape: number[];
   shape: number[] | 'irregular';
   coordinates: string[];
   data: AxisData;
@@ -32,6 +35,9 @@ export interface BaseDataPlotly {
   nodeUri: string;
   labelUri: string;
   yaxis?: string;
+  customPreferences?: CustomPreferences;
+  line?: PlotLine;
+  mode?: string;
 }
 
 export type DataPlotly = BaseDataPlotly &
@@ -53,6 +59,15 @@ export type ErrorBandData = {
   yData: AxisData;
 };
 
+export type CustomPreferences = {
+  colorscale?: string;
+};
+
+export type PlotLine = {
+  color?: string;
+  shape?: string;
+};
+
 export interface BaseDataGridPlot {
   i: string;
   x: number;
@@ -62,6 +77,9 @@ export interface BaseDataGridPlot {
   title: string;
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
+  displayGrid: boolean;
+  downsampled_method?: string;
+  downsampled_size?: number;
   xAxisData?: Axis;
   yAxisData?: Axis;
   y2AxisData?: Axis;
@@ -70,11 +88,15 @@ export interface BaseDataGridPlot {
 export interface DataGridPlot extends Layout, BaseDataGridPlot {
   plot: DataPlotly[];
   isEditing: boolean;
+  dataType?: NodeInfoTypeEnum;
   coordinates?: Coordinates[];
   downsampled_method?: string;
+  downsampled_size?: number;
+  selectedPlotMode?: 'Heatmap' | '1D';
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
+  dataType: NodeInfoTypeEnum;
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
 }

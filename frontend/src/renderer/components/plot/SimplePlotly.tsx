@@ -1,5 +1,5 @@
 import { Center, Grid, Group, Select, Text } from '@mantine/core';
-import { Layout } from 'plotly.js';
+import { Layout, AxisType } from 'plotly.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Configuration, Coordinates, DataGridPlot } from 'src/renderer/types';
@@ -13,12 +13,13 @@ import {
   swapAxis,
 } from '../../utils';
 import classes from './SimplePlotly.module.css';
-import { NoDataForURI, PlotTitle } from '../plot';
+import { NoDataForURI } from '../plot';
+import { usePlotLayout } from './hooks/usePlotLayout';
 interface SimplePlotlyProps {
   itemDataGrid: DataGridPlot;
   width: number;
   height: number;
-  sliderRef?: React.RefObject<HTMLDivElement>;
+  showSliders: boolean;
   is3DView?: boolean;
   handleUpdateCoordinate?: (
     coordinate: Coordinates,
@@ -30,7 +31,7 @@ export const SimplePlotly = ({
   itemDataGrid,
   height,
   width,
-  sliderRef,
+  showSliders,
   is3DView,
   handleUpdateCoordinate,
 }: SimplePlotlyProps) => {
@@ -49,6 +50,11 @@ export const SimplePlotly = ({
       rangemode: 'normal',
       showline: true,
       zeroline: false,
+      type:
+        (itemDataGrid?.xAxisData?.type as AxisType) ||
+        typeof itemDataGrid.plot[0].x[0] === 'string'
+          ? 'category'
+          : 'linear',
     },
     yaxis: {
       title: {
@@ -61,7 +67,10 @@ export const SimplePlotly = ({
       rangemode: 'normal',
       showline: true,
       zeroline: false,
-      showgrid: true,
+      type: (itemDataGrid?.yAxisData?.type as AxisType) || 'linear',
+    },
+    yaxis2: {
+      type: (itemDataGrid?.y2AxisData?.type as AxisType) || 'linear',
     },
     modebar: {
       orientation: 'v',
@@ -74,10 +83,17 @@ export const SimplePlotly = ({
     plot_bgcolor: '#c7c7c7',
     dragmode: 'zoom',
   });
+  // Custom hook used for trigger some useEffects to update the layout
+  usePlotLayout({
+    itemDataGrid,
+    setLayoutPlot,
+  });
   const [title, setTitle] = useState(itemDataGrid.title);
   const [dataEntries, setDataEntries] = useState<string[]>([]);
-  const plotRef = useRef<Plot | null>(null);
   const plotDivRef = useRef<HTMLDivElement>(null);
+  const layoutPlotWidth = showSliders
+    ? width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1)
+    : width;
 
   useEffect(() => {
     // Check data entries to update axes titles when needed
@@ -194,7 +210,7 @@ export const SimplePlotly = ({
   useEffect(() => {
     setLayoutPlot((prevLayout) => ({
       ...prevLayout,
-      width: width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1) - 75,
+      width: layoutPlotWidth - 75,
     }));
   }, [width]);
 
@@ -254,6 +270,7 @@ export const SimplePlotly = ({
       yaxis2:
         itemDataGrid.y2AxisData && itemDataGrid.y2AxisData !== undefined
           ? {
+              ...prevLayout.yaxis2,
               title: {
                 text: Y2Title,
                 font: {
@@ -293,11 +310,10 @@ export const SimplePlotly = ({
       {/* Coordinates sliders */}
       {itemDataGrid.coordinates.filter((coord) => coord.name !== '')?.length >
         1 &&
-        sliderRef && (
+        showSliders && (
           <Grid.Col
             className={classes.handlePlotExplorationContainer}
             span="content"
-            ref={sliderRef ? sliderRef : undefined}
             mt={10}
           >
             <Group gap={5}>
@@ -317,12 +333,12 @@ export const SimplePlotly = ({
                   value &&
                   swapAxis(
                     itemDataGrid,
-                    active,
-                    updatedConfiguration,
                     itemDataGrid.coordinates.find(
                       (coord: Coordinates) => coord.name === value,
                     ).axeIndex,
-                    'x',
+                    0, // axeIndex of x is always 0
+                    active,
+                    updatedConfiguration,
                   )
                 }
                 size="xs"
@@ -377,45 +393,36 @@ export const SimplePlotly = ({
       {itemDataGrid.plot.every((plot) =>
         [plot.x, plot.y].every(isMatrixPlottable),
       ) ? (
-        <>
-          <PlotTitle
-            itemDataGrid={itemDataGrid}
-            title={title}
-            setTitle={setTitle}
-          />
-
-          <Grid.Col
-            span="auto"
-            pos="relative"
-            w={`${width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1) - 32}px`}
-            maw={`${width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1) - 32}px`}
-            h={`${height}px`}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <div ref={plotDivRef}>
-              <Plot
-                ref={plotRef}
-                className={classes.simplePlot}
-                data={itemDataGrid.plot}
-                config={{
-                  autosizable: false,
-                  staticPlot: !itemDataGrid.static,
-                  scrollZoom: true,
-                  displayModeBar: true,
-                  showTips: true,
-                  displaylogo: false,
-                  modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-                }}
-                layout={layoutPlot}
-                onRelayout={handleRelayout}
-                useResizeHandler={false}
-              />
-            </div>
-          </Grid.Col>
-        </>
+        <Grid.Col
+          span="auto"
+          pos="relative"
+          w={`${layoutPlotWidth - 32}px`}
+          maw={`${layoutPlotWidth - 32}px`}
+          h={`${height}px`}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div ref={plotDivRef}>
+            <Plot
+              className={classes.simplePlot}
+              data={itemDataGrid.plot}
+              config={{
+                autosizable: false,
+                staticPlot: !itemDataGrid.static,
+                scrollZoom: true,
+                displayModeBar: true,
+                showTips: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+              }}
+              layout={layoutPlot}
+              onRelayout={handleRelayout}
+              useResizeHandler={false}
+            />
+          </div>
+        </Grid.Col>
       ) : itemDataGrid.plot.some(
           (plot) => ![plot.x, plot.y, plot.yData].some(isMatrixPlottable),
         ) ? (

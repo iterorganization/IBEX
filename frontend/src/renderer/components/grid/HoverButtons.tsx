@@ -1,33 +1,32 @@
 import classes from './HoverButtons.module.css';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Group,
   Tooltip,
   ActionIcon,
-  Select,
   Text,
   Tabs,
   Switch,
+  ScrollArea,
 } from '@mantine/core';
 import {
   IconBrandDatabricks,
   IconCheck,
   IconEdit,
+  IconPalette,
   IconTrash,
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
 import { Configuration, DataGridPlot } from '../../types';
-import { fetchErrorBandsInConfig } from '../../utils';
+import { applyRange, fetchErrorBandsInConfig } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
   data: DataGridPlot;
-  downsamplingMethod: string;
-  downsamplingList: string[];
   shouldDisplayMetadata: boolean;
-  setDownsamplingMethod: React.Dispatch<React.SetStateAction<string>>;
   handleEditGrid: (id: string) => void;
   handleInspectMetadata: (id: string) => void;
+  handleCustomization: (id: string) => void;
   handleDeleteGrid: (id: string) => void;
   is3DView: boolean;
   setIs3DView: React.Dispatch<React.SetStateAction<boolean>>;
@@ -38,12 +37,10 @@ interface HoverButtonsProps {
 export const HoverButtons = React.memo(
   ({
     data,
-    downsamplingMethod,
-    downsamplingList,
     shouldDisplayMetadata,
-    setDownsamplingMethod,
     handleEditGrid,
     handleInspectMetadata,
+    handleCustomization,
     handleDeleteGrid,
     is3DView,
     setIs3DView,
@@ -52,6 +49,9 @@ export const HoverButtons = React.memo(
   }: HoverButtonsProps) => {
     const { active, updatedConfiguration } = useIbexStore();
     const { hovered, ref: hoverRef } = useHover();
+    const previousValueDisplayErrorBands = useRef<boolean | undefined>(
+      undefined,
+    );
 
     const heatmapLogo = (
       <svg width="50" height="50" viewBox="0 0 50 50">
@@ -108,17 +108,49 @@ export const HoverButtons = React.memo(
           JSON.stringify(active),
         ) as Configuration;
         if (data.displayErrorBand) {
-          // Get all error bands from selected dataPLot
-          const selectedDataPlot = updatedActive.dataPlot.find(
-            (dataPlot) => dataPlot.i === data.i,
-          );
-          for (const plot of selectedDataPlot.plot) {
-            await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
+          if (
+            (previousValueDisplayErrorBands.current === false ||
+              previousValueDisplayErrorBands.current === undefined) &&
+            data.displayErrorBand === true
+          ) {
+            // Get all error bands from selected dataPlot when user active error bands
+            const selectedDataPlot = updatedActive.dataPlot.find(
+              (dataPlot) => dataPlot.i === data.i,
+            );
+            for (const plot of selectedDataPlot.plot) {
+              await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
+            }
+
+            if (previousValueDisplayErrorBands.current === false) {
+              // Apply ranges to the new error bands added with switch "display error bands" and if not already applied at load
+              for (const coordinate of selectedDataPlot.coordinates) {
+                if (coordinate?.range) {
+                  const keepValueIndex = true;
+                  await applyRange(
+                    coordinate,
+                    coordinate.rangeValues,
+                    selectedDataPlot,
+                    [
+                      ...selectedDataPlot.plot.map(
+                        (plot) => plot.nodeUri + '_error_upper',
+                      ),
+                      ...selectedDataPlot.plot.map(
+                        (plot) => plot.nodeUri + '_error_lower',
+                      ),
+                    ],
+                    keepValueIndex,
+                  );
+                }
+              }
+            }
           }
         } else {
           // Removes all error bands from selected dataPlot
           removeErrorBands(updatedActive);
         }
+        // Update previous value (used to determine the condition: previous === false && new === true)
+        previousValueDisplayErrorBands.current = data.displayErrorBand;
+
         // Update config
         updatedConfiguration(updatedActive);
       };
@@ -130,18 +162,37 @@ export const HoverButtons = React.memo(
     return (
       <div ref={hoverRef} className={classes.containerButton}>
         <Group justify="space-between" h={'100%'}>
-          {is3DView ? (
+          {is3DView || !data.coordinates.length || shouldDisplayMetadata ? (
             <Tabs
               value={active3DTab}
               onChange={(value) => setActive3DTab(value)}
             >
-              <Tabs.List>
-                {data.plot.map((plot, index) => (
-                  <Tabs.Tab key={`3D_tab_${index}`} value={index.toString()}>
-                    {plot.name}
-                  </Tabs.Tab>
-                ))}
-              </Tabs.List>
+              <ScrollArea
+                type="hover"
+                scrollHideDelay={0} // keep visible scrollbar only during hover
+                scrollbarSize={6}
+                offsetScrollbars
+                maw={
+                  hoverRef?.current?.offsetWidth
+                    ? !data.coordinates.length || shouldDisplayMetadata
+                      ? hoverRef.current.offsetWidth - 110
+                      : hoverRef.current.offsetWidth - 230
+                    : '100%'
+                }
+              >
+                <Tabs.List
+                  style={{
+                    flexWrap: 'nowrap',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {data.plot.map((plot, index) => (
+                    <Tabs.Tab key={`3D_tab_${index}`} value={index.toString()}>
+                      {plot.name}
+                    </Tabs.Tab>
+                  ))}
+                </Tabs.List>
+              </ScrollArea>
             </Tabs>
           ) : (
             <div></div>
@@ -149,20 +200,6 @@ export const HoverButtons = React.memo(
 
           {hovered || data.isEditing ? (
             <Group pos="absolute" right={'1rem'} top={5}>
-              {data.coordinates.length && !shouldDisplayMetadata && (
-                <Tooltip label="Select your downsampling method">
-                  <Select
-                    value={downsamplingMethod || 'None'}
-                    w="7rem"
-                    size="xs"
-                    disabled={!data.isEditing}
-                    data={downsamplingList}
-                    onChange={setDownsamplingMethod}
-                    placeholder="Downsampling"
-                  />
-                </Tooltip>
-              )}
-
               {!is3DView && data.isEditing && !shouldDisplayMetadata && (
                 <Switch
                   label="Error bands"
@@ -199,6 +236,23 @@ export const HoverButtons = React.memo(
                     }
                   >
                     <IconBrandDatabricks
+                      style={{ width: '70%', height: '70%' }}
+                      stroke={1.5}
+                    />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+
+              {data.coordinates.length && !shouldDisplayMetadata && (
+                // Show customization button only if plottable
+                <Tooltip label="Customize the grid">
+                  <ActionIcon
+                    variant="filled"
+                    aria-label="Metadatas"
+                    onClick={() => handleCustomization(data.i)}
+                    className={classes.actionButton}
+                  >
+                    <IconPalette
                       style={{ width: '70%', height: '70%' }}
                       stroke={1.5}
                     />

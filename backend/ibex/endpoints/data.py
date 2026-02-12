@@ -1,5 +1,6 @@
 """Endpoints extracting data from data source"""
 
+import orjson
 from typing import List, Any
 
 from fastapi import APIRouter, Query  # type: ignore
@@ -11,14 +12,26 @@ from ibex.endpoints.schemas.data_schemas import FieldValueResponse, PlotDataResp
 router = APIRouter()
 
 
+class CustomORJSONResponse(ORJSONResponse):
+    """
+    Custom ORJSON serializer. Uses serializer from data_source to transform arbitrary types (e.g. IDSNumericArray) to ones supported by ORJSON serializer (e.g. np.array).
+    """
+
+    def render(self, content) -> bytes:
+        return orjson.dumps(
+            content, default=ibex_service.data_source.data_serializer_custom, option=orjson.OPT_SERIALIZE_NUMPY
+        )
+
+
 @router.get(
     "/data/field_value",
     status_code=200,
     response_model=FieldValueResponse,
-    response_class=ORJSONResponse,
+    response_class=CustomORJSONResponse,
     responses={
         200: {"description": "Field value returned successfully"},
         404: {"description": "Data node not found"},
+        461: {"description": "Given path does not point to leaf node"},
         464: {"description": "Given data node is empty"},
     },
     description="Returns single (or tensorized) data node value",
@@ -45,14 +58,14 @@ def field_value(
     :return: JSON response
 
     """
-    return ORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size, range))
+    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size, range))
 
 
 @router.get(
     "/data/plot_data",
     status_code=200,
     response_model=PlotDataResponse,
-    response_class=ORJSONResponse,
+    response_class=CustomORJSONResponse,
     responses={
         200: {"description": "Plot data returned successfully"},
         404: {"description": "Data node not found"},
@@ -100,7 +113,5 @@ def plot_data(uri: str, downsampling_method: str | None = Query(None), downsampl
     :param downsampled_size: target size of downsampled data
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
-
-
     """
-    return ORJSONResponse(ibex_service.get_plot_data(uri.strip(), downsampling_method, downsampled_size))
+    return CustomORJSONResponse(ibex_service.get_plot_data(uri.strip(), downsampling_method, downsampled_size))

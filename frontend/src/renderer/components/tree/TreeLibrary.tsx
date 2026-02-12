@@ -6,7 +6,6 @@ import {
   Text,
   Tooltip,
   Tree,
-  TreeNodeData,
   UseTreeReturnType,
   useTree,
 } from '@mantine/core';
@@ -29,12 +28,13 @@ import { hasUserSelectedText } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface NodeIconProps {
-  node: TreeNodeData;
+  node: CustomTreeNodeData;
   type: NodeInfoTypeEnum;
   uriLabel: string;
   expanded: boolean;
   checkedNodes: URITreeNodeData[];
   tree: UseTreeReturnType;
+  shouldDisableTree: boolean;
   textRef: React.RefObject<HTMLDivElement>;
   isOverflowing: boolean;
   getCheckedNodes: (nodes: URITreeNodeData[]) => void;
@@ -52,11 +52,13 @@ interface TreeLibraryProps {
 }
 
 interface ElementProps extends RenderTreeNodePayload {
+  node: CustomTreeNodeData;
   type: NodeInfoTypeEnum;
   uriLabel: string;
   selectedNode: string | null;
   checkedNodes?: URITreeNodeData[];
   tree: UseTreeReturnType;
+  shouldDisableTree: boolean;
   setSelectedNode: (node: string | null) => void;
   handleSelectChildren: (nodeUri: string) => Promise<void>;
   getCheckedNodes: (nodes: URITreeNodeData[]) => void;
@@ -70,6 +72,7 @@ function Element({
   selectedNode,
   checkedNodes,
   tree,
+  shouldDisableTree,
   uriLabel,
   setSelectedNode,
   handleSelectChildren,
@@ -140,6 +143,7 @@ function Element({
         node={node}
         checkedNodes={checkedNodes}
         tree={tree}
+        shouldDisableTree={shouldDisableTree}
         textRef={textRef}
         isOverflowing={isTextOverflowing}
         getCheckedNodes={getCheckedNodes}
@@ -154,6 +158,7 @@ function NodeIcon({
   expanded,
   checkedNodes,
   tree,
+  shouldDisableTree,
   isOverflowing,
   textRef,
   uriLabel,
@@ -176,6 +181,7 @@ function NodeIcon({
 
     const handleCheckNode = useCallback(() => {
       if (
+        shouldDisableTree ||
         node.label.toString().endsWith('_error_lower') ||
         node.label.toString().endsWith('_error_upper')
       ) {
@@ -218,6 +224,7 @@ function NodeIcon({
           const newCheckedNode: URITreeNodeData = {
             name: uriLabel,
             uri: node.value,
+            type: node.type,
           };
           checkedNodes.push(newCheckedNode);
         }
@@ -257,6 +264,7 @@ function NodeIcon({
           style={{
             userSelect: 'text',
             cursor:
+              shouldDisableTree ||
               node.label.toString().endsWith('_error_lower') ||
               node.label.toString().endsWith('_error_upper')
                 ? 'not-allowed'
@@ -276,6 +284,7 @@ function NodeIcon({
               },
             }}
             disabled={
+              shouldDisableTree ||
               node.label.toString().endsWith('_error_lower') ||
               node.label.toString().endsWith('_error_upper')
             }
@@ -334,6 +343,7 @@ export const TreeLibrary = ({
   const { active } = useIbexStore();
   const tree = useTree();
   const [selectedNode, setSelectedNode] = useState<string>(null);
+  const [shouldDisableTree, setShouldDisableTree] = useState<boolean>(false);
 
   const expandNodesWithFiles = (nodes: CustomTreeNodeData[]) => {
     const expandRecursively = (node: CustomTreeNodeData) => {
@@ -356,6 +366,17 @@ export const TreeLibrary = ({
       }
       expandRecursively(node);
     });
+  };
+
+  const handleDisableTree = (
+    metadataGridLayout?: string,
+    customizedGridLayout?: string,
+  ) => {
+    if (metadataGridLayout || customizedGridLayout) {
+      setShouldDisableTree(true);
+    } else {
+      setShouldDisableTree(false);
+    }
   };
 
   useEffect(() => {
@@ -433,6 +454,10 @@ export const TreeLibrary = ({
     run();
   }, [isEditingPlot]);
 
+  useEffect(() => {
+    handleDisableTree(active?.metadataGridLayout, active?.customizedGridLayout);
+  }, [active?.metadataGridLayout, active?.customizedGridLayout]);
+
   return (
     <ScrollArea h={height}>
       <Tree
@@ -440,19 +465,23 @@ export const TreeLibrary = ({
         data={treeData}
         className={classes.tree}
         expandOnClick={false}
-        renderNode={(payload) => (
-          <Element
-            {...payload}
-            type={(payload.node as CustomTreeNodeData).type}
-            uriLabel={(payload.node as CustomTreeNodeData).uriLabel}
-            selectedNode={selectedNode}
-            tree={tree}
-            checkedNodes={checkedNodes}
-            setSelectedNode={setSelectedNode}
-            handleSelectChildren={handleSelectChildren}
-            getCheckedNodes={getCheckedNodes}
-          />
-        )}
+        renderNode={(payload) => {
+          return (
+            <Element
+              {...payload}
+              node={payload.node as CustomTreeNodeData}
+              type={(payload.node as CustomTreeNodeData).type}
+              uriLabel={(payload.node as CustomTreeNodeData).uriLabel}
+              selectedNode={selectedNode}
+              tree={tree}
+              shouldDisableTree={shouldDisableTree}
+              checkedNodes={checkedNodes}
+              setSelectedNode={setSelectedNode}
+              handleSelectChildren={handleSelectChildren}
+              getCheckedNodes={getCheckedNodes}
+            />
+          );
+        }}
       />
     </ScrollArea>
   );

@@ -7,7 +7,15 @@ import numpy as np  # type: ignore
 import re  # type: ignore
 from idstools.database import DBMaster  # type: ignore
 from imas.ids_metadata import IDSMetadata  # type: ignore
-from imas.ids_primitive import IDSNumericArray, IDSString0D, IDSString1D, IDSComplex0D, IDSFloat0D, IDSInt0D  # type: ignore
+from imas.ids_primitive import (
+    IDSNumericArray,
+    IDSString0D,
+    IDSString1D,
+    IDSComplex0D,
+    IDSFloat0D,
+    IDSInt0D,
+    IDSPrimitive,
+)  # type: ignore
 from imas.ids_struct_array import IDSStructArray  # type: ignore
 from imas.ids_structure import IDSStructure  # type: ignore
 from imas.ids_data_type import IDSDataType  # type: ignore
@@ -41,6 +49,16 @@ class IMASPythonSource(DataSourceInterface):
         Default constructor
         """
         ...
+
+    def data_serializer_custom(self, obj):
+        """
+        Custom data sub-serializer. Replaces arbitrary objects with ones supported by ORJSON serializer (IDSNumericArray -> np.array).
+        """
+        if isinstance(obj, IDSPrimitive):
+            return obj.value
+        if isinstance(obj, np.ndarray) and not obj.flags.c_contiguous:
+            return np.ascontiguousarray(obj)
+        raise TypeError
 
     def _open_entry(self, uri: str) -> imas.DBEntry:
         """
@@ -375,12 +393,17 @@ class IMASPythonSource(DataSourceInterface):
             ids_path = IDSPath(node_path)
             path_elements = list(ids_path.items())
             ids_data = self._get_raw_data(ids_root, path_elements)
+        self._check_data_is_leaf_node(ids_data)
 
-        data_to_be_returned = self._serialize_data(ids_data)
+        data_to_be_returned = ids_data
 
         first_value = ids_data
         while isinstance(first_value, list):
             first_value = first_value[0]
+
+        self._replace_empty_numbers(data_to_be_returned)
+        if self._is_empty(data_to_be_returned):
+            raise NoDataException(f"No data for {node_path}")
 
         if first_value.metadata.ndim == 1 and downsampling_method is not None:
             _, data_to_be_returned = downsample_data(
@@ -466,6 +489,7 @@ class IMASPythonSource(DataSourceInterface):
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
             ids_data = self._get_raw_data(ids_obj, path_elements)
+        self._check_data_is_leaf_node(ids_data)
 
         if isinstance(ids_data, IDSStructure) or isinstance(ids_data, IDSStructArray):
             raise NotALeafNodeException(f"Path {node_path} does not point to a leaf node")
@@ -538,28 +562,16 @@ class IMASPythonSource(DataSourceInterface):
         else:
             return data.coordinates[0]
 
-    def _serialize_data(self, data):
+    def _check_data_is_leaf_node(self, data) -> None:
         """
-        Converts data IDS data into serializable values e.g. imas.int64 -> int
-
-        :param data:
-        :return: Serializable data value
+        Helper function. Helps determine if data could be returned (e.g. is not IDSStructure).
+        It has to be done before data is returned to serializer.
         """
-        if isinstance(data, IDSStructure):
+        if isinstance(data, list):
+            for x in data:
+                self._check_data_is_leaf_node(x)
+        elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
-        if isinstance(data, (str, int, float)):
-            return data
-        elif isinstance(data, IDSNumericArray):
-            return data.value.tolist()
-        elif isinstance(data, list):
-            return [self._serialize_data(x) for x in data]
-        elif isinstance(data, np.ndarray):  # data = np.ndarray
-            return data.tolist()
-        elif isinstance(data.value, np.ndarray):  # data = IDSNumericArray
-            return data.tolist()
-        elif not data.has_value:
-            return None
-        return data.value
 
     def get_plot_data(
         self,
@@ -586,19 +598,9 @@ class IMASPythonSource(DataSourceInterface):
             ids_path = IDSPath(node_path)
             path_elements = list(ids_path.items())
             ids_data = self._get_raw_data(ids_obj, path_elements)
+            self._check_data_is_leaf_node(ids_data)
 
-            # function to check if list is essentially empty (contains only empty lists or empty strings)
-            def is_empty(seq):
-                if isinstance(seq, (IDSNumericArray, IDSString0D, IDSString1D, IDSComplex0D, IDSFloat0D, IDSInt0D)):
-                    return not seq.has_value
-                if isinstance(seq, np.ndarray):
-                    return seq.size == 0
-                elif isinstance(seq, list):
-                    return all(map(is_empty, seq))
-                else:
-                    return False
-
-            if is_empty(ids_data):
+            if self._is_empty(ids_data):
                 raise NoDataException(f"No data for {node_path}")
             coordinates_to_be_returned = []
 
@@ -654,6 +656,7 @@ class IMASPythonSource(DataSourceInterface):
                         ids_path = IDSPath(str(target_str))
                         path_elements = list(ids_path.items())
                         coord_target_objects = self._get_raw_data(ids_obj, path_elements)
+                        self._check_data_is_leaf_node(coord_target_objects)
 
                         # collect labels for 1...N coordinates
                         labels = []
@@ -720,6 +723,7 @@ class IMASPythonSource(DataSourceInterface):
                         coord_path = IDSPath(coord)
                         coord_real_paths = list(coord_path.items())
                         coord_data = self._get_raw_data(ids_obj, coord_real_paths)
+                        self._check_data_is_leaf_node(coord_data)
 
                         first_value = find_first_value_in_list(coord_data)
 
@@ -773,6 +777,7 @@ class IMASPythonSource(DataSourceInterface):
                         target_size=downsampled_size,
                         method=downsampling_method,
                         x=coordinates_to_be_returned[0]["value"],
+                        single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
                     )
 
                 else:
@@ -785,7 +790,6 @@ class IMASPythonSource(DataSourceInterface):
                     c["downsampled_shape"] = np.asarray(c["value"]).shape
                 except ValueError:
                     c["downsampled_shape"] = "irregular"
-                c["value"] = self._serialize_data(c["value"])
             try:
                 downsampled_shape = np.asarray(data_to_be_returned).shape
             except ValueError:
@@ -800,7 +804,7 @@ class IMASPythonSource(DataSourceInterface):
                     "path": f"#{ids}/{node_path}",
                     "description": first_value.metadata.documentation,
                     "coordinates": coordinates_to_be_returned,
-                    "value": self._serialize_data(data_to_be_returned),
+                    "value": data_to_be_returned,
                 }
             }
 
@@ -814,3 +818,31 @@ class IMASPythonSource(DataSourceInterface):
                     new_shape_factors_list.append(coord_name)
                 coordinate["coordinates"] = new_shape_factors_list
         return result
+
+
+    def _is_empty(self, seq):
+        """Checks if list is essentially empty (contains only empty lists or empty strings)"""
+        if isinstance(seq, (IDSNumericArray, IDSString0D, IDSString1D, IDSComplex0D, IDSFloat0D, IDSInt0D)):
+            return not seq.has_value
+        if isinstance(seq, np.ndarray):
+            return seq.size == 0
+        if isinstance(seq, list):
+            return all(map(self._is_empty, seq))
+        if np.isnan(seq):
+            return True
+        else:
+            return False
+
+    def _replace_empty_numbers(self, arr, replace_to=np.nan):
+        for i, x in enumerate(arr):
+            if isinstance(x, list):
+                self._replace_empty_numbers(x, replace_to)
+            else:
+
+                try:
+                    if not x.has_value:
+                        arr[i] = replace_to
+                # exception occurs for numpy values e.g. numpy.float64
+                except AttributeError:
+                    if x == imas.ids_defs.EMPTY_FLOAT or x == imas.ids_defs.EMPTY_INT or x == imas.ids_defs.EMPTY_COMPLEX:
+                        arr[i] = replace_to

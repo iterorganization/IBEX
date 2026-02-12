@@ -8,6 +8,7 @@ import {
   Stack,
   Table,
   Tabs,
+  Title,
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -193,30 +194,35 @@ export const MetaDataInfos = ({
   }, [tabsSelected]);
 
   return (
-    <ScrollArea h={height || '79vh'}>
-      <Table py="md">
-        <Table.Tbody>
-          {renderField('uri', data?.nodeUri)}
-          {renderField('name', data?.name)}
-          {renderField('path', data?.path)}
-          {renderField('unit', yAxis.unit)}
-          {renderSpoiler('shape', data.shape as (string | number)[])}
-          {renderField('dimension', data?.dimensions.toString())}
-          {renderSpoiler(
-            'value',
-            data.y.length
-              ? data.y
-              : (data.yData as string | number | (string | number)[]),
-          )}
-          {renderField('min', summary?.min)}
-          {renderField('max', summary?.max)}
-          {renderField('mean', summary?.mean)}
-          {renderField('standard_deviation', summary?.standard_deviation)}
-          {renderField('description', data?.description)}
-          <RenderMetaDataCoordinates coordinates={coordinates} />
-        </Table.Tbody>
-      </Table>
-    </ScrollArea>
+    <Stack gap={0}>
+      <Title ta={'center'} order={3} pt={10}>
+        Metadatas
+      </Title>
+      <ScrollArea h={height || '79vh'}>
+        <Table py="md">
+          <Table.Tbody>
+            {renderField('uri', data?.nodeUri)}
+            {renderField('name', data?.name)}
+            {renderField('path', data?.path)}
+            {renderField('unit', yAxis.unit)}
+            {renderSpoiler('shape', data.shape as (string | number)[])}
+            {renderField('dimension', data?.dimensions.toString())}
+            {renderSpoiler(
+              'value',
+              data.y.length
+                ? data.y
+                : (data.yData as string | number | (string | number)[]),
+            )}
+            {renderField('min', summary?.min)}
+            {renderField('max', summary?.max)}
+            {renderField('mean', summary?.mean)}
+            {renderField('standard_deviation', summary?.standard_deviation)}
+            {renderField('description', data?.description)}
+            <RenderMetaDataCoordinates coordinates={coordinates} />
+          </Table.Tbody>
+        </Table>
+      </ScrollArea>
+    </Stack>
   );
 };
 
@@ -237,9 +243,9 @@ export const VisualizationMetaData = () => {
    * Handle find grid layout corresponding to the selected tab
    */
   useEffect(() => {
-    if (active?.gridLayoutSelected) {
+    if (active?.metadataGridLayout) {
       const data = active.dataPlot.find(
-        (item: DataGridPlot) => item.i === active.gridLayoutSelected,
+        (item: DataGridPlot) => item.i === active.metadataGridLayout,
       );
       if (data) {
         setDataGridLayout(data);
@@ -276,10 +282,10 @@ export const VisualizationMetaData = () => {
   /**
    * Handle the switch grid event
    */
-  const handleSwitchGrid = useCallback(() => {
+  const closeWithoutSaving = useCallback(() => {
     const updatedActive: Configuration = {
       ...active,
-      gridLayoutSelected: null,
+      metadataGridLayout: null,
     };
     updatedConfiguration(updatedActive);
   }, [active]);
@@ -317,7 +323,8 @@ export const VisualizationMetaData = () => {
               : []
           }
           value={tabsValue}
-          handleSwitchGrid={handleSwitchGrid}
+          usedFor="metadatas"
+          closeWithoutSaving={closeWithoutSaving}
         />
 
         {dataGridLayout &&
@@ -338,6 +345,7 @@ export const VisualizationMetaData = () => {
                           itemDataGrid={itemDataGrid}
                           width={WIDTH_PLOT}
                           height={HEIGHT_PLOT}
+                          showSliders={false}
                         />
                       </Grid.Col>
                       <Grid.Col span={7}>
