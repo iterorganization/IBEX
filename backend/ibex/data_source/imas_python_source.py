@@ -408,13 +408,10 @@ class IMASPythonSource(DataSourceInterface):
         if self._is_empty(data_to_be_returned):
             raise NoDataException(f"No data for {node_path}")
 
-        try:
-            if first_value.metadata.ndim == 1 and downsampling_method is not None:
-                _, data_to_be_returned = downsample_data(
-                    data=data_to_be_returned, target_size=downsampled_size, method=downsampling_method
-                )
-        except BaseException as e:
-            raise InvalidParametersException(f"Downsampling failed: {e}") from None
+        if first_value.metadata.ndim == 1 and downsampling_method is not None:
+            _, data_to_be_returned = downsample_data(
+                data=data_to_be_returned, target_size=downsampled_size, method=downsampling_method
+            )
 
         return {"value": data_to_be_returned}
 
@@ -778,24 +775,18 @@ class IMASPythonSource(DataSourceInterface):
             if first_value.metadata.ndim == 1:
                 if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":
                     # If coordinate targets node -> downsample coordinate as well
-                    try:
-                        coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
-                            data_to_be_returned,
-                            target_size=downsampled_size,
-                            method=downsampling_method,
-                            x=coordinates_to_be_returned[0]["value"],
-                            single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
-                        )
-                    except BaseException as e:
-                        raise InvalidParametersException(f"Downsampling failed: {e}") from None
+                    coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
+                        data_to_be_returned,
+                        target_size=downsampled_size,
+                        method=downsampling_method,
+                        x=coordinates_to_be_returned[0]["value"],
+                        single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
+                    )
 
                 else:
-                    try:
-                        _, data_to_be_returned = downsample_data(
-                            data_to_be_returned, target_size=downsampled_size, method=downsampling_method
-                        )
-                    except BaseException as e:
-                        raise InvalidParametersException(f"Downsampling failed: {e}") from None
+                    _, data_to_be_returned = downsample_data(
+                        data_to_be_returned, target_size=downsampled_size, method=downsampling_method
+                    )
             # serialize coordinates and update shapes (they could be changed by downsampling)
             for c in coordinates_to_be_returned:
                 try:
