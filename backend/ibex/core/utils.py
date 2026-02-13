@@ -116,19 +116,19 @@ class DownsamplingMethods(Enum):
         "name": "Min-Max",
         "description": "Selects the minimum and maximum value in each bin",
         "function": MinMaxDownsampler().downsample,
-        "validation" : (lambda target_size : target_size%2 == 0, "Min-Max downsampling target size must be even"),
+        "validation": (lambda target_size: target_size % 2 == 0, "Min-Max downsampling target size must be even"),
     }
     M4 = {
         "name": "M4",
         "description": "Selects the minimum, maximum, first, and last value in each bin",
         "function": M4Downsampler().downsample,
-        "validation": (lambda target_size: target_size%4 == 0, "M4 downsampling target size must be divisible by 4"),
+        "validation": (lambda target_size: target_size % 4 == 0, "M4 downsampling target size must be divisible by 4"),
     }
     LTTB = {
         "name": "LTTB",
         "description": "Implements the Largest Triangle Three Buckets (LTTB) algorithm",
         "function": LTTBDownsampler().downsample,
-        "validation": (lambda target_size: target_size>=3, "Minimum downsampling size for LTTB is 3"),
+        "validation": (lambda target_size: target_size >= 3, "Minimum downsampling size for LTTB is 3"),
     }
     MIN_MAX_LTTB = {
         "name": "Min-Max LTTB",
@@ -146,11 +146,10 @@ class DownsamplingMethods(Enum):
         raise ValueError(f"Downsampling method: {name} is not recognised by IBEX backend")
 
     @classmethod
-    def validate_downsampling_target_size(cls, method : dict, target_size : int):
-        if "validation" in  method.keys():
+    def validate_downsampling_target_size(cls, method: dict, target_size: int):
+        if "validation" in method.keys():
             if not method["validation"][0](target_size):
                 raise InvalidParametersException(method["validation"][1])
-
 
 
 def downsample_data(data: List, target_size: int, method: str | None = None, x=None, single_x_axis=True):

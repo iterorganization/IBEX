@@ -822,7 +822,6 @@ class IMASPythonSource(DataSourceInterface):
                 coordinate["coordinates"] = new_shape_factors_list
         return result
 
-
     def _is_empty(self, seq):
         """Checks if list is essentially empty (contains only empty lists or empty strings)"""
         if isinstance(seq, (IDSNumericArray, IDSString0D, IDSString1D, IDSComplex0D, IDSFloat0D, IDSInt0D)):
@@ -841,11 +840,14 @@ class IMASPythonSource(DataSourceInterface):
             if isinstance(x, list):
                 self._replace_empty_numbers(x, replace_to)
             else:
-
                 try:
                     if not x.has_value:
                         arr[i] = replace_to
                 # exception occurs for numpy values e.g. numpy.float64
                 except AttributeError:
-                    if x == imas.ids_defs.EMPTY_FLOAT or x == imas.ids_defs.EMPTY_INT or x == imas.ids_defs.EMPTY_COMPLEX:
+                    if (
+                        x == imas.ids_defs.EMPTY_FLOAT
+                        or x == imas.ids_defs.EMPTY_INT
+                        or x == imas.ids_defs.EMPTY_COMPLEX
+                    ):
                         arr[i] = replace_to
