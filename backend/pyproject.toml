@@ -92,7 +92,7 @@ testpaths = "tests"
 
 [tool.setuptools_scm]
 write_to = "ibex/_version.py"
-fallback_version = "0.1.0"
+local_scheme = "no-local-version"
 
 [tool.ruff]
 # Set the maximum line length to 120.
