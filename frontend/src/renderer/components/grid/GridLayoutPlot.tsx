@@ -250,6 +250,19 @@ export const GridLayoutPlot = ({
       dataPlot: newDataPlot,
       checkedNodeURI: checkedNodeURI,
     };
+
+    // Remove from synchronized relations deleted dataGrid
+    const oldDataPlot = active.dataPlot.find(
+      (item: DataGridPlot) => item.i === id,
+    );
+    for (const synchronizedId of oldDataPlot.synchronizedGrids) {
+      const dataPlotToUpdate = newDataPlot.find(
+        (dp) => synchronizedId === dp.i,
+      );
+      dataPlotToUpdate.synchronizedGrids =
+        dataPlotToUpdate.synchronizedGrids.filter((id) => id !== oldDataPlot.i);
+    }
+
     updatedConfiguration(newActive);
   }, []);
 

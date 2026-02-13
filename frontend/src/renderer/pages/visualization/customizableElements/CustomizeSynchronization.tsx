@@ -1,14 +1,5 @@
 import { useEffect, useState } from 'react';
 import { DataGridPlot } from '../../../types';
-import {
-  fetchDataPlot,
-  fetchDownsamplingMethods,
-  fetchErrorBands,
-  getArrayValueFromDependance,
-  getFirstArrayValueFromShape,
-  getVectorData,
-  normalizeIndices,
-} from '../../../utils';
 import { MultiSelect, Stack } from '@mantine/core';
 import { useIbexStore } from '../../../stores';
 
@@ -20,47 +11,46 @@ export const CustomizeSynchronization = ({
   customizedDataGrid,
   setCustomizedDataGrid,
 }: CustomizeSynchronizationProps) => {
-  const { active, updatedConfiguration } = useIbexStore();
-  const [synchronizedList, setSynchronizedList] = useState<string[]>([]);
+  const { active } = useIbexStore();
+  const [synchronizedList, setSynchronizedList] = useState<string[]>(
+    customizedDataGrid?.synchronizedGrids,
+  );
   const fullDataGridList: { value: string; label: string }[] = active.dataPlot
     .filter((dataGrid) => dataGrid.i !== customizedDataGrid.i)
     .map((dataGrid) => ({ value: dataGrid.i, label: dataGrid.title }));
 
-  /*
-   * Get downsampling methods to show in select
-   */
   useEffect(() => {
-    console.log('active : ', active);
-    console.log('customizedDataGrid : ', customizedDataGrid);
-    console.log('fullDataGridList : ', fullDataGridList);
-  }, []);
+    setCustomizedDataGrid({
+      ...customizedDataGrid,
+      synchronizedGrids: synchronizedList,
+    });
+  }, [synchronizedList]);
 
-  useEffect(() => {
-    console.log('synchronizedList : ', synchronizedList);
-    // TODO : MAJ customizedDataGrid.synchronizedGrids here
-    // setCustomizedDataGrid({
-    //   ...customizedDataGrid,
-    //   synchronizedGrids: synchronizedList
-    // });
+  const handleSynchronizedListUpdate = (newSynchronizedList: string[]) => {
+    const newDepencyAdded = active.dataPlot.find(
+      (dp) => dp.i === newSynchronizedList[newSynchronizedList.length - 1],
+    );
 
-    console.log('active : ', active);
-
-    const updatedActive = JSON.parse(JSON.stringify(active));
-    for (const [index, dataPlot] of updatedActive.dataPlot.entries()) {
-      if (dataPlot.i === customizedDataGrid.i) {
-        // Add in customized grid the synchronized list
-        updatedActive.dataPlot[index].synchronizedGrids = synchronizedList;
-      } else if (synchronizedList.includes(dataPlot.i)) {
-        // Add in other grid the synchronized list and include the customized grid
-        updatedActive.dataPlot[index].synchronizedGrids = [
-          customizedDataGrid.i,
-          ...synchronizedList.filter((i) => i !== dataPlot.i),
-        ];
+    if (newSynchronizedList.length < synchronizedList.length) {
+      // Remove an element
+      setSynchronizedList(newSynchronizedList);
+    } else {
+      // Add an element
+      if (newDepencyAdded?.synchronizedGrids.length) {
+        // Add also these dependencies
+        setSynchronizedList(
+          Array.from(
+            new Set([
+              ...newSynchronizedList,
+              ...newDepencyAdded.synchronizedGrids,
+            ]),
+          ),
+        );
+      } else {
+        setSynchronizedList(newSynchronizedList);
       }
     }
-    updatedConfiguration(updatedActive);
-    console.log('updatedActive (SYNC) : ', updatedActive);
-  }, [synchronizedList]);
+  };
 
   return (
     <Stack w="fit-content">
@@ -72,7 +62,7 @@ export const CustomizeSynchronization = ({
         data={fullDataGridList}
         // defaultValue={['React']}
         value={synchronizedList}
-        onChange={setSynchronizedList}
+        onChange={handleSynchronizedListUpdate}
         searchable
         nothingFoundMessage="Nothing found..."
       />
