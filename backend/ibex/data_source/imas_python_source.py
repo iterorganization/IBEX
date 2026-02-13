@@ -246,6 +246,9 @@ class IMASPythonSource(DataSourceInterface):
                 new_ids_obj = ids_obj[f"{path_node_name}[{path_index}]"]
             except AttributeError as e:
                 raise NodeNotFoundException(e)
+            except IndexError as e:
+                message = f"Index out of range: {path_node_name} has no index {path_index}"
+                raise NodeNotFoundException(message)
             return self._get_raw_data(new_ids_obj, path_elements[1:])
 
         elif isinstance(path_index, slice):
