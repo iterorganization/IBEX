@@ -1,5 +1,11 @@
 import { Complex } from '../types';
 
+export function getColorRandom(): string {
+  return `#${Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, '0')}`;
+}
+
 export function removeSuffix(str: string, suffix: string): string {
   return str?.endsWith(suffix) ? str.slice(0, -suffix.length) : str;
 }

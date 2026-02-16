@@ -18,12 +18,14 @@ import {
   DataGridPlot,
   DataPlotly,
   PlotLine,
-} from 'src/renderer/types';
+  synchronizedList,
+} from '../../types';
 import { CustomizeDownsampling, CustomizeGlobal } from './customizableElements';
 import { CustomizeHeatmap } from './customizableElements/CustomizeHeatmap';
 import { Customize1DPlot } from './customizableElements/Customize1DPlot';
 import { CustomizeDataRange } from './customizableElements/CustomizeDataRange';
 import { CustomizeSynchronization } from './customizableElements/CustomizeSynchronization';
+import { IconLink } from '@tabler/icons-react';
 interface CustomizationProps {
   customizedDataGrid: DataGridPlot;
   selectedAccordion: string | null;
@@ -138,6 +140,15 @@ const Customization = ({
           setCustomizedDataGrid={setCustomizedDataGrid}
         />
       ),
+      icon:
+        customizedDataGrid.synchronizedGrids.color !== '' ? (
+          <IconLink
+            size={20}
+            color={customizedDataGrid.synchronizedGrids.color}
+          />
+        ) : (
+          <IconLink size={20} />
+        ),
     },
   ];
 
@@ -332,10 +343,10 @@ export const DataplotCustomization = () => {
 
     // Update synchronized grids dependencies
     if (
-      JSON.parse(JSON.stringify(oldDataGrid.synchronizedGrids))
+      JSON.parse(JSON.stringify(oldDataGrid.synchronizedGrids.list))
         .sort()
         .toString() !==
-      JSON.parse(JSON.stringify(customizedDataGrid.synchronizedGrids))
+      JSON.parse(JSON.stringify(customizedDataGrid.synchronizedGrids.list))
         .sort()
         .toString()
     ) {
@@ -346,29 +357,37 @@ export const DataplotCustomization = () => {
         if (dataPlotDependency.i !== customizedDataGrid.i) {
           // Add & remove automatically dataPlots excepted the updated one
           if (
-            !oldDataGrid.synchronizedGrids.includes(dataPlotDependency.i) &&
-            customizedDataGrid.synchronizedGrids.includes(dataPlotDependency.i)
+            !oldDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            ) &&
+            customizedDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            )
           ) {
-            const newSynchronizedList = [
-              customizedDataGrid.i,
-              ...customizedDataGrid.synchronizedGrids.filter(
-                (i) => i !== dataPlotDependency.i,
-              ),
-            ];
+            const newSynchronizedList = {
+              color: customizedDataGrid.synchronizedGrids.color,
+              list: [
+                customizedDataGrid.i,
+                ...customizedDataGrid.synchronizedGrids.list.filter(
+                  (i) => i !== dataPlotDependency.i,
+                ),
+              ],
+            } as synchronizedList;
 
             // Reset synchronized list for deleted dependencies
-            for (const oldSyncIdFromNewDep of dataPlotDependency.synchronizedGrids) {
+            for (const oldSyncIdFromNewDep of dataPlotDependency
+              .synchronizedGrids.list) {
               const indexDPProbablyDesync = updatedActive.dataPlot.findIndex(
                 (dp) => oldSyncIdFromNewDep === dp.i,
               );
               if (
-                !newSynchronizedList.includes(
+                !newSynchronizedList.list.includes(
                   updatedActive.dataPlot[indexDPProbablyDesync].i,
                 )
               ) {
                 updatedActive.dataPlot[
                   indexDPProbablyDesync
-                ].synchronizedGrids = [];
+                ].synchronizedGrids = { color: '', list: [] };
               }
             }
 
@@ -376,21 +395,31 @@ export const DataplotCustomization = () => {
             updatedActive.dataPlot[index].synchronizedGrids =
               newSynchronizedList;
           } else if (
-            oldDataGrid.synchronizedGrids.includes(dataPlotDependency.i) &&
-            !customizedDataGrid.synchronizedGrids.includes(dataPlotDependency.i)
+            oldDataGrid.synchronizedGrids.list.includes(dataPlotDependency.i) &&
+            !customizedDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            )
           ) {
             // Remove synchronization for deleted dependencies
-            updatedActive.dataPlot[index].synchronizedGrids = [];
+            updatedActive.dataPlot[index].synchronizedGrids = {
+              color: '',
+              list: [],
+            };
           } else if (
-            customizedDataGrid.synchronizedGrids.includes(dataPlotDependency.i)
+            customizedDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            )
           ) {
-            // Update relations  of unchanged dataGrids
-            updatedActive.dataPlot[index].synchronizedGrids = [
-              customizedDataGrid.i,
-              ...customizedDataGrid.synchronizedGrids.filter(
-                (i) => i !== dataPlotDependency.i,
-              ),
-            ];
+            // Update relations of unchanged dataGrids
+            updatedActive.dataPlot[index].synchronizedGrids = {
+              color: customizedDataGrid.synchronizedGrids.color,
+              list: [
+                customizedDataGrid.i,
+                ...customizedDataGrid.synchronizedGrids.list.filter(
+                  (i) => i !== dataPlotDependency.i,
+                ),
+              ],
+            };
           }
         }
       }

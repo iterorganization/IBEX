@@ -26,6 +26,7 @@ import {
   fetchURIExists,
   fetchURIFromPath,
   formatConfigBeforeLoadingURIs,
+  getColorRandom,
   plotNodeUriLoaded,
   updateCustomDataTree,
 } from '../../utils';
@@ -39,10 +40,6 @@ interface VisualizationSelectIDSModalProps {
 interface FormIDS {
   file: File;
   uri: string;
-}
-
-function getColorRandom(): string {
-  return `#${Math.floor(Math.random() * 16777215).toString(16)}`;
 }
 
 export const VisualizationURIModal = ({

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { DataGridPlot } from '../../../types';
+import { DataGridPlot, synchronizedList } from '../../../types';
 import { MultiSelect, Stack } from '@mantine/core';
 import { useIbexStore } from '../../../stores';
+import { getColorRandom } from '../../../utils';
 
 interface CustomizeSynchronizationProps {
   customizedDataGrid: DataGridPlot;
@@ -12,7 +13,7 @@ export const CustomizeSynchronization = ({
   setCustomizedDataGrid,
 }: CustomizeSynchronizationProps) => {
   const { active } = useIbexStore();
-  const [synchronizedList, setSynchronizedList] = useState<string[]>(
+  const [synchronizedList, setSynchronizedList] = useState<synchronizedList>(
     customizedDataGrid?.synchronizedGrids,
   );
   const fullDataGridList: { value: string; label: string }[] = active.dataPlot
@@ -31,23 +32,34 @@ export const CustomizeSynchronization = ({
       (dp) => dp.i === newSynchronizedList[newSynchronizedList.length - 1],
     );
 
-    if (newSynchronizedList.length < synchronizedList.length) {
+    if (newSynchronizedList.length < synchronizedList.list.length) {
       // Remove an element
-      setSynchronizedList(newSynchronizedList);
+      setSynchronizedList({
+        color: !newSynchronizedList.length ? '' : synchronizedList.color,
+        list: newSynchronizedList,
+      });
     } else {
       // Add an element
-      if (newDepencyAdded?.synchronizedGrids.length) {
+      if (newDepencyAdded?.synchronizedGrids.list.length) {
         // Add also these dependencies
-        setSynchronizedList(
-          Array.from(
+        setSynchronizedList({
+          color: newDepencyAdded.synchronizedGrids.color,
+          list: Array.from(
             new Set([
               ...newSynchronizedList,
-              ...newDepencyAdded.synchronizedGrids,
+              ...newDepencyAdded.synchronizedGrids.list.filter(
+                (dataGridId) => dataGridId !== customizedDataGrid.i,
+              ),
             ]),
           ),
-        );
+        });
       } else {
-        setSynchronizedList(newSynchronizedList);
+        setSynchronizedList({
+          color: !synchronizedList.list.length
+            ? getColorRandom()
+            : synchronizedList.color,
+          list: newSynchronizedList,
+        });
       }
     }
   };
@@ -60,8 +72,7 @@ export const CustomizeSynchronization = ({
         label="Graphs to synchronyze"
         placeholder="Pick a graph"
         data={fullDataGridList}
-        // defaultValue={['React']}
-        value={synchronizedList}
+        value={synchronizedList.list}
         onChange={handleSynchronizedListUpdate}
         searchable
         nothingFoundMessage="Nothing found..."

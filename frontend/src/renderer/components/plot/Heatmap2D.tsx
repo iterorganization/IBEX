@@ -24,6 +24,7 @@ import classes from './Heatmap2D.module.css';
 import { useIbexStore } from '../../stores';
 import { NoDataForURI } from '.';
 import { usePlotLayout } from './hooks/usePlotLayout';
+import { IconLink } from '@tabler/icons-react';
 
 interface Heatmap2DProps {
   itemDataGrid: DataGridPlot;
@@ -344,6 +345,7 @@ export const Heatmap2D = ({
                 w={`${width * 0.2}px`}
                 miw={`${(itemDataGrid.coordinates.length - coordsUsedInAxes) * 50}px`}
                 align="flex-end"
+                pos="relative"
               >
                 {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
                   .sort(compareByAxeIndex)
@@ -375,6 +377,14 @@ export const Heatmap2D = ({
                         />
                       ),
                   )}
+                {itemDataGrid.synchronizedGrids.list.length && (
+                  <div style={{ position: 'absolute', top: 12, right: -20 }}>
+                    <IconLink
+                      size={20}
+                      color={itemDataGrid.synchronizedGrids.color}
+                    />
+                  </div>
+                )}
               </Group>
             </Grid.Col>
           </>

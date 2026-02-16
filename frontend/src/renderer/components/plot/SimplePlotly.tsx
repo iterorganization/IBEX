@@ -15,6 +15,7 @@ import {
 import classes from './SimplePlotly.module.css';
 import { NoDataForURI } from '../plot';
 import { usePlotLayout } from './hooks/usePlotLayout';
+import { IconLink } from '@tabler/icons-react';
 interface SimplePlotlyProps {
   itemDataGrid: DataGridPlot;
   width: number;
@@ -361,6 +362,7 @@ export const SimplePlotly = ({
               w={`${width * 0.2}px`}
               miw={`${(itemDataGrid.coordinates.length - coordsUsedInAxes) * 50}px`}
               align="flex-end"
+              pos="relative"
             >
               {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
                 .sort(compareByAxeIndex)
@@ -395,6 +397,14 @@ export const SimplePlotly = ({
                       />
                     ),
                 )}
+              {itemDataGrid.synchronizedGrids?.list.length && (
+                <div style={{ position: 'absolute', top: 12, right: -20 }}>
+                  <IconLink
+                    size={20}
+                    color={itemDataGrid.synchronizedGrids.color}
+                  />
+                </div>
+              )}
             </Group>
           </Grid.Col>
         )}

@@ -255,12 +255,20 @@ export const GridLayoutPlot = ({
     const oldDataPlot = active.dataPlot.find(
       (item: DataGridPlot) => item.i === id,
     );
-    for (const synchronizedId of oldDataPlot.synchronizedGrids) {
+    for (const synchronizedId of oldDataPlot.synchronizedGrids.list) {
       const dataPlotToUpdate = newDataPlot.find(
         (dp) => synchronizedId === dp.i,
       );
-      dataPlotToUpdate.synchronizedGrids =
-        dataPlotToUpdate.synchronizedGrids.filter((id) => id !== oldDataPlot.i);
+      const updatedList = dataPlotToUpdate.synchronizedGrids.list.filter(
+        (id) => id !== oldDataPlot.i,
+      );
+      dataPlotToUpdate.synchronizedGrids = {
+        color:
+          updatedList.length > 0
+            ? dataPlotToUpdate.synchronizedGrids.color
+            : '',
+        list: updatedList,
+      };
     }
 
     updatedConfiguration(newActive);

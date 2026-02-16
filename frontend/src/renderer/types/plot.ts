@@ -84,7 +84,7 @@ export interface BaseDataGridPlot {
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
   displayGrid: boolean;
-  synchronizedGrids: string[];
+  synchronizedGrids: synchronizedList;
   downsampled_method?: string;
   downsampled_size?: number;
   xAxisData?: Axis;
@@ -107,3 +107,8 @@ export interface DataGridPlotToSave extends BaseDataGridPlot {
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
 }
+
+export type synchronizedList = {
+  color: string;
+  list: string[];
+};
