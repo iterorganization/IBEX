@@ -378,7 +378,15 @@ export const Heatmap2D = ({
                       ),
                   )}
                 {itemDataGrid.synchronizedGrids.list.length && (
-                  <div style={{ position: 'absolute', top: 12, right: -20 }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 12,
+                      ...(itemDataGrid.coordinates.length > 2
+                        ? { right: -20 }
+                        : { left: 0 }),
+                    }}
+                  >
                     <IconLink
                       size={20}
                       color={itemDataGrid.synchronizedGrids.color}

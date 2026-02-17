@@ -398,7 +398,13 @@ export const SimplePlotly = ({
                     ),
                 )}
               {itemDataGrid.synchronizedGrids?.list.length && (
-                <div style={{ position: 'absolute', top: 12, right: -20 }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: -20,
+                  }}
+                >
                   <IconLink
                     size={20}
                     color={itemDataGrid.synchronizedGrids.color}
