@@ -58,9 +58,9 @@ class IMASPythonSource(DataSourceInterface):
             return obj.value
         if isinstance(obj, np.ndarray) and not obj.flags.c_contiguous:
             return np.ascontiguousarray(obj)
-        if isinstance(obj, (np.ndarray, IDSNumericArray)): # np.arrays with not supported dtype
+        if isinstance(obj, (np.ndarray, IDSNumericArray)):  # np.arrays with not supported dtype
             return obj.tolist()
-        if isinstance(obj, complex): # not supported dtype extracted from np.array
+        if isinstance(obj, complex):  # not supported dtype extracted from np.array
             return (obj.real, obj.imag)
         raise TypeError
 
