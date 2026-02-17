@@ -53,40 +53,39 @@ export const GridLayoutPlot = ({
     if (!lastTargetLastName)
       return console.warn('No indexed field found in target');
 
-    // Update coordinates targets & paths with new valueIndex
-    const updatedCoordinatesValue = data.coordinates.map((item) => {
-      const lastTargetLastName = getLastIndexedField(coordinate.target);
-
-      const updatedPath = updateIndexFieldName(
-        item.path,
-        lastTargetLastName,
-        valueIndex,
-      );
-      const updatedTarget = updateIndexFieldName(
-        item.target,
-        lastTargetLastName,
-        valueIndex,
-      );
-
-      return {
-        ...item,
-        path: updatedPath,
-        target: updatedTarget,
-        valueIndex:
-          item.name === coordinate.name ? valueIndex : item.valueIndex,
-      };
-    }) as Coordinates[];
-
-    limitSlidersToMaxLength(updatedCoordinatesValue);
-
     const updatedActive: Configuration = {
       ...active,
       dataPlot: active.dataPlot.map((item: DataGridPlot) => {
-        if (item.i === data.i) {
+        if (item.i === data.i || data.synchronizedGrids.list.includes(item.i)) {
+          // Update targets & paths from each coordinates of synchronized sliders with new valueIndex
+          const updatedCoordinatesValue = item.coordinates.map((coordItem) => {
+            const updatedPath = updateIndexFieldName(
+              coordItem.path,
+              lastTargetLastName,
+              valueIndex,
+            );
+            const updatedTarget = updateIndexFieldName(
+              coordItem.target,
+              lastTargetLastName,
+              valueIndex,
+            );
+
+            return {
+              ...coordItem,
+              path: updatedPath,
+              target: updatedTarget,
+              valueIndex:
+                coordItem.name === coordinate.name
+                  ? valueIndex
+                  : coordItem.valueIndex,
+            };
+          }) as Coordinates[];
+          limitSlidersToMaxLength(updatedCoordinatesValue);
+
           const updatedXAxisData: Axis = {
-            ...data.xAxisData,
+            ...item.xAxisData,
             path: updateIndexFieldName(
-              data.xAxisData?.path || '',
+              item.xAxisData?.path || '',
               lastTargetLastName,
               valueIndex,
             ),
@@ -98,7 +97,7 @@ export const GridLayoutPlot = ({
             0,
           );
 
-          const updatedPlot = data.plot.map((plotItem) => {
+          const updatedPlot = item.plot.map((plotItem) => {
             const updatedNodeUri = updateIndexFieldName(
               plotItem.nodeUri,
               lastTargetLastName,
@@ -141,7 +140,7 @@ export const GridLayoutPlot = ({
           });
 
           return {
-            ...data,
+            ...item,
             coordinates: updatedCoordinatesValue,
             plot: updatedPlot,
             xAxisData: updatedXAxisData,
