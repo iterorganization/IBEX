@@ -756,6 +756,9 @@ export function formatConfigBeforeLoadingURIs(
           unit: '',
         } as DataPlotly;
       }),
+      synchronizedGrids: data?.synchronizedGrids
+        ? data.synchronizedGrids
+        : { color: '', list: [] },
     }),
   );
 
