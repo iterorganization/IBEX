@@ -149,6 +149,8 @@ const Customization = ({
         ) : (
           <IconLink size={20} />
         ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't be synchronized",
     },
   ];
 

@@ -16,8 +16,13 @@ export const CustomizeSynchronization = ({
   const [synchronizedList, setSynchronizedList] = useState<synchronizedList>(
     customizedDataGrid?.synchronizedGrids,
   );
+
+  // Get a list of dataGrids having at least 2 coordinates
   const fullDataGridList: { value: string; label: string }[] = active.dataPlot
-    .filter((dataGrid) => dataGrid.i !== customizedDataGrid.i)
+    .filter(
+      (dataGrid) =>
+        dataGrid.i !== customizedDataGrid.i && dataGrid.coordinates.length > 1,
+    )
     .map((dataGrid) => ({ value: dataGrid.i, label: dataGrid.title }));
 
   useEffect(() => {
