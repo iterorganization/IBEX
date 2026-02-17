@@ -56,8 +56,18 @@ export const GridLayoutPlot = ({
     const updatedActive: Configuration = {
       ...active,
       dataPlot: active.dataPlot.map((item: DataGridPlot) => {
-        if (item.i === data.i || data.synchronizedGrids.list.includes(item.i)) {
-          // Update targets & paths from each coordinates of synchronized sliders with new valueIndex
+        const mainDataGrid = item.i === data.i;
+        const isSynchronized = data.synchronizedGrids.list.includes(item.i);
+        const coordWithSameName = item.coordinates.find(
+          (ic) => ic.name === coordinate.name,
+        );
+        const sameCoordinate =
+          coordWithSameName &&
+          JSON.stringify(coordinate.data) ===
+            JSON.stringify(coordWithSameName.data);
+
+        if (mainDataGrid || (isSynchronized && sameCoordinate)) {
+          // Update main slider with new valueIndex & update synchronized ones matching with the same coordinate
           const updatedCoordinatesValue = item.coordinates.map((coordItem) => {
             const updatedPath = updateIndexFieldName(
               coordItem.path,
