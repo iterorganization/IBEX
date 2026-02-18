@@ -227,18 +227,20 @@ export const VisualizationURIModal = ({
       <Table.Th>URI</Table.Th>
       <Table.Td>
         {dataDbEntries.length && (
-          <ActionIcon
-            variant="filled"
-            size="lg"
-            color="red"
-            onClick={() => setIsDeletingAllUri(true)}
-          >
-            <IconX
-              color="white"
-              style={{ width: '70%', height: '70%' }}
-              stroke={1.5}
-            />
-          </ActionIcon>
+          <Tooltip label="Delete all URIs" openDelay={300}>
+            <ActionIcon
+              variant="filled"
+              size="lg"
+              color="red"
+              onClick={() => setIsDeletingAllUri(true)}
+            >
+              <IconX
+                color="white"
+                style={{ width: '70%', height: '70%' }}
+                stroke={1.5}
+              />
+            </ActionIcon>
+          </Tooltip>
         )}
       </Table.Td>
     </Table.Tr>
@@ -265,23 +267,25 @@ export const VisualizationURIModal = ({
       <Table.Td>{element.name}</Table.Td>
       <Table.Td>{element.uri}</Table.Td>
       <Table.Td>
-        <ActionIcon
-          variant="transparent"
-          aria-label="Remove URI"
-          component="button"
-          type="button"
-          onClick={() =>
-            setDataDbEntries((entries) =>
-              entries.filter((entry) => entry.uri !== element.uri),
-            )
-          }
-        >
-          <IconX
-            color="red"
-            style={{ width: '70%', height: '70%' }}
-            stroke={1.5}
-          />
-        </ActionIcon>
+        <Tooltip label="Delete the URI" openDelay={300}>
+          <ActionIcon
+            variant="transparent"
+            aria-label="Remove URI"
+            component="button"
+            type="button"
+            onClick={() =>
+              setDataDbEntries((entries) =>
+                entries.filter((entry) => entry.uri !== element.uri),
+              )
+            }
+          >
+            <IconX
+              color="red"
+              style={{ width: '70%', height: '70%' }}
+              stroke={1.5}
+            />
+          </ActionIcon>
+        </Tooltip>
       </Table.Td>
     </Table.Tr>
   ));
