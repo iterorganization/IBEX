@@ -143,7 +143,7 @@ export const fetchNodeInfos = async (
   showErrorBars: boolean,
 ) => {
   return fetchFromApi<NodeInfoResponse>(
-    `/ids_info/node_info/?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
+    `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
 };
 
@@ -156,7 +156,7 @@ export const fetchFindPaths = async (
   showErrorBars: boolean,
 ) => {
   return fetchFromApi<SearchNodeResponse>(
-    `/ids_info/find_paths/?uri=${encodeURIComponent(uri)}&searched_node=${encodeURIComponent(value)}&show_error_bars=${showErrorBars}`,
+    `/ids_info/find_paths?uri=${encodeURIComponent(uri)}&searched_node=${encodeURIComponent(value)}&show_error_bars=${showErrorBars}`,
   );
 };
 
@@ -175,13 +175,13 @@ export const fetchDataPlot = async (
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data/?uri=${encodeURIComponent(uri)}`,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}`,
         5000,
       );
     } catch (error) {
@@ -193,7 +193,7 @@ export const fetchDataPlot = async (
           methods?.downsampling_methods.find((meth) => meth.name === 'M4')
             ?.name || methods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
         );
       }
     }
@@ -218,8 +218,8 @@ export const fetchDataPlot = async (
     response.data.downsampled_method = firstMethod || downsamplingMethod;
   }
 
-  if (response.data.shape === 'irregular' && response.data.ndim === 1) {
-    // Alert when getting irregular shape in 1D cases
+  if (response.data.shape === 'irregular') {
+    // Alert when getting irregular shape
     showNotification({
       title: 'Warning',
       message: 'Data are incomplete.',
@@ -262,15 +262,12 @@ export const fetchFieldValue = async (
   const downsampled_size = downsamplingSize || 1000;
   let response: FieldValueResponse;
   if (downsamplingMethod) {
-    // TODO : this is a temporary solution to get downsampled value without using field_value route. We should use this route as soon as downsampling will be fixed
-    const dataPlotResponse = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data/?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+    response = await fetchFromApi<FieldValueResponse>(
+      `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
     );
-
-    response = { value: dataPlotResponse.data.value } as FieldValueResponse;
   } else {
     response = await fetchFromApi<FieldValueResponse>(
-      `/data/field_value/?uri=${encodeURIComponent(uri)}`,
+      `/data/field_value?uri=${encodeURIComponent(uri)}`,
     );
   }
   return response;
@@ -281,7 +278,7 @@ export const fetchFieldValue = async (
  */
 export const fetchDataIds = async (uri: string) => {
   return fetchFromApi<DataIdsResponse>(
-    `/data_entry/list_idses/?uri=${encodeURIComponent(uri)}`,
+    `/data_entry/list_idses?uri=${encodeURIComponent(uri)}`,
   );
 };
 
@@ -290,7 +287,7 @@ export const fetchDataIds = async (uri: string) => {
  */
 export const fetchURIFromPath = async (path: string) => {
   return fetchFromApi<URIFromPathResponse>(
-    `/data_entry/uri_from_path/?path=${encodeURIComponent(path)}`,
+    `/data_entry/uri_from_path?path=${encodeURIComponent(path)}`,
   );
 };
 
@@ -299,7 +296,7 @@ export const fetchURIFromPath = async (path: string) => {
  */
 export const fetchURIExists = async (uri: string) => {
   return fetchFromApi<URIExistsResponse>(
-    `/data_entry/exists/?uri=${encodeURIComponent(uri)}`,
+    `/data_entry/exists?uri=${encodeURIComponent(uri)}`,
   );
 };
 
@@ -310,7 +307,7 @@ export const fetchDataEntries = async (
   dataEntriesParameters: FormDbEntries,
 ) => {
   return fetchFromApi<URDataEntriesResponse>(
-    `/data_entry/available_entries/?user=${dataEntriesParameters.user}&backend=${dataEntriesParameters.backend}&database=${dataEntriesParameters.database}&version=${dataEntriesParameters.version}`,
+    `/data_entry/available_entries?user=${dataEntriesParameters.user}&backend=${dataEntriesParameters.backend}&database=${dataEntriesParameters.database}&version=${dataEntriesParameters.version}`,
   );
 };
 
@@ -319,7 +316,7 @@ export const fetchDataEntries = async (
  */
 export const fetchArraySummary = async (uri: string) => {
   return fetchFromApi<ArraySummaryResponse>(
-    `/ids_info/array_summary/?uri=${encodeURIComponent(uri)}`,
+    `/ids_info/array_summary?uri=${encodeURIComponent(uri)}`,
   );
 };
 
@@ -327,5 +324,5 @@ export const fetchArraySummary = async (uri: string) => {
  * Return backend version.
  */
 export const fetchInfoVersion = async () => {
-  return fetchFromApi<InfoVersionResponse>(`/info/version/`);
+  return fetchFromApi<InfoVersionResponse>(`/info/version`);
 };

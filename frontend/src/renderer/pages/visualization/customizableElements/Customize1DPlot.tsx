@@ -71,9 +71,10 @@ export const Customize1DPlot = ({
       JSON.stringify(customizedDataGrid),
     ) as DataGridPlot;
 
-    updatedDataPlot.plot.find(
+    const plotToUpdate = updatedDataPlot.plot.find(
       (plot) => plot.name === selectedPlot.name,
-    ).line.shape = newShape;
+    );
+    plotToUpdate.line = { ...plotToUpdate?.line, shape: newShape };
 
     setCustomizedDataGrid({
       ...customizedDataGrid,
@@ -122,7 +123,10 @@ export const Customize1DPlot = ({
         label="Plot shape"
         description="Customize the shape"
         placeholder="Customize the shape"
-        data={['linear', 'hv']}
+        data={[
+          { value: 'linear', label: 'linear' },
+          { value: 'hv', label: 'hv (Horizontal-Vertical)' },
+        ]}
         value={selectedPlot?.line?.shape || 'linear'}
         onChange={(value) => updatePlotShape(value)}
         maw={200}

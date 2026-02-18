@@ -19,12 +19,12 @@ import {
   isMatrixPlottable,
   swapAxis,
 } from '../../utils';
-import classes from './Surface2D.module.css';
+import classes from './Heatmap2D.module.css';
 import { useIbexStore } from '../../stores';
-import { NoDataForURI } from '../plot';
+import { NoDataForURI } from '.';
 import { usePlotLayout } from './hooks/usePlotLayout';
 
-interface Surface2DProps {
+interface Heatmap2DProps {
   itemDataGrid: DataGridPlot;
   width: number;
   height: number;
@@ -36,14 +36,14 @@ interface Surface2DProps {
   ) => Promise<void>;
 }
 
-export const Surface2D = ({
+export const Heatmap2D = ({
   itemDataGrid,
   width,
   height,
   plotIndex,
   showSliders,
   handleUpdateCoordinate,
-}: Surface2DProps) => {
+}: Heatmap2DProps) => {
   const { active, updatedConfiguration } = useIbexStore();
   const coordsUsedInAxes: 1 | 2 = 2;
   const SELECT_AXIS_HEIGHT = 90; // Height of the select axis container

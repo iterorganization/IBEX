@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SimplePlotly, Surface2D, TabsListCustom } from '../../components';
+import { SimplePlotly, Heatmap2D, TabsListCustom } from '../../components';
 import {
   Configuration,
   DataGridPlot,
@@ -48,6 +48,7 @@ const Customization = ({
     component: JSX.Element;
     icon?: JSX.Element;
     disabled?: boolean;
+    tooltip?: string;
   };
   const accordionItems: accordionItemsType[] = [
     {
@@ -87,7 +88,11 @@ const Customization = ({
         />
       ),
       icon: (
-        <ActionIcon variant="filled" component="span">
+        <ActionIcon
+          variant="filled"
+          component="span"
+          disabled={customizedDataGrid.coordinates.length < 2}
+        >
           <svg width="50" height="50" viewBox="0 0 50 50">
             <rect x="0" y="0" width="15" height="15" fill="#440154" />
             <rect x="17" y="0" width="15" height="15" fill="#31688e" />
@@ -103,6 +108,8 @@ const Customization = ({
           </svg>
         </ActionIcon>
       ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't display heatmap",
     },
     {
       value: 'Axis range',
@@ -132,7 +139,11 @@ const Customization = ({
   const items = accordionItems.map((item) => (
     <Tooltip
       key={item.value}
-      label={item?.disabled ? 'This feature will be available soon' : ''}
+      label={
+        item?.disabled
+          ? item?.tooltip || 'This feature will be available soon'
+          : ''
+      }
       position="bottom-start"
       opened={item?.disabled ? null : false}
     >
@@ -223,12 +234,12 @@ export const DataplotCustomization = () => {
     // Get child elements from the legend
     const legends = customContainer.querySelectorAll<SVGGElement>('g.layers');
 
+    const updatedPlotColors = JSON.parse(
+      JSON.stringify(customizedDataGrid),
+    ) as DataGridPlot;
     if (legends?.length) {
+      // When we have a color legend (so several plots)
       let plotIndex = 0;
-      const updatedPlotColors = JSON.parse(
-        JSON.stringify(customizedDataGrid),
-      ) as DataGridPlot;
-
       let shouldUpdateColors = false;
       for (const plot of updatedPlotColors.plot) {
         // Get from DOM & set color in plot.line for each plots
@@ -255,9 +266,13 @@ export const DataplotCustomization = () => {
       if (!shouldUpdateColors) {
         return;
       }
-
-      setCustomizedDataGrid(updatedPlotColors);
+    } else if (updatedPlotColors.plot.length === 1) {
+      // When we have only one plot, thee is no legend so we set manualy to the first plotly color
+      updatedPlotColors.plot[0].line = {
+        color: 'rgb(31, 119, 180)',
+      } as PlotLine;
     }
+    setCustomizedDataGrid(updatedPlotColors);
   };
 
   useEffect(() => {
@@ -358,7 +373,7 @@ export const DataplotCustomization = () => {
                     <Grid type="container" ref={customContainerRef}>
                       <Grid.Col span={6}>
                         {selectedAccordion === 'Heatmap' ? (
-                          <Surface2D
+                          <Heatmap2D
                             itemDataGrid={customizedDataGrid}
                             width={WIDTH_PLOT}
                             height={HEIGHT_PLOT}

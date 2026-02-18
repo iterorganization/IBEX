@@ -56,6 +56,7 @@ export const CustomizeDataRange = ({
       customizedDataGrid: DataGridPlot,
       newPlotsUri?: string[],
       shouldApplyRangeOriginInCoord?: boolean,
+      isAlreadyRestored?: boolean,
     ) => {
       if (!newValueRange) {
         return;
@@ -100,14 +101,16 @@ export const CustomizeDataRange = ({
       setIsLoadingApply(true);
 
       if (
+        isAlreadyRestored !== true &&
         // Check if numbers min or max are out of actual range
-        (coordinateToApply?.rangeValues &&
+        ((coordinateToApply?.rangeValues &&
           typeof newValueRange[0] === 'number' &&
           ((newValueRange[0] as number) <
             (coordinateToApply.rangeValues[0] as number) ||
             newValueRange[1] > coordinateToApply.rangeValues[1])) ||
-        // Check if strings min or max are not included in actual range
-        (coordinateToApply?.rangeValues && typeof newValueRange[0] === 'string')
+          // Check if strings min or max are not included in actual range
+          (coordinateToApply?.rangeValues &&
+            typeof newValueRange[0] === 'string'))
       ) {
         // Restore automatically range before applying new range if types range is out of actual range
         const appliedRange = await handleRestoreAndApply(
@@ -294,6 +297,7 @@ export const CustomizeDataRange = ({
               forcedRangeValues,
               updatedDataPlot,
               [...updatedDataPlot.plot.map((plot) => plot.nodeUri)],
+              true,
               true,
             );
           }

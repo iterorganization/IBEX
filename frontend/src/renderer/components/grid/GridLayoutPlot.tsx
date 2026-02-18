@@ -7,11 +7,12 @@ import {
   DataPlotly,
   GridLayoutPlotProps,
   URITreeNodeData,
-} from 'src/renderer/types';
+} from '../../../renderer/types';
 import { Center, Container, Text } from '@mantine/core';
-import { SimplePlotly, Surface2D } from '../plot';
+import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import {
+  containsFloat,
   getArrayValueFromDependance,
   getErrorYVectors,
   getLastIndexedField,
@@ -189,9 +190,48 @@ export const GridLayoutPlot = ({
     }
   }, [data.plot]);
 
+  const updateSelectedPlotMode = (is3DView: boolean, active: Configuration) => {
+    const updatedDataPlot: DataGridPlot[] = JSON.parse(
+      JSON.stringify(active.dataPlot),
+    );
+    const selectedDataPlot = updatedDataPlot.find(
+      (dataPlot) => dataPlot.i === data.i,
+    );
+    if (selectedDataPlot?.selectedPlotMode) {
+      selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
+    } else {
+      selectedDataPlot.selectedPlotMode =
+        data.coordinates.length >= 2 &&
+        containsFloat(
+          data.coordinates.find((coord) => coord.axeIndex === 1).data,
+        )
+          ? 'Heatmap'
+          : '1D';
+    }
+
+    const updatedActive: Configuration = {
+      ...active,
+      dataPlot: updatedDataPlot,
+    };
+    updatedConfiguration(updatedActive);
+  };
+
   useLayoutEffect(() => {
-    setIs3DView(data.coordinates.length >= 2);
+    if (data?.selectedPlotMode) {
+      setIs3DView(data.selectedPlotMode === 'Heatmap');
+    } else {
+      setIs3DView(
+        data.coordinates.length >= 2 &&
+          containsFloat(
+            data.coordinates.find((coord) => coord.axeIndex === 1).data,
+          ),
+      );
+    }
   }, []);
+
+  useEffect(() => {
+    updateSelectedPlotMode(is3DView, active);
+  }, [is3DView]);
 
   /**
    * Handle the delete grid event
@@ -234,6 +274,7 @@ export const GridLayoutPlot = ({
         ? findPlot.plot.map((item) => ({
             uri: normalizeIndices(item.nodeUri),
             name: item.labelUri,
+            type: findPlot.dataType,
           }))
         : [];
 
@@ -247,6 +288,7 @@ export const GridLayoutPlot = ({
             const newCheckedNode = {
               name: plot.labelUri,
               uri: normalizeIndices(error_band.path),
+              type: findPlot.dataType,
             };
             const exists = checkedNodeURI.some(
               (node) =>
@@ -278,16 +320,9 @@ export const GridLayoutPlot = ({
    */
   const handleInspectMetadata = useCallback(
     (id: string) => {
-      const updatedDataPlot: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
-      updatedDataPlot.find((dataPlot) => dataPlot.i === id).isEditing = false;
-
       const updatedActive: Configuration = {
         ...active,
         metadataGridLayout: id,
-        dataPlot: updatedDataPlot,
-        checkedNodeURI: [],
       };
       updatedConfiguration(updatedActive);
     },
@@ -299,19 +334,9 @@ export const GridLayoutPlot = ({
    */
   const handleCustomization = useCallback(
     (id: string) => {
-      const updatedDataPlotList: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
-      const updatedDataPlot = updatedDataPlotList.find(
-        (dataPlot: DataGridPlot) => dataPlot.i === id,
-      );
-      updatedDataPlot.isEditing = false;
-
       const updatedActive: Configuration = {
         ...active,
         customizedGridLayout: id,
-        dataPlot: updatedDataPlotList,
-        checkedNodeURI: [],
       };
       updatedConfiguration(updatedActive);
     },
@@ -358,7 +383,7 @@ export const GridLayoutPlot = ({
         </Container>
       ) : is3DView ? (
         // Show heatmap
-        <Surface2D
+        <Heatmap2D
           itemDataGrid={data}
           width={widthGrid}
           height={heightGrid}

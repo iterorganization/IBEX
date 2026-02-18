@@ -109,7 +109,8 @@ export const HoverButtons = React.memo(
         ) as Configuration;
         if (data.displayErrorBand) {
           if (
-            previousValueDisplayErrorBands.current === false &&
+            (previousValueDisplayErrorBands.current === false ||
+              previousValueDisplayErrorBands.current === undefined) &&
             data.displayErrorBand === true
           ) {
             // Get all error bands from selected dataPlot when user active error bands
@@ -120,24 +121,26 @@ export const HoverButtons = React.memo(
               await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
             }
 
-            // Apply ranges to the new error bands added with switch "display error bands"
-            for (const coordinate of selectedDataPlot.coordinates) {
-              if (coordinate?.range) {
-                const keepValueIndex = true;
-                await applyRange(
-                  coordinate,
-                  coordinate.rangeValues,
-                  selectedDataPlot,
-                  [
-                    ...selectedDataPlot.plot.map(
-                      (plot) => plot.nodeUri + '_error_upper',
-                    ),
-                    ...selectedDataPlot.plot.map(
-                      (plot) => plot.nodeUri + '_error_lower',
-                    ),
-                  ],
-                  keepValueIndex,
-                );
+            if (previousValueDisplayErrorBands.current === false) {
+              // Apply ranges to the new error bands added with switch "display error bands" and if not already applied at load
+              for (const coordinate of selectedDataPlot.coordinates) {
+                if (coordinate?.range) {
+                  const keepValueIndex = true;
+                  await applyRange(
+                    coordinate,
+                    coordinate.rangeValues,
+                    selectedDataPlot,
+                    [
+                      ...selectedDataPlot.plot.map(
+                        (plot) => plot.nodeUri + '_error_upper',
+                      ),
+                      ...selectedDataPlot.plot.map(
+                        (plot) => plot.nodeUri + '_error_lower',
+                      ),
+                    ],
+                    keepValueIndex,
+                  );
+                }
               }
             }
           }

@@ -186,6 +186,7 @@ export const handleNewPlot = async (
     response.data.downsampled_method,
     response.data.description,
   );
+  updatedPlot.dataType = nodes[0].type;
   updatedActive.dataPlot.push(updatedPlot);
   return updatedActive;
 };
@@ -541,6 +542,7 @@ export const fetchErrorBandsInConfig = async (
           const newCheckedNode = {
             name: updatedPlot.labelUri,
             uri: normalizeIndices(error_band.path),
+            type: selectedDataPlot.dataType,
           };
           const exists = updatedCheckedNodeURI.some(
             (node) =>
@@ -587,8 +589,7 @@ export const fetchErrorBands = async (
     (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
   );
   if (!plot) {
-    // No matching data: return dataPlot with no updates
-    return dataPlot;
+    return;
   }
 
   try {
@@ -616,6 +617,8 @@ export const fetchErrorBands = async (
 
     const lowerResponse = await fetchFieldValue(
       normalizeIndices(plot.nodeUri) + '_error_lower',
+      downsamplingMethod,
+      downsamplingSize,
     );
     const defaultLowerYValue = getVectorData(
       dataPlot.coordinates,
@@ -724,6 +727,7 @@ export function formatConfigBeforeLoadingURIs(
     (data): DataGridPlot => ({
       ...data,
       isEditing: false,
+      dataType: data.dataType,
       static: false,
       coordinates:
         data.coordinates && data.coordinates.length > 0
@@ -780,7 +784,7 @@ export async function plotNodeUriLoaded(
         const updatedXAxisData: Axis = dataGrid.xAxisData;
 
         const updatedPlot: DataPlotly[] = [];
-        for (const plot of dataGrid.plot) {
+        for (const [index, plot] of dataGrid.plot.entries()) {
           if (!plot.nodeUri) {
             updatedPlot.push(plot);
             continue;
@@ -855,6 +859,14 @@ export async function plotNodeUriLoaded(
                 lastField,
                 matchingCoord.valueIndex,
               );
+
+              if (response.data.coordinates.length > 0 && index === 0) {
+                // Update x axis informations to plot right x axis title in a saved file with transposition (useless if transposition will be restored at load)
+                updatedXAxisData.name = response.data.coordinates[0].name;
+                updatedXAxisData.unit = response.data.coordinates[0].unit;
+                updatedXAxisData.path = response.data.coordinates[0].path;
+                delete updatedXAxisData.type;
+              }
 
               matchingCoordList.push(matchingCoord);
             }
