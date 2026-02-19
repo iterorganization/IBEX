@@ -135,7 +135,7 @@ def get_data(uri: str, downsampling_method: str | None, downsampled_size: int, r
         occurrence=uri_obj.occurrence,
         downsampling_method=downsampling_method,
         downsampled_size=downsampled_size,
-        range=range
+        range=range,
     )
 
 
