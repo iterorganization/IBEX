@@ -47,8 +47,12 @@ read -r -a found_ports < <(get_free_ports)
 echo "Selected free ports: ${found_ports[@]}"
 echo "Setting IBEX BACKEND PORT = ${found_ports[0]}"
 
-./bin/run_ibex_service -p ${found_ports[0]} &
+run_ibex_service -p ${found_ports[0]} &
 BACKEND_PID=$!
+
+export IBEX_BACKEND_URL="http://127.0.0.1:${found_ports[0]}"
+echo "Setting IBEX_BACKEND_URL = $IBEX_BACKEND_URL"
+
 cd "$SCRIPT_DIR"
 
 echo "5. Installing frontend dependencies..."
@@ -83,4 +87,5 @@ FRONTEND_PID=$!
 cd "$SCRIPT_DIR"
 
 # Wait for both processes to finish
-wait $BACKEND_PID $FRONTEND_PID
+wait $FRONTEND_PID
+kill $BACKEND_PID
