@@ -97,7 +97,7 @@ venv4linting/
 *.swo
 
 # SCM setuptools
-backend/ibex/version.py
+backend/ibex/_version.py
 
 # Saxon symlink or downloaded file
 saxon*.jar

@@ -78,13 +78,13 @@ def test_show_error_bars_option(entry_path):
 
     assert response.status_code == 200
     for child in response.json()["children"]:
-        assert not any(
-            x in child["name"] for x in ["_error_upper", "_error_lower", "_error_index"]
-        ), f"Error bars filtering failed. Node {child['name']} should not be returned."
+        assert not any(x in child["name"] for x in ["_error_upper", "_error_lower", "_error_index"]), (
+            f"Error bars filtering failed. Node {child['name']} should not be returned."
+        )
 
     parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/vacuum_toroidal_field", "show_error_bars": True}
     response = pytest.test_client.get("/ids_info/node_info", params=parameters)
     assert response.status_code == 200
-    assert "r0_error_upper" in [
-        child["name"] for child in response.json()["children"]
-    ], "Error bars filtering failed. 'r0_error_upper' nodes was not returned, but it should be."
+    assert "r0_error_upper" in [child["name"] for child in response.json()["children"]], (
+        "Error bars filtering failed. 'r0_error_upper' nodes was not returned, but it should be."
+    )

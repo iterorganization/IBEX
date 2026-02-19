@@ -1,0 +1,30 @@
+name: linting-and-code-formatting
+
+on: 
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout IMAS-Python sources
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
+      - name: Install the code linting and formatting tools
+        run: pip install --upgrade ruff
+
+      - name: Check formatting of code with ruff
+        run: ruff format --check backend/
+
+      - name: Check linting with ruff
+        run: ruff check backend/
