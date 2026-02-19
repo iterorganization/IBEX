@@ -63,6 +63,16 @@ export const Heatmap2D = ({
       yaxis: { title: { text: yAxis?.name || '' } },
       zaxis: { title: { text: zAxis?.name || '' } },
     },
+    xaxis: {
+      exponentformat: 'power',
+      showexponent: 'all',
+      separatethousands: true,
+    },
+    yaxis: {
+      exponentformat: 'power',
+      showexponent: 'all',
+      separatethousands: true,
+    },
     modebar: {
       orientation: 'v',
     },
@@ -395,7 +405,12 @@ export const Heatmap2D = ({
                       ? `${zAxis?.name} ${(zAxis?.unit && '[' + zAxis.unit + ']') || ''}`
                       : '',
                   },
+                  exponentformat: 'power',
+                  showexponent: 'all',
+                  separatethousands: true,
                 },
+                hovertemplate:
+                  'x: %{x}<br>' + 'y: %{y}<br>' + 'z: %{z:,.6g}<extra></extra>',
                 x: x,
                 y: y,
                 z: z,
