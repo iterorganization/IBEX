@@ -3,10 +3,10 @@
 import logging
 from ibex.setup_logging import connect_formatter
 
-from . import _version
+from ._version import version as version
+from ._version import __version__ as __version__
+from ._version import version_tuple as version_tuple
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 connect_formatter(logger)
-
-__version__ = _version.get_versions()["version"]
