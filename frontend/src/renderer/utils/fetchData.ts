@@ -266,6 +266,7 @@ export const fetchFieldValue = async (
   uri: string,
   downsamplingMethod?: string,
   downsamplingSize?: number,
+  type?: NodeInfoTypeEnum,
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: FieldValueResponse;
@@ -277,6 +278,12 @@ export const fetchFieldValue = async (
     response = await fetchFromApi<FieldValueResponse>(
       `/data/field_value?uri=${encodeURIComponent(uri)}`,
     );
+  }
+
+  if (type === 'CPX') {
+    // Transform complex data
+    const updatedData = transformComplexData(response.value) as AxisData;
+    response.value = updatedData;
   }
   return response;
 };

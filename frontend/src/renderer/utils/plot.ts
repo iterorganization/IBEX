@@ -595,6 +595,7 @@ export const fetchErrorBands = async (
       normalizeIndices(plot.nodeUri) + '_error_upper',
       downsamplingMethod,
       downsamplingSize,
+      dataPlot?.dataType,
     );
     const defaultUpperYValue = getVectorData(
       dataPlot.coordinates,
@@ -611,6 +612,7 @@ export const fetchErrorBands = async (
       normalizeIndices(plot.nodeUri) + '_error_lower',
       downsamplingMethod,
       downsamplingSize,
+      dataPlot?.dataType,
     );
     const defaultLowerYValue = getVectorData(
       dataPlot.coordinates,
