@@ -49,6 +49,7 @@ export const CustomizeDownsampling = ({
           normalizeIndices(plot.nodeUri),
           downsamplingMethod,
           downsamplingSize,
+          updatedDataPlot?.dataType,
         );
 
         if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {

@@ -1,4 +1,4 @@
-import { AxisData, Coordinates } from '../types';
+import { AxisData, Complex, Coordinates } from '../types';
 import * as tf from '@tensorflow/tfjs';
 
 export const getFirstArrayValueFromShape = (
@@ -11,7 +11,7 @@ export const getFirstArrayValueFromShape = (
     shape = tensor.shape;
   }
 
-  let firstArrayValue: AxisData | number | string = value;
+  let firstArrayValue: AxisData | number | string | Complex = value;
   for (let index = 0; index < shape.length - 1; index++) {
     if (Array.isArray(firstArrayValue)) {
       firstArrayValue = firstArrayValue[0];
@@ -65,7 +65,8 @@ export const getArrayValueFromDependance = (
   }
 
   // Get wanted coordinate data from dependencies not linked to the dimension
-  let coordinateData: (number | string) | AxisData = wantedCoordinate.data;
+  let coordinateData: (number | string | Complex) | AxisData =
+    wantedCoordinate.data;
   for (const vectorIndex of sortedIndexValueDependances) {
     if (Array.isArray(coordinateData)) {
       coordinateData = coordinateData[vectorIndex];

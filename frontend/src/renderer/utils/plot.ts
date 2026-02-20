@@ -108,10 +108,15 @@ export const handleNewPlot = async (
   //* : corresponds to all indices (matrix)
   let defaultUri = nodes[0].uri; //Use normalized URI to get all matrix
 
-  const response: PlotDataResponse = await fetchDataPlot(defaultUri);
+  const response: PlotDataResponse = await fetchDataPlot(
+    defaultUri,
+    undefined,
+    undefined,
+    nodes[0].type,
+  );
   defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
 
-  let coordinatesOfFirstPlot: Coordinates[] = [];
+  let formattedCoordinates: Coordinates[] = [];
   let xAxis: Axis = null;
 
   if (response.data.coordinates.length > 0) {
@@ -124,24 +129,10 @@ export const handleNewPlot = async (
     };
 
     //Get coordinates data
-    coordinatesOfFirstPlot = response.data.coordinates.map(
-      (coordinate: PlotCoordinatesResponse, index) => {
-        const dataValueMatrix: AxisData = coordinate.value;
-
-        return {
-          name: coordinate.name,
-          shape: coordinate.shape,
-          downsampled_shape: coordinate.downsampled_shape,
-          coordinates: coordinate.coordinates,
-          data: dataValueMatrix,
-          valueIndex: 0,
-          path: getDefaultUri(coordinate.path),
-          target: getDefaultUri(coordinate.target),
-          nodeUri: defaultUri,
-          axeIndex: index,
-          unit: coordinate.unit || '',
-        };
-      },
+    formattedCoordinates = formatCoordinates(
+      response.data.coordinates,
+      defaultUri,
+      0,
     );
   }
 
@@ -152,7 +143,7 @@ export const handleNewPlot = async (
   };
 
   const newGrid = generateNewGridPlot(
-    coordinatesOfFirstPlot,
+    formattedCoordinates,
     xAxis,
     yAxis,
     updatedActive.dataPlot || [],
@@ -237,6 +228,7 @@ export const handleExistingPlot = async (
       defaultUri,
       findDataPlot?.downsampled_method,
       findDataPlot?.downsampled_size,
+      node.type,
     );
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
@@ -769,6 +761,45 @@ export function formatConfigBeforeLoadingURIs(
 }
 
 /**
+ * Returns the coordinates from BE in expected format
+ * @param receivedCoords
+ * @param defaultUri
+ * @returns Formatted coordinates
+ */
+function formatCoordinates(
+  receivedCoords: PlotCoordinatesResponse[],
+  uri: string,
+  valueIndex: number,
+) {
+  const formattedCoordinates: Coordinates[] = receivedCoords.map(
+    (coordinate: PlotCoordinatesResponse, index) => {
+      const lastField = getLastIndexedField(coordinate.target);
+      return {
+        name: coordinate.name,
+        shape: coordinate.shape,
+        downsampled_shape: coordinate.downsampled_shape,
+        coordinates: coordinate.coordinates,
+        data: coordinate.value,
+        valueIndex: valueIndex,
+        path:
+          valueIndex === 0
+            ? getDefaultUri(coordinate.path)
+            : updateIndexFieldName(coordinate.path, lastField, valueIndex),
+        target:
+          valueIndex === 0
+            ? getDefaultUri(coordinate.target)
+            : updateIndexFieldName(coordinate.target, lastField, valueIndex),
+        nodeUri: uri,
+        axeIndex: index,
+        unit: coordinate.unit || '',
+      };
+    },
+  );
+
+  return formattedCoordinates;
+}
+
+/**
  * @description Fetches data for each plot in the provided DataGridPlot from file configuration.
  * @param dataGridPlot The array of DataGridPlot objects to fetch data for.
  * @returns A promise that resolves to an array of updated DataGridPlot objects.
@@ -781,10 +812,13 @@ export async function plotNodeUriLoaded(
 
     const updatedDataGridPlot: DataGridPlot[] = await Promise.all(
       dataGridPlot.map(async (dataGrid): Promise<DataGridPlot> => {
+        for (const [index, coord] of dataGrid.coordinates.entries()) {
+          coord.axeIndex = index;
+        }
         const updatedXAxisData: Axis = dataGrid.xAxisData;
 
         const updatedPlot: DataPlotly[] = [];
-        for (const [index, plot] of dataGrid.plot.entries()) {
+        for (const plot of dataGrid.plot) {
           if (!plot.nodeUri) {
             updatedPlot.push(plot);
             continue;
@@ -809,6 +843,7 @@ export async function plotNodeUriLoaded(
               defaultUri,
               dataGrid?.downsampled_method,
               dataGrid?.downsampled_size,
+              dataGrid?.dataType,
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
@@ -823,7 +858,10 @@ export async function plotNodeUriLoaded(
               (plotFromList) => plotFromList.nodeUri === plot.nodeUri,
             );
             const matchingCoordList: Coordinates[] = [];
-            for (const responseCoordinates of response.data.coordinates) {
+            for (const [
+              index,
+              responseCoordinates,
+            ] of response.data.coordinates.entries()) {
               const matchingCoord: Coordinates = JSON.parse(
                 JSON.stringify(dataGrid.coordinates),
               ).find(
@@ -834,6 +872,7 @@ export async function plotNodeUriLoaded(
               if (!lastField) continue;
 
               // If coordinates exist, update it with response from BE
+              matchingCoord.axeIndex = index;
               matchingCoord.data = responseCoordinates.value;
               matchingCoord.name = responseCoordinates.name;
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
@@ -1297,6 +1336,27 @@ function getMaxShape(arr: any[]): number[] {
 
   goThrough(arr, 0);
   return shape;
+}
+
+/**
+ * Convert all last children of shape [number, number] into {r, i} objects.
+ */
+export function transformComplexData(arr: any[]): any[] {
+  const maxDepth = getMaxShape(arr).length;
+
+  function transform(node: any, depth: number): any {
+    if (!Array.isArray(node)) return node;
+
+    if (depth === maxDepth - 1) {
+      // Format children having complex type
+      node = node[0] + node[1]; // TODO => update this transformation to ITER needs when we will received it (complex type : {r: node[0], i: node[1]})
+      return node;
+    }
+
+    return node.map((child) => transform(child, depth + 1));
+  }
+
+  return transform(arr, 0);
 }
 
 /**

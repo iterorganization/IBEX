@@ -203,7 +203,7 @@ export const GridLayoutPlot = ({
       selectedDataPlot.selectedPlotMode =
         data.coordinates.length >= 2 &&
         containsFloat(
-          data.coordinates.find((coord) => coord.axeIndex === 1).data,
+          data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
         )
           ? 'Heatmap'
           : '1D';
@@ -223,7 +223,7 @@ export const GridLayoutPlot = ({
       setIs3DView(
         data.coordinates.length >= 2 &&
           containsFloat(
-            data.coordinates.find((coord) => coord.axeIndex === 1).data,
+            data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
           ),
       );
     }

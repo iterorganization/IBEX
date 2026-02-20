@@ -157,13 +157,15 @@ export const MetaDataInfos = ({
       try {
         if (tabsSelected === data.name) {
           // Force with downsampled method if selected by user
-          const downsampled_method = active.dataPlot.find(
+          const selectedDataPlot = active.dataPlot.find(
             (gridLayout) => gridLayout.i === gridLayoutKey,
-          )?.downsampled_method;
+          );
 
           const response: PlotDataResponse = await fetchDataPlot(
             data.nodeUri,
-            downsampled_method,
+            selectedDataPlot?.downsampled_method,
+            selectedDataPlot?.downsampled_size,
+            selectedDataPlot?.dataType,
           );
 
           setCoordinates(response.data.coordinates);

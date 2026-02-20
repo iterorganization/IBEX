@@ -9,10 +9,16 @@ export interface Axis {
   type?: string;
 }
 
+export type Complex = {
+  r: number;
+  i: number;
+};
+
 export type AxisData =
-  | (number | string)[][][]
-  | (number | string)[][]
-  | (number | string)[];
+  | (number | string | Complex)[][][][]
+  | (number | string | Complex)[][][]
+  | (number | string | Complex)[][]
+  | (number | string | Complex)[];
 
 export interface BaseCoordinates {
   path: string;
