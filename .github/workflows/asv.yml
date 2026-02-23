@@ -1,0 +1,57 @@
+name: ASV Benchmarks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    # Run benchmarks daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install asv
+
+      - name: Run ASV benchmarks
+        run: |
+          asv run --quick --show-stderr
+
+      - name: Compare with main branch
+        if: github.event_name == 'pull_request'
+        run: |
+          asv continuous develop main --quick --show-stderr || true
+
+      - name: Generate HTML results
+        if: always()
+        run: |
+          asv publish
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asv-results
+          path: html/
+          retention-days: 30
