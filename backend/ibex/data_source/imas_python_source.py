@@ -38,7 +38,7 @@ from ibex.data_source.exception import (
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
 from ibex.core.utils import IMAS_URI
-from ibex.data_source.imas_python_source_utils import convert_ids_data_into_numpy_array, resample_data, union_arrays
+from ibex.data_source.imas_python_source_utils import convert_ids_data_into_numpy_array, resample_data, union_arrays, resample_data2, join_coordinates
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -767,7 +767,47 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= BEGIN resample data onto new time vector =============
 
+            def convert_to_lists(data):
+                """TODO: delete after development"""
+                if isinstance(data, list):
+                    return [convert_to_lists(d) for d in data]
+                elif isinstance(data, (np.ndarray, IDSNumericArray)):
+                    return data.tolist()
+                else:
+                    return data
+
             if interpolate_over:
+                # =================== GATHER ALL COORDINATES ===================
+                coords = {}
+                for c in coordinates_to_be_returned:
+                    coords[c["name"]] = c["value"]
+
+                for _uri in interpolate_over:
+                    _uri_obj = IMAS_URI(_uri)
+
+                    if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
+                        raise InvalidParametersException("IDS name and node path should be the same for source and target URI when interpolating data")
+
+                    coord = self.get_plot_data(uri=_uri_obj.uri_entry_identifiers,
+                                               ids=_uri_obj.ids_name,
+                                               node_path=_uri_obj.node_path,
+                                               occurrence=_uri_obj.occurrence,
+                                               downsampling_method=downsampling_method,
+                                               downsampled_size=downsampled_size)["data"]["coordinates"]
+
+                    _coord_dict = {}
+                    for c in coord:
+                        _coord_dict[c["name"]] = c["value"]
+
+                    # merge gathered coordinate into common coordinate list
+                    for key in coords.keys():
+                        coords[key] = join_coordinates(coords[key] , _coord_dict[key])
+
+                # =================== INTERPOLATE ===================
+
+
+
+                """
                 if first_value.metadata.ndim == 1 and coordinates_to_be_returned[0]["name"] == "time":
                     #1 collect all time vectors
                     time_vectors = []
@@ -781,13 +821,19 @@ class IMASPythonSource(DataSourceInterface):
                     common_tv = union_arrays(time_vectors)
 
                     #3 interpolate data_to_be_returned
-                    data_to_be_returned = resample_data(data=data_to_be_returned,original_x=coordinates_to_be_returned[0]["value"], target_x=common_tv)
+                    if False:
+                        data_to_be_returned = resample_data(data=data_to_be_returned,original_x=coordinates_to_be_returned[0]["value"], target_x=common_tv)
+                    else:
+                        print(f" START RESAMPLING")
+                        data_to_be_returned = resample_data2(data=data_to_be_returned,original_x=coordinates_to_be_returned[0]["value"],target_x=common_tv)
 
                     #4 replace `time` coordinate with new time vector
                     coordinates_to_be_returned[0]["value"] = common_tv
 
                     if not coordinates_to_be_returned[0]["shape"] == "irregular":
                         coordinates_to_be_returned[0]["shape"] = np.asarray(coordinates_to_be_returned[0]["value"]).shape
+                """
+
 
             # ============= END resample data onto new time vector =============
 
