@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Axis,
   Configuration,
@@ -34,7 +34,9 @@ export const GridLayoutPlot = ({
     data.h * rowHeight + (23 * (data.h * rowHeight)) / 100,
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
-  const [is3DView, setIs3DView] = useState<boolean>(false);
+  const [is3DView, setIs3DView] = useState<boolean>(
+    data?.selectedPlotMode === 'Heatmap' ? true : false,
+  );
   const [active3DTab, setActive3DTab] = useState<string>('0');
   const [metadataTabsValue, setMetadataTabsValue] = useState<string>(
     data.plot[0]?.path || '',
@@ -225,20 +227,12 @@ export const GridLayoutPlot = ({
     updatedConfiguration(updatedActive);
   };
 
-  useLayoutEffect(() => {
-    if (data?.selectedPlotMode) {
-      setIs3DView(data.selectedPlotMode === 'Heatmap');
-    } else {
-      setIs3DView(
-        data.coordinates.length >= 2 &&
-          containsFloat(
-            data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
-          ),
-      );
-    }
-  }, []);
-
   useEffect(() => {
+    if ((data.selectedPlotMode === 'Heatmap') === is3DView) {
+      // Prevent from triggering updateSelectedPlotMode when initialize is3DView
+      return;
+    }
+
     updateSelectedPlotMode(is3DView, active);
   }, [is3DView]);
 

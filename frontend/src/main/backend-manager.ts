@@ -231,7 +231,7 @@ export class BackendManager {
       console.info('Remote backend configured, not stopping it.');
       return;
     }
-    
+
     if (this.backendProcess) {
       console.info('Stopping backend process...');
       this.backendProcess.kill();
