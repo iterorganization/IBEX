@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       pull-requests: write  # needed to post PR comments
+      issues: write         # PR comments use the Issues API (createComment endpoint)
 
     steps:
       - name: Checkout code
@@ -145,6 +146,10 @@ jobs:
       - name: Generate HTML results
         if: always()
         run: |
+          # asv publish resolves branch names from asv.conf.json via git rev-list.
+          # On PR checkouts only the PR branch is a local ref — fetch develop/main
+          # so git can resolve them; ignore errors if a branch doesn't exist yet.
+          git fetch origin develop main 2>/dev/null || true
           asv publish
 
       - name: Upload benchmark results
