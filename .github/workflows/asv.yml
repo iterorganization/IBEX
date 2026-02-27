@@ -147,9 +147,12 @@ jobs:
         if: always()
         run: |
           # asv publish resolves branch names from asv.conf.json via git rev-list.
-          # On PR checkouts only the PR branch is a local ref — fetch develop/main
-          # so git can resolve them; ignore errors if a branch doesn't exist yet.
-          git fetch origin develop main 2>/dev/null || true
+          # On PR checkouts only the PR branch is a local ref. Using
+          # refspec <remote>:<local> creates local branches directly so that
+          # git rev-list develop / main succeeds (plain fetch only makes
+          # remotes/origin/develop which asv does not resolve).
+          git fetch origin develop:develop 2>/dev/null || true
+          git fetch origin main:main 2>/dev/null || true
           asv publish
 
       - name: Upload benchmark results
