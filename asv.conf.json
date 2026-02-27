@@ -25,9 +25,11 @@
     // Python's stdlib importlib.metadata which discovers pbr from EasyBuild
     // site-packages; pbr then fails with "No module named pkg_resources".
     // Running without isolation uses ASV's own clean virtualenv instead.
+    // pbr is installed explicitly so the venv's pbr (which has pkg_resources
+    // via setuptools) takes precedence over EasyBuild's pbr in sys.path.
     // build_requirements below ensures setuptools_scm and wheel are present.
     "build_command": [
-        "python -m pip install 'setuptools>=77' build wheel 'setuptools_scm[toml]>=6.2'",
+        "python -m pip install 'setuptools>=77' pbr build wheel 'setuptools_scm[toml]>=6.2'",
         "python -m build --no-isolation --wheel -o {build_cache_dir} {build_dir}"
     ],
     // Customizable commands for installing and uninstalling the project.
