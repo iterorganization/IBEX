@@ -5,14 +5,13 @@ on:
     branches: [main, develop]
   pull_request:
     types: [opened, synchronize, reopened]
-  schedule:
-    # Run benchmarks daily at 2 AM UTC
-    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
   benchmark:
     runs-on: ubuntu-22.04
+    permissions:
+      pull-requests: write  # needed to post PR comments
 
     steps:
       - name: Checkout code
@@ -32,17 +31,117 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install asv
+          # virtualenv required by asv to create per-commit benchmark environments
+          pip install asv virtualenv
 
-      - name: Run ASV benchmarks
+      - name: Download test data from Zenodo
         run: |
-          asv run --quick --show-stderr
+          mkdir -p test_data
+          # iter_scenario_53298_seq1_DD4: ~14 MB, single time slice, DD 4.0.0
+          wget -q -O test_data/iter_scenario_53298_seq1_DD4.nc \
+            "https://zenodo.org/records/17062700/files/iter_scenario_53298_seq1_DD4.nc?download=1"
+          # iter_scenario_123364_1: ~118 MB, single time slice, DD 4.0.0
+          wget -q -O test_data/iter_scenario_123364_1.nc \
+            "https://zenodo.org/records/17062700/files/iter_scenario_123364_1.nc?download=1"
+          echo "Downloaded files:"
+          ls -lh test_data/
 
-      - name: Compare with main branch
+      - name: Configure ASV regression threshold for CI
+        run: |
+          # On GitHub Actions: only flag regressions >2x slower in the HTML report,
+          # matching the --factor 2.0 used in asv continuous below.
+          # On Bamboo/local, asv.conf.json is used as-is (default ASV threshold of 5%).
+          python - <<'EOF'
+          import pathlib
+          conf_path = pathlib.Path('asv.conf.json')
+          conf = conf_path.read_text()
+          # Insert threshold entry before the final closing brace
+          assert conf.rstrip().endswith('}'), "Unexpected asv.conf.json ending"
+          patched = conf.rstrip()[:-1].rstrip().rstrip(',') + ',\n    "regressions_thresholds": {".*": 2.0}\n}\n'
+          conf_path.write_text(patched)
+          print("CI: regressions_thresholds set to 2.0")
+          EOF
+
+      - name: Run ASV continuous benchmarks
+        id: asv
+        # continue-on-error so we can post the PR comment before re-failing the job
+        continue-on-error: true
+        env:
+          # Tells benchmarks/__init__.py where the test data lives
+          IBEX_TEST_DATA_DIR: ${{ github.workspace }}/test_data
+        run: |
+          asv machine --yes
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Compare base branch vs PR head — both on the same runner, same hardware
+            BASELINE="origin/${{ github.base_ref }}"
+            CONTENDER="${{ github.sha }}"
+          else
+            # Compare previous commit vs current commit on push/manual trigger
+            # Guard: skip if there is no previous commit (e.g. initial branch push)
+            if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+              echo "No previous commit to compare against — skipping benchmark comparison."
+              exit 0
+            fi
+            BASELINE="HEAD~1"
+            CONTENDER="HEAD"
+          fi
+
+          echo "Comparing ${BASELINE}...${CONTENDER}"
+          # --factor 2.0: only flag as regression if a benchmark is >2x slower
+          # (filters out GitHub runner hardware noise, ~20-50% typical variance)
+          asv continuous --quick --show-stderr --factor 2.0 "${BASELINE}" "${CONTENDER}" \
+            2>&1 | tee asv_output.txt
+
+      - name: Post benchmark results to PR
         if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.existsSync('asv_output.txt')
+              ? fs.readFileSync('asv_output.txt', 'utf8').trim()
+              : '_No output captured — benchmark step crashed before producing output._';
+
+            const outcome = '${{ steps.asv.outcome }}';
+            const icon = outcome === 'failure' ? '🔴' : '✅';
+            const title = outcome === 'failure'
+              ? '**Performance regression detected (>2x slower on at least one benchmark)**'
+              : '**No significant performance regressions detected**';
+            const body = `## ${icon} ASV Benchmark Results\n${title}\n\n`
+              + `<details><summary>Full output</summary>\n\n\`\`\`\n${output}\n\`\`\`\n</details>`;
+
+            // Update existing bot comment if present, otherwise create a new one.
+            // This avoids comment spam when multiple commits are pushed to the same PR.
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('ASV Benchmark Results')
+            );
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                comment_id: botComment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body,
+              });
+            }
+
+      - name: Fail job if regression detected
+        if: steps.asv.outcome == 'failure'
         run: |
-          asv continuous develop main --quick --show-stderr || true
+          echo "❌ Performance regression detected (>2x threshold). See benchmark output above."
+          exit 1
 
       - name: Generate HTML results
         if: always()
@@ -54,5 +153,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: asv-results
-          path: html/
+          path: .asv/html/
           retention-days: 30
+          if-no-files-found: warn
