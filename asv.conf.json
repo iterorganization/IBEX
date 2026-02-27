@@ -27,7 +27,7 @@
     // Running without isolation uses ASV's own clean virtualenv instead.
     // build_requirements below ensures setuptools_scm and wheel are present.
     "build_command": [
-        "python -m pip install build setuptools>=61 setuptools_scm[toml]>=6.2 wheel",
+        "python -m pip install 'setuptools>=77' build wheel 'setuptools_scm[toml]>=6.2'",
         "python -m build --no-isolation --wheel -o {build_cache_dir} {build_dir}"
     ],
     // Customizable commands for installing and uninstalling the project.
