@@ -20,11 +20,15 @@
 
     // Customizable commands for building the project.
     // See asv.conf.json documentation.
-    // To build the package using pyproject.toml (PEP518), uncomment the following lines
+    // --no-isolation: skip creating a fresh /tmp/build-env-xxx virtualenv.
+    // On ITER/EasyBuild infrastructure, that isolated venv uses the EasyBuild
+    // Python's stdlib importlib.metadata which discovers pbr from EasyBuild
+    // site-packages; pbr then fails with "No module named pkg_resources".
+    // Running without isolation uses ASV's own clean virtualenv instead.
+    // build_requirements below ensures setuptools_scm and wheel are present.
     "build_command": [
-        "python -m pip install build",
-        "python -m build --wheel -o {build_cache_dir} {build_dir}",
-        //"python -m pip wheel --no-deps -w {build_cache_dir} {build_dir}"
+        "python -m pip install build setuptools>=61 setuptools_scm[toml]>=6.2 wheel",
+        "python -m build --no-isolation --wheel -o {build_cache_dir} {build_dir}"
     ],
     // Customizable commands for installing and uninstalling the project.
     // See asv.conf.json documentation.
