@@ -327,6 +327,7 @@ export const Heatmap2D = ({
                             (coord: Coordinates) => coord.name === value,
                           ).axeIndex,
                           targetAxis === 'x' ? 0 : 1,
+                          false,
                           active,
                           updatedConfiguration,
                         )
