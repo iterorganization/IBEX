@@ -13,7 +13,7 @@ git checkout -B develop upstream/develop
 git checkout -B main upstream/main
 
 # Go back to the triggering branch
-git checkout ${bamboo.planRepository.branch}
+git checkout "${bamboo_planRepository_branch}"
 
 # Set up environment s
 BACKEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/..")
