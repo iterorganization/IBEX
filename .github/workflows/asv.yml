@@ -11,8 +11,7 @@ jobs:
   benchmark:
     runs-on: ubuntu-22.04
     permissions:
-      pull-requests: write  # needed to post PR comments
-      issues: write         # PR comments use the Issues API (createComment endpoint)
+      contents: write       # needed to push HTML report to gh-pages branch
 
     steps:
       - name: Checkout code
@@ -87,55 +86,52 @@ jobs:
             CONTENDER="HEAD"
           fi
 
-          echo "Comparing ${BASELINE}...${CONTENDER}"
+          # Resolve to full SHAs for clarity in the log
+          BASELINE_SHA=$(git rev-parse "${BASELINE}" 2>/dev/null || echo "${BASELINE}")
+          CONTENDER_SHA=$(git rev-parse "${CONTENDER}" 2>/dev/null || echo "${CONTENDER}")
+          echo "Comparing commits:"
+          echo "  BASELINE  : ${BASELINE} → ${BASELINE_SHA}"
+          echo "  CONTENDER : ${CONTENDER} → ${CONTENDER_SHA}"
+
           # --factor 2.0: only flag as regression if a benchmark is >2x slower
           # (filters out GitHub runner hardware noise, ~20-50% typical variance)
-          asv continuous --quick --show-stderr --factor 2.0 "${BASELINE}" "${CONTENDER}" \
+          asv continuous --quick --show-stderr --factor 2.0 "${BASELINE_SHA}" "${CONTENDER_SHA}" \
             2>&1 | tee asv_output.txt
 
-      - name: Post benchmark results to PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const output = fs.existsSync('asv_output.txt')
-              ? fs.readFileSync('asv_output.txt', 'utf8').trim()
-              : '_No output captured — benchmark step crashed before producing output._';
-
-            const outcome = '${{ steps.asv.outcome }}';
-            const icon = outcome === 'failure' ? '🔴' : '✅';
-            const title = outcome === 'failure'
-              ? '**Performance regression detected (>2x slower on at least one benchmark)**'
-              : '**No significant performance regressions detected**';
-            const body = `## ${icon} ASV Benchmark Results\n${title}\n\n`
-              + `<details><summary>Full output</summary>\n\n\`\`\`\n${output}\n\`\`\`\n</details>`;
-
-            // Update existing bot comment if present, otherwise create a new one.
-            // This avoids comment spam when multiple commits are pushed to the same PR.
-            const { data: comments } = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const botComment = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('ASV Benchmark Results')
-            );
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                comment_id: botComment.id,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: body,
-              });
-            }
+      - name: Print benchmark results to log
+        # Always print to the job log and GitHub Actions job summary.
+        # For fork PRs (where write access is blocked) this is the only place
+        # results are visible — open the Actions run to see them.
+        if: always()
+        run: |
+          OUTPUT=$(cat asv_output.txt 2>/dev/null || echo "(no output captured)")
+          OUTCOME="${{ steps.asv.outcome }}"
+          if [ "${OUTCOME}" = "failure" ]; then
+            ICON="❌"
+            TITLE="Performance regression detected (>2x slower on at least one benchmark)"
+          else
+            ICON="✅"
+            TITLE="No significant performance regressions detected"
+          fi
+          echo ""
+          echo "======================================================"
+          echo "  ${ICON} ASV Benchmark Results — ${TITLE}"
+          echo "======================================================"
+          echo "${OUTPUT}"
+          echo ""
+          # Also write to GitHub Actions job summary (visible in the Actions UI
+          # for all runs, including fork PRs, without any write permissions).
+          {
+            echo "## ${ICON} ASV Benchmark Results"
+            echo "**${TITLE}**"
+            echo ""
+            echo "<details><summary>Full output</summary>"
+            echo ""
+            echo '```'
+            echo "${OUTPUT}"
+            echo '```'
+            echo "</details>"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Fail job if regression detected
         if: steps.asv.outcome == 'failure'
@@ -155,11 +151,18 @@ jobs:
           git fetch origin main:main 2>/dev/null || true
           asv publish
 
-      - name: Upload benchmark results
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Deploy HTML report to GitHub Pages
+        # Pushes .asv/html/ to the gh-pages branch so the report is browsable at
+        # https://<org>.github.io/IBEX/
+        # Skipped for fork PRs: they cannot push to the upstream repo.
+        if: >
+          always() && (
+            github.event_name != 'pull_request' ||
+            github.event.pull_request.head.repo.full_name == github.repository
+          )
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          name: asv-results
-          path: .asv/html/
-          retention-days: 30
-          if-no-files-found: warn
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .asv/html
+          destination_dir: benchmarks
+          keep_files: false
