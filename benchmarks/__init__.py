@@ -9,7 +9,7 @@ if os.environ.get("GITHUB_ACTIONS") == "true":
     # Downloaded by the workflow into IBEX_TEST_DATA_DIR before benchmarks run.
     _data_dir = Path(os.environ["IBEX_TEST_DATA_DIR"])
     uris = [
-        str(_data_dir / "iter_scenario_123364_1.nc"),        # ~118 MB, single time slice (DD 4.0.0)
+        str(_data_dir / "iter_scenario_53298_seq1_DD4.nc"),  # ~14 MB, DD 4.0.0, core_profiles+equilibrium
     ]
 else:
     # Local / ITER infrastructure: use internal IMAS data sources directly

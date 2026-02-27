@@ -37,12 +37,11 @@ jobs:
       - name: Download test data from Zenodo
         run: |
           mkdir -p test_data
-          # iter_scenario_53298_seq1_DD4: ~14 MB, single time slice, DD 4.0.0
+          # iter_scenario_53298_seq1_DD4: ~14 MB, DD 4.0.0, contains core_profiles + equilibrium
+          # (required by all benchmark node paths). The 123364 file is a SOLPS edge
+          # simulation with no core_profiles/equilibrium so is not used for benchmarks.
           wget -q -O test_data/iter_scenario_53298_seq1_DD4.nc \
             "https://zenodo.org/records/17062700/files/iter_scenario_53298_seq1_DD4.nc?download=1"
-          # iter_scenario_123364_1: ~118 MB, single time slice, DD 4.0.0
-          wget -q -O test_data/iter_scenario_123364_1.nc \
-            "https://zenodo.org/records/17062700/files/iter_scenario_123364_1.nc?download=1"
           echo "Downloaded files:"
           ls -lh test_data/
 
