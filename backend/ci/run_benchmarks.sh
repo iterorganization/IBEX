@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bamboo CI script for benchmarks
-set -euo pipefail
+set -e -o pipefail
 
 # Always fetch develop/main from the canonical upstream repo, not from origin
 UPSTREAM="https://github.com/iterorganization/IBEX"
@@ -21,7 +21,6 @@ source ${BACKEND_ROOT_DIR}/ci/configure_env.sh
 
 BENCHMARKS_DIR=$(realpath "$PWD/ibex_benchmarks")
 if [[ "$(uname -n)" == *"bamboo"* ]]; then
-    set -e -o pipefail
     # create
     BENCHMARKS_DIR=$(realpath "/mnt/bamboo_deploy/ibex/benchmarks/")
 fi
