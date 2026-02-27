@@ -98,40 +98,11 @@ jobs:
           asv continuous --quick --show-stderr --factor 2.0 "${BASELINE_SHA}" "${CONTENDER_SHA}" \
             2>&1 | tee asv_output.txt
 
-      - name: Print benchmark results to log
-        # Always print to the job log and GitHub Actions job summary.
-        # For fork PRs (where write access is blocked) this is the only place
-        # results are visible — open the Actions run to see them.
-        if: always()
-        run: |
-          OUTPUT=$(cat asv_output.txt 2>/dev/null || echo "(no output captured)")
-          OUTCOME="${{ steps.asv.outcome }}"
-          if [ "${OUTCOME}" = "failure" ]; then
-            ICON="❌"
-            TITLE="Performance regression detected (>2x slower on at least one benchmark)"
-          else
-            ICON="✅"
-            TITLE="No significant performance regressions detected"
-          fi
+          # Print a direct before/after comparison table (ratio per benchmark).
+          # This makes it easy to see which benchmarks changed and by how much.
           echo ""
-          echo "======================================================"
-          echo "  ${ICON} ASV Benchmark Results — ${TITLE}"
-          echo "======================================================"
-          echo "${OUTPUT}"
-          echo ""
-          # Also write to GitHub Actions job summary (visible in the Actions UI
-          # for all runs, including fork PRs, without any write permissions).
-          {
-            echo "## ${ICON} ASV Benchmark Results"
-            echo "**${TITLE}**"
-            echo ""
-            echo "<details><summary>Full output</summary>"
-            echo ""
-            echo '```'
-            echo "${OUTPUT}"
-            echo '```'
-            echo "</details>"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "=== Before vs After comparison ==="
+          asv compare --factor 2.0 --split "${BASELINE_SHA}" "${CONTENDER_SHA}" 2>&1 | tee -a asv_output.txt
 
       - name: Fail job if regression detected
         if: steps.asv.outcome == 'failure'
