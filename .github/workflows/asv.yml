@@ -107,11 +107,14 @@ jobs:
       - name: Fail job if regression detected
         if: steps.asv.outcome == 'failure'
         run: |
-          echo "❌ Performance regression detected (>2x threshold). See benchmark output above."
+          echo "FAILED: Performance regression detected (>2x threshold). See benchmark output above."
           exit 1
 
       - name: Generate HTML results
-        if: always()
+        # Only meaningful on push to develop/main — asv publish builds the branch
+        # timeline, so PR commits (not yet on any branch) are simply skipped with
+        # "Couldn't find <sha> in branches". Run only after a merge to avoid noise.
+        if: github.event_name != 'pull_request'
         run: |
           # asv publish resolves branch names from asv.conf.json via git rev-list.
           # On PR checkouts only the PR branch is a local ref. Using
@@ -123,14 +126,8 @@ jobs:
           asv publish
 
       - name: Deploy HTML report to GitHub Pages
-        # Pushes .asv/html/ to the gh-pages branch so the report is browsable at
-        # https://<org>.github.io/IBEX/
-        # Skipped for fork PRs: they cannot push to the upstream repo.
-        if: >
-          always() && (
-            github.event_name != 'pull_request' ||
-            github.event.pull_request.head.repo.full_name == github.repository
-          )
+        # Only run on push to develop/main, same reasoning as Generate HTML above.
+        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
