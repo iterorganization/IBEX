@@ -1,13 +1,19 @@
 #!/bin/bash
 
-# Bamboo CI script for linting
+# Bamboo CI script for benchmarks
+set -euo pipefail
 
-# Fetch develop and main for `ASV compare`
-git fetch origin develop
-git fetch origin main
+# Always fetch develop/main from the canonical upstream repo, not from origin
+UPSTREAM="https://github.com/iterorganization/IBEX"
+git remote remove upstream 2>/dev/null || true
+git remote add upstream "${UPSTREAM}"
+git fetch upstream
 
-# Debuggging:
-set -e -o pipefail
+git checkout -B develop upstream/develop
+git checkout -B main upstream/main
+
+# Go back to the triggering branch
+git checkout ${bamboo.planRepository.branch}
 
 # Set up environment s
 BACKEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/..")
@@ -47,8 +53,8 @@ asv run --skip-existing-successful develop^!
 asv run --skip-existing-successful main^!
 
 # Compare results
-if [ `git rev-parse --abbrev-ref HEAD` == develop ]
-then
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "${CURRENT_BRANCH}" = "develop" ]; then
     asv compare main develop --machine $(hostname) || echo "asv compare failed"
 else
     asv compare develop HEAD --machine $(hostname) || echo "asv compare failed"
