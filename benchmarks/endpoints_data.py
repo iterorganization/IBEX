@@ -12,7 +12,7 @@ class TimeDataEndpointsSuite:
         self.test_client = TestClient(app)
 
     def time_field_value(self, uri, node_path):
-        parameters = {"uri": f"{uri}/{node_path}"}
+        parameters = {"uri": f"{uri}{node_path}"}
         self.test_client.get("/data/field_value", params=parameters)
 
     time_field_value.param_names = param_names + ["node path"]
@@ -27,7 +27,7 @@ class TimeDataEndpointsSuite:
     )
 
     def time_plot_data(self, uri, node_path):
-        parameters = {"uri": f"{uri}/{node_path}"}
+        parameters = {"uri": f"{uri}{node_path}"}
         self.test_client.get("/data/plot_data", params=parameters)
 
     time_plot_data.param_names = param_names + ["node path"]
