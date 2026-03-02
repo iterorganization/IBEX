@@ -38,7 +38,7 @@ from ibex.data_source.exception import (
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
 from ibex.core.utils import IMAS_URI
-from ibex.data_source.imas_python_source_utils import convert_ids_data_into_numpy_array, resample_data, union_arrays, resample_data2, join_coordinates
+from ibex.data_source.imas_python_source_utils import convert_ids_data_into_numpy_array, resample_data, union_arrays, resample_data2, join_coordinates, pad_to_rectangular, flatten
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -782,9 +782,13 @@ class IMASPythonSource(DataSourceInterface):
 
             if interpolate_over:
                 # =================== GATHER ALL COORDINATES ===================
-                coords = {}
-                for c in coordinates_to_be_returned:
-                    coords[c["name"]] = c["value"]
+                original_coord_values = []
+                new_common_coords = coordinates_to_be_returned
+                for c in new_common_coords:
+                    c["value"] = convert_to_lists(c["value"])
+                    original_coord_values.append(sorted(set(flatten(c["value"]))))
+                original_coord_values.reverse()
+
 
                 for _uri in interpolate_over:
                     _uri_obj = IMAS_URI(_uri)
@@ -792,24 +796,47 @@ class IMASPythonSource(DataSourceInterface):
                     if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
                         raise InvalidParametersException("IDS name and node path should be the same for source and target URI when interpolating data")
 
-                    coord = self.get_plot_data(uri=_uri_obj.uri_entry_identifiers,
+                    interpolate_to_coordinates = self.get_plot_data(uri=_uri_obj.uri_entry_identifiers,
                                                ids=_uri_obj.ids_name,
                                                node_path=_uri_obj.node_path,
                                                occurrence=_uri_obj.occurrence,
                                                downsampling_method=downsampling_method,
                                                downsampled_size=downsampled_size)["data"]["coordinates"]
 
-                    _coord_dict = {}
-                    for c in coord:
-                        _coord_dict[c["name"]] = c["value"]
+                    #_coord_dict = {}
+                    #for c in new_coord:
+                    #    _coord_dict[c["name"]] = c["value"]
 
                     # merge gathered coordinate into common coordinate list
-                    for key in coords.keys():
-                        coords[key] = join_coordinates(coords[key] , _coord_dict[key])
+                    #for key in new_common_coords.keys():
+                    #    new_common_coords[key] = join_coordinates(new_common_coords[key] , _coord_dict[key])
 
+                    if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
+                        # TODO: return proper exception
+                        raise Exception("")
+
+                    for x,y in zip(coordinates_to_be_returned, interpolate_to_coordinates):
+                        if x["name"] != y["name"]:
+                            # TODO: return proper exception
+                            # coordinates between quantities doesn't match
+                            raise Exception("")
+
+                        x["value"] = sorted(set(flatten(x["value"])+flatten(convert_to_lists(y["value"]))))
+                        # join values
+
+                # reverse coordinates list so it matches data dimensions
+                new_common_coords.reverse()
+                common_coords_values = [c["value"] for c in new_common_coords]
                 # =================== INTERPOLATE ===================
+                #print(f"=== ORIGINAL COORDS: {original_coord_values}")
+                print(f"=== NEW COORDS: {common_coords_values}")
 
+                # === make data vector rectangular ===
+                data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+                print(f"=== OLD DATA VALUES: {data_to_be_returned}")
+                new_data_values = resample_data2(tuple(original_coord_values),data_to_be_returned, tuple(common_coords_values))
 
+                print(f"=== NEW DATA VALUES: {new_data_values}")
 
                 """
                 if first_value.metadata.ndim == 1 and coordinates_to_be_returned[0]["name"] == "time":

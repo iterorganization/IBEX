@@ -2,11 +2,49 @@ from functools import reduce
 
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, RegularGridInterpolator
 
 
 def union_arrays(data : list):
         return reduce(np.union1d, data)
+
+def flatten(lst):
+    result = []
+    for item in lst:
+        if isinstance(item, list):
+            result.extend(flatten(item))
+        else:
+            result.append(item)
+    return result
+
+def get_max_shape(lst, level=0, shape=None):
+    if shape is None:
+        shape = []
+
+    if isinstance(lst, (list,np.ndarray)):
+        if len(shape) <= level:
+            shape.append(0)
+        shape[level] = max(shape[level], len(lst))
+
+        for item in lst:
+            get_max_shape(item, level + 1, shape)
+
+    return shape
+
+
+def fill_array(arr, lst, index=()):
+    if isinstance(lst, list):
+        for i, item in enumerate(lst):
+            fill_array(arr, item, index + (i,))
+    else:
+        arr[index] = lst
+
+
+def pad_to_rectangular(lst):
+    shape = tuple(get_max_shape(lst))
+    arr = np.full(shape, np.nan)
+    fill_array(arr, lst)
+    return arr
 
 def join_coordinates(a, b):
     """
@@ -53,7 +91,7 @@ def resample_data(data, original_x, target_x):
     else:
         return data
 
-def resample_data2(data1, original_coords, target_coords):
+def resample_data2(original_coords, data, target_coords):
 
     # time_slice(itime)/profiles_2d(i1)/psi
     # 1- time_slice(itime)/profiles_2d(i1)/grid/dim1
@@ -62,8 +100,11 @@ def resample_data2(data1, original_coords, target_coords):
     # class LinearNDInterpolator(points, values, fill_value=np.nan, rescale=False)
     # interp = LinearNDInterpolator(list(zip(x, y)), z)
 
-    interp = LinearNDInterpolator(original_coords, data1)
-    result = interp(target_coords, data1)
+    print(f"=== RESAMPLE ORIGINAL COORDS: {original_coords}")
+    print(f"=== RESAMPLE TARGET COORDS: {target_coords}")
+    print(f"=== RESAMPLE INPUT DATA: {data}")
+    interpolator = RegularGridInterpolator(original_coords, data)
+    result = interpolator(target_coords)
 
     print(f"==== RESULT {result}")
     return result
