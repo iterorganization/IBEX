@@ -16,6 +16,8 @@ jobs:
 
       - name: Setup Python
         uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
@@ -36,7 +38,13 @@ jobs:
         working-directory: frontend
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" bash -c "
+            python3 -m venv ../ibex_venv
+            source ../ibex_venv/bin/activate
+            pip install --upgrade pip setuptools wheel
+            cd ../backend
+            pip install -e .
+            cd ../frontend
             npm run start:e2e &
-            sleep 120
+            npx wait-on tcp:9222
             npm run test:e2e
           "
