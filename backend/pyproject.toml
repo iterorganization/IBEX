@@ -71,8 +71,8 @@ linting = [
 ]
 
 docs =[
-    "sphinx",
-    "sphinx-autosummary-accessors",
+    "sphinx>=7,<9",
+    "sphinx-autosummary-accessors==2025.3.1",
     "sphinx_immaterial",
 ]
 
