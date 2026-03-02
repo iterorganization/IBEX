@@ -30,6 +30,13 @@ cd ${FRONTEND_ROOT_DIR}
 echo "Installing frontend npm dependencies..."
 npm ci
 
+# Start a virtual framebuffer so Electron can run headlessly in CI (no $DISPLAY)
+echo "Starting Xvfb virtual display..."
+Xvfb :99 -screen 0 1920x1080x24 &
+XVFB_PID=$!
+export DISPLAY=:99
+sleep 2  # give Xvfb time to initialise
+
 # Start Electron app
 echo "Starting Electron app for E2E tests..."
 npm run start:e2e &
@@ -63,6 +70,12 @@ if ps -p "$APP_PID" > /dev/null; then
   kill -9 "$APP_PID" || true
 else
   echo "App stopped successfully."
+fi
+
+# Stop Xvfb virtual display
+if [ -n "$XVFB_PID" ]; then
+  echo "Stopping Xvfb (PID $XVFB_PID)..."
+  kill $XVFB_PID || true
 fi
 
 if [ $TEST_RESULT -eq 0 ]; then
