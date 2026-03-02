@@ -1,0 +1,30 @@
+name: frontend-linting-and-formatting
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout frontend sources
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Display Node version
+        run: node -v && npm -v
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run code formatting
+        run: npm run format
+
+      - name: Run linting
+        run: npm run lint
