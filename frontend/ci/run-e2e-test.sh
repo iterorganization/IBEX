@@ -26,6 +26,10 @@ pip install --upgrade .
 # Set up environment
 cd ${FRONTEND_ROOT_DIR}
 
+# Install frontend dependencies (required for cross-env and other local binaries)
+echo "Installing frontend npm dependencies..."
+npm ci
+
 # Start Electron app
 echo "Starting Electron app for E2E tests..."
 npm run start:e2e &
