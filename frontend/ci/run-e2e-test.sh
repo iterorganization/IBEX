@@ -1,10 +1,27 @@
 #!/bin/bash
 
 # Script to run E2E tests
+FRONTEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/..")
+
+BACKEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../backend")
+
+echo "FRONTEND_ROOT_DIR: ${FRONTEND_ROOT_DIR}"
+echo "BACKEND_ROOT_DIR: ${BACKEND_ROOT_DIR}"
 
 # Root directory of the frontend
-FRONTEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/..")
 source ${FRONTEND_ROOT_DIR}/ci/configure-env.sh
+
+cd ${BACKEND_ROOT_DIR}
+which python
+python --version
+
+python -m venv venv
+. venv/bin/activate
+echo "PWD: " `pwd`
+
+# PREPARE THE ENVIRONMENT
+pip install --upgrade pip setuptools wheel pytest-cov pytest-xdist
+pip install --upgrade .
 
 # Set up environment
 cd ${FRONTEND_ROOT_DIR}

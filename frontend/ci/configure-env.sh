@@ -8,6 +8,8 @@ module purge
 
 # Set up environment
 module load nodejs
+module load Python
+module load IDStools/2.4.0-intel-2023b
 
 # Debuggging:
 echo "Done loading modules"
