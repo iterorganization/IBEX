@@ -45,19 +45,9 @@ export const getArrayValueFromDependance = (
   // get sorted valueIndex list (sorted by shape length) to access to data matrix
   const dependances = wantedCoordinate.coordinates;
   const sortedIndexValueDependances: number[] = [];
-
-  let tensor;
-  if (wantedCoordinate.shape === 'irregular') {
-    // get shape when irregular data
-    tensor = tf.tensor(wantedCoordinate.data);
-  }
-  for (const shapeElement of wantedCoordinate.shape === 'irregular'
-    ? tensor.shape
-    : wantedCoordinate.shape) {
+  for (const dependance of dependances) {
     const coordDep = coordinates.find(
-      (coord_dep) =>
-        dependances.includes(coord_dep.name) &&
-        coord_dep.shape[coord_dep.shape.length - 1] === shapeElement,
+      (coord_dep) => coord_dep.name === dependance,
     );
     if (coordDep) {
       sortedIndexValueDependances.push(coordDep.valueIndex);
