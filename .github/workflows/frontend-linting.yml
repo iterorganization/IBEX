@@ -21,10 +21,13 @@ jobs:
         run: node -v && npm -v
 
       - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci
 
       - name: Run code formatting
+        working-directory: frontend
         run: npm run format
 
       - name: Run linting
+        working-directory: frontend
         run: npm run lint
