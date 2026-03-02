@@ -13,6 +13,13 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -30,6 +37,6 @@ jobs:
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" bash -c "
             npm run start:e2e &
-            sleep 30
+            sleep 120
             npm run test:e2e
           "
