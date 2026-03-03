@@ -20,7 +20,7 @@ import { expect } from 'chai';
 /**
  * UI Test Suite for the Visualization Component
  */
-describe('UI Tests for Header Component', function () {
+describe('UI Tests for plotted data', function () {
   this.timeout(60000);
 
   before(async () => {
@@ -75,12 +75,12 @@ describe('UI Tests for Header Component', function () {
     );
 
     ///
-    /// Add the URI 'imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3' to the configuration and navigate in the accordion node tree
+    /// Add the URI 'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106' to the configuration and navigate in the accordion node tree
     ///
     await ensureCssElementIsDisplayed('config-uri-selection-modal');
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
-      'imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3',
+      'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
     );
     await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
     await findCssElementAndClickIt(
@@ -89,27 +89,27 @@ describe('UI Tests for Header Component', function () {
       300,
     );
     await ensureCssElementIsDisplayed(
-      'uriAccordion-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3',
+      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'uriAccordion-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3',
+      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'folder-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3#core_profiles:0/',
+      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/',
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'folder-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3#core_profiles:0/profiles_1d[:]/',
+      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/',
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'folder-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3#core_profiles:0/profiles_1d[:]/ion[:]/',
+      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/ion[:]/',
       200,
       100,
     );
@@ -124,7 +124,7 @@ describe('UI Tests for Header Component', function () {
     );
     // Click on temperature checkbox to start a new plot
     await findCssElementAndClickIt(
-      'checkbox-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3#core_profiles:0/profiles_1d[:]/ion[:]/temperature',
+      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/ion[:]/temperature',
     );
     // Check that there is one dataplot created
     await waitForValue(
@@ -148,7 +148,7 @@ describe('UI Tests for Header Component', function () {
     );
     // Click on density checkbox to plot a second axis
     await findCssElementAndClickIt(
-      'checkbox-imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3#core_profiles:0/profiles_1d[:]/ion[:]/density',
+      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/ion[:]/density',
     );
     // Check that the Y plot is defined
     await waitForValue(
@@ -195,14 +195,14 @@ describe('UI Tests for Header Component', function () {
     );
 
     ///
-    /// Add the URI 'imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3' to the configuration and navigate in the accordion node tree
+    /// Add the URI 'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106' to the configuration and navigate in the accordion node tree
     ///
     const uriModal = await ensureCssElementIsDisplayed(
       'config-uri-selection-modal',
     );
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
-      'imas:hdf5?user=public;pulse=100002;run=1;database=iterdb;version=3',
+      'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
       true,
     );
     await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
