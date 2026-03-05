@@ -166,7 +166,11 @@ const Customization = ({
       opened={item?.disabled ? null : false}
     >
       <Accordion.Item value={item.value}>
-        <Accordion.Control icon={item.icon} disabled={item?.disabled || false}>
+        <Accordion.Control
+          icon={item.icon}
+          disabled={item?.disabled || false}
+          data-testid={`customization-${item.value}-accordion`}
+        >
           {item.value}
         </Accordion.Control>
         <Accordion.Panel>{item.component}</Accordion.Panel>

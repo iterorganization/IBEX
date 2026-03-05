@@ -11,6 +11,7 @@ import {
   ensureCssElementIsDisplayed,
   findCssElementAndClickIt,
   findTextElementAndClickIt,
+  getCssElementFromDataTestId,
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
@@ -21,7 +22,7 @@ import { expect } from 'chai';
  * UI Test Suite for the Visualization Component
  */
 describe('UI Tests for plotted data', function () {
-  this.timeout(60000);
+  this.timeout(90000);
 
   before(async () => {
     await startApp();
@@ -163,6 +164,301 @@ describe('UI Tests for plotted data', function () {
       async () => (await getTestState()).active.dataPlot[0].y2AxisData,
       undefined,
       (actual, expected) => actual != expected,
+    );
+  });
+
+  it('Should crop the data in all plots by applying a data range', async () => {
+    ///
+    /// Create a new configuration named 'New Plot Config'
+    ///
+    await findCssElementAndClickIt('header-add-configuration');
+    const configCreateModal = await ensureCssElementIsDisplayed(
+      'config-create-modal',
+    );
+    await writeTextInCssElement('config-create-name-input', 'New Plot Config');
+    await findCssElementAndClickIt('config-create-submit-button');
+    await waitForElementToDisappear(configCreateModal);
+    await waitForValue(
+      'Plot configuration length',
+      async () => (await getTestState()).configurations.length,
+      1,
+    );
+    await waitForValue(
+      'Plot configuration name',
+      async () => (await getTestState()).configurations[0].name,
+      'New Plot Config',
+    );
+
+    ///
+    /// Add the URI 'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106' to the configuration and navigate in the accordion node tree
+    ///
+    await ensureCssElementIsDisplayed('config-uri-selection-modal');
+    await writeTextInCssElement(
+      'config-uri-selection-modal-uri-text-input',
+      'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      true,
+    );
+    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
+    await findCssElementAndClickIt(
+      'config-uri-selection-modal-validate-button',
+      100,
+      300,
+    );
+    await ensureCssElementIsDisplayed(
+      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      200,
+      100,
+    );
+    await findCssElementAndClickIt(
+      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      200,
+      100,
+    );
+    await findCssElementAndClickIt(
+      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/',
+      200,
+      100,
+    );
+    await findCssElementAndClickIt(
+      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/',
+      200,
+      100,
+    );
+
+    ///
+    /// The accordion node tree is now unfold, check that the plot are correctly added into the active configuration
+    ///
+    await waitForValue(
+      'DataPlot configuration length',
+      async () => (await getTestState()).active.dataPlot.length,
+      0,
+    );
+    // Click on j_total checkbox to start a new plot
+    await findCssElementAndClickIt(
+      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/j_total',
+    );
+    // Check that there is one dataplot created
+    await waitForValue(
+      'DataPlot configuration length',
+      async () => (await getTestState()).active.dataPlot.length,
+      1,
+    );
+    // Click on j_ohmic checkbox to plot a second data
+    await findCssElementAndClickIt(
+      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/j_ohmic',
+    );
+    // Check that there is two dataplot created
+    await waitForValue(
+      'Plot configuration length',
+      async () => (await getTestState()).active.dataPlot[0].plot.length,
+      2,
+    );
+    // Now we check integrity of data manipulation
+    // Step 1 - The minimum and maximum original data for the two plots
+    const originalDataFromActive = (await getTestState()).active;
+    await waitForValue(
+      'First y value of j_total at origin',
+      async () => originalDataFromActive.dataPlot[0]?.plot[0]?.y[0],
+      -191505.77227601665,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_total at origin',
+      async () =>
+        originalDataFromActive.dataPlot[0]?.plot[0]?.y[
+          originalDataFromActive.dataPlot[0]?.plot[0]?.y.length - 1
+        ],
+      -12283.374007355182,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'First y value of j_ohmic at origin',
+      async () => originalDataFromActive.dataPlot[0]?.plot[1]?.y[0],
+      -155459.99347997818,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_ohmic at origin',
+      async () =>
+        originalDataFromActive.dataPlot[0]?.plot[1]?.y[
+          originalDataFromActive.dataPlot[0]?.plot[1]?.y.length - 1
+        ],
+      -14479.974999151873,
+      (actual, expected) => actual === expected,
+    );
+
+    // Step 2 - Enter the data range, apply a range, confirm the change, and check the values
+    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await writeTextInCssElement('data-range-min-input', '0.2', true);
+    await writeTextInCssElement('data-range-max-input', '0.8', true);
+    await findCssElementAndClickIt('data-range-apply-input');
+    await findCssElementAndClickIt('customization-save-button');
+    const activeAtFirstApplied = (await getTestState()).active;
+    await waitForValue(
+      'First y value of j_total at first applied',
+      async () => activeAtFirstApplied.dataPlot[0]?.plot[0]?.y[0],
+      -200577.796875,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_total at first applied',
+      async () =>
+        activeAtFirstApplied.dataPlot[0]?.plot[0]?.y[
+          activeAtFirstApplied.dataPlot[0]?.plot[0]?.y.length - 1
+        ],
+      -102633.421875,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'First y value of j_ohmic at first applied',
+      async () => activeAtFirstApplied.dataPlot[0]?.plot[1]?.y[0],
+      -158003.015625,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_ohmic at first applied',
+      async () =>
+        activeAtFirstApplied.dataPlot[0]?.plot[1]?.y[
+          activeAtFirstApplied.dataPlot[0]?.plot[1]?.y.length - 1
+        ],
+      -95764.546875,
+      (actual, expected) => actual === expected,
+    );
+
+    // Step 3 - Enter the data range, apply a second range, confirm the change, and check the values
+    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await writeTextInCssElement('data-range-min-input', '0.4', true);
+    await writeTextInCssElement('data-range-max-input', '0.6', true);
+    await findCssElementAndClickIt('data-range-apply-input');
+    await findCssElementAndClickIt('customization-save-button');
+    const activeAtSecondApplied = (await getTestState()).active;
+    await waitForValue(
+      'First y value of j_total at second applied',
+      async () => activeAtSecondApplied.dataPlot[0]?.plot[0]?.y[0],
+      -220957.3125,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_total at second applied',
+      async () =>
+        activeAtSecondApplied.dataPlot[0]?.plot[0]?.y[
+          activeAtSecondApplied.dataPlot[0]?.plot[0]?.y.length - 1
+        ],
+      -195015.078125,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'First y value of j_ohmic at second applied',
+      async () => activeAtSecondApplied.dataPlot[0]?.plot[1]?.y[0],
+      -200219.234375,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_ohmic at second applied',
+      async () =>
+        activeAtSecondApplied.dataPlot[0]?.plot[1]?.y[
+          activeAtSecondApplied.dataPlot[0]?.plot[1]?.y.length - 1
+        ],
+      -182456.90625,
+      (actual, expected) => actual === expected,
+    );
+
+    // Step 4 - Enter the data range, apply a third, wider range, confirm the change, and check the values
+    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await writeTextInCssElement('data-range-min-input', '0.2', true);
+    await writeTextInCssElement('data-range-max-input', '0.8', true);
+    await findCssElementAndClickIt('data-range-apply-input');
+    await waitForValue(
+      'Restore button finished loading',
+      async () =>
+        (
+          await getCssElementFromDataTestId('data-range-apply-input')
+        ).getAttribute('data-loading'),
+      null,
+      (actual, expected) => actual === expected,
+      10,
+    );
+    await findCssElementAndClickIt('customization-save-button');
+    const activeAtThirdApplied = (await getTestState()).active;
+    await waitForValue(
+      'First y value of j_total at third applied',
+      async () => activeAtThirdApplied.dataPlot[0]?.plot[0]?.y[0],
+      -200577.796875,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_total at third applied',
+      async () =>
+        activeAtThirdApplied.dataPlot[0]?.plot[0]?.y[
+          activeAtThirdApplied.dataPlot[0]?.plot[0]?.y.length - 1
+        ],
+      -102633.421875,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'First y value of j_ohmic at third applied',
+      async () => activeAtThirdApplied.dataPlot[0]?.plot[1]?.y[0],
+      -158003.015625,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_ohmic at third applied',
+      async () =>
+        activeAtThirdApplied.dataPlot[0]?.plot[1]?.y[
+          activeAtThirdApplied.dataPlot[0]?.plot[1]?.y.length - 1
+        ],
+      -95764.546875,
+      (actual, expected) => actual === expected,
+    );
+
+    // Step 5 - Enter the data range, restore the range, confirm the change, and check if the values have returned to their original state
+    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await findCssElementAndClickIt('data-range-restore-input');
+    await waitForValue(
+      'Restore button finished loading',
+      async () =>
+        (
+          await getCssElementFromDataTestId('data-range-restore-input')
+        ).getAttribute('data-loading'),
+      null,
+      (actual, expected) => actual === expected,
+      10,
+    );
+    await findCssElementAndClickIt('customization-save-button');
+    const restoredDataFromActive = (await getTestState()).active;
+    await waitForValue(
+      'First y value of j_total at restoration',
+      async () => restoredDataFromActive.dataPlot[0]?.plot[0]?.y[0],
+      -191505.765625,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_total at restoration',
+      async () =>
+        restoredDataFromActive.dataPlot[0]?.plot[0]?.y[
+          restoredDataFromActive.dataPlot[0]?.plot[0]?.y.length - 1
+        ],
+      -12283.3740234375,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'First y value of j_ohmic at restoration',
+      async () => restoredDataFromActive.dataPlot[0]?.plot[1]?.y[0],
+      -155460,
+      (actual, expected) => actual === expected,
+    );
+    await waitForValue(
+      'Last y value of j_ohmic at restoration',
+      async () =>
+        restoredDataFromActive.dataPlot[0]?.plot[1]?.y[
+          restoredDataFromActive.dataPlot[0]?.plot[1]?.y.length - 1
+        ],
+      -14479.974609375,
+      (actual, expected) => actual === expected,
     );
   });
 
