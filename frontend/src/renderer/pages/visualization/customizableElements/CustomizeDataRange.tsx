@@ -305,6 +305,9 @@ export const CustomizeDataRange = ({
                 onChange={(value: number) => setTypedMinRange(value)}
                 w={150}
                 hideControls
+                data-testid={
+                  coordinate.axeIndex === 0 ? 'data-range-min-input' : undefined
+                }
               />
               <NumberInput
                 label="Max"
@@ -314,6 +317,9 @@ export const CustomizeDataRange = ({
                 onChange={(value: number) => setTypedMaxRange(value)}
                 w={150}
                 hideControls
+                data-testid={
+                  coordinate.axeIndex === 0 ? 'data-range-max-input' : undefined
+                }
               />
             </>
           ) : (
@@ -354,6 +360,9 @@ export const CustomizeDataRange = ({
             }
             loading={isLoadingApply}
             leftSection={<IconCheck size={20} />}
+            data-testid={
+              coordinate.axeIndex === 0 ? 'data-range-apply-input' : undefined
+            }
           >
             Apply
           </Button>
@@ -363,6 +372,9 @@ export const CustomizeDataRange = ({
             loading={isLoadingRestore}
             variant="outline"
             leftSection={<IconRestore size={20} />}
+            data-testid={
+              coordinate.axeIndex === 0 ? 'data-range-restore-input' : undefined
+            }
           >
             Restore
           </Button>
