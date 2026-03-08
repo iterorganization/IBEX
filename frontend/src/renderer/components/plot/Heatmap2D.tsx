@@ -5,10 +5,11 @@ import { Layout } from 'plotly.js';
 import {
   Axis,
   AxisData,
+  Complex,
   Configuration,
   Coordinates,
   DataGridPlot,
-} from 'src/renderer/types';
+} from '../../types';
 import classe from './SimplePlotly.module.css';
 import { Center, Grid, Group, Select, Stack, Text } from '@mantine/core';
 import { VerticalSlider } from '../verticalSlider';
@@ -254,7 +255,7 @@ export const Heatmap2D = ({
       );
 
       // Get matrix [[]] needed for z in 3D
-      let zData: AxisData | number | string =
+      let zData: AxisData | number | string | Complex =
         itemDataGrid.plot[parseInt(plotIndex)].yData;
 
       const tensor = tf.tensor(zData);
