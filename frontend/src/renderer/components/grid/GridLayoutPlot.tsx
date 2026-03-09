@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Axis,
   Configuration,
@@ -34,7 +34,9 @@ export const GridLayoutPlot = ({
     data.h * rowHeight + (23 * (data.h * rowHeight)) / 100,
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
-  const [is3DView, setIs3DView] = useState<boolean>(false);
+  const [is3DView, setIs3DView] = useState<boolean>(
+    data?.selectedPlotMode === 'Heatmap' ? true : false,
+  );
   const [active3DTab, setActive3DTab] = useState<string>('0');
   const [metadataTabsValue, setMetadataTabsValue] = useState<string>(
     data.plot[0]?.path || '',
@@ -53,40 +55,49 @@ export const GridLayoutPlot = ({
     if (!lastTargetLastName)
       return console.warn('No indexed field found in target');
 
-    // Update coordinates targets & paths with new valueIndex
-    const updatedCoordinatesValue = data.coordinates.map((item) => {
-      const lastTargetLastName = getLastIndexedField(coordinate.target);
-
-      const updatedPath = updateIndexFieldName(
-        item.path,
-        lastTargetLastName,
-        valueIndex,
-      );
-      const updatedTarget = updateIndexFieldName(
-        item.target,
-        lastTargetLastName,
-        valueIndex,
-      );
-
-      return {
-        ...item,
-        path: updatedPath,
-        target: updatedTarget,
-        valueIndex:
-          item.name === coordinate.name ? valueIndex : item.valueIndex,
-      };
-    }) as Coordinates[];
-
-    limitSlidersToMaxLength(updatedCoordinatesValue);
-
     const updatedActive: Configuration = {
       ...active,
       dataPlot: active.dataPlot.map((item: DataGridPlot) => {
-        if (item.i === data.i) {
+        const mainDataGrid = item.i === data.i;
+        const isSynchronized = data.synchronizedGrids.list.includes(item.i);
+        const coordWithSameName = item.coordinates.find(
+          (ic) => ic.name === coordinate.name,
+        );
+        const sameCoordinate =
+          coordWithSameName &&
+          JSON.stringify(coordinate.data) ===
+            JSON.stringify(coordWithSameName.data);
+
+        if (mainDataGrid || (isSynchronized && sameCoordinate)) {
+          // Update main slider with new valueIndex & update synchronized ones matching with the same coordinate
+          const updatedCoordinatesValue = item.coordinates.map((coordItem) => {
+            const updatedPath = updateIndexFieldName(
+              coordItem.path,
+              lastTargetLastName,
+              valueIndex,
+            );
+            const updatedTarget = updateIndexFieldName(
+              coordItem.target,
+              lastTargetLastName,
+              valueIndex,
+            );
+
+            return {
+              ...coordItem,
+              path: updatedPath,
+              target: updatedTarget,
+              valueIndex:
+                coordItem.name === coordinate.name
+                  ? valueIndex
+                  : coordItem.valueIndex,
+            };
+          }) as Coordinates[];
+          limitSlidersToMaxLength(updatedCoordinatesValue);
+
           const updatedXAxisData: Axis = {
-            ...data.xAxisData,
+            ...item.xAxisData,
             path: updateIndexFieldName(
-              data.xAxisData?.path || '',
+              item.xAxisData?.path || '',
               lastTargetLastName,
               valueIndex,
             ),
@@ -98,7 +109,7 @@ export const GridLayoutPlot = ({
             0,
           );
 
-          const updatedPlot = data.plot.map((plotItem) => {
+          const updatedPlot = item.plot.map((plotItem) => {
             const updatedNodeUri = updateIndexFieldName(
               plotItem.nodeUri,
               lastTargetLastName,
@@ -141,7 +152,7 @@ export const GridLayoutPlot = ({
           });
 
           return {
-            ...data,
+            ...item,
             coordinates: updatedCoordinatesValue,
             plot: updatedPlot,
             xAxisData: updatedXAxisData,
@@ -216,20 +227,12 @@ export const GridLayoutPlot = ({
     updatedConfiguration(updatedActive);
   };
 
-  useLayoutEffect(() => {
-    if (data?.selectedPlotMode) {
-      setIs3DView(data.selectedPlotMode === 'Heatmap');
-    } else {
-      setIs3DView(
-        data.coordinates.length >= 2 &&
-          containsFloat(
-            data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
-          ),
-      );
-    }
-  }, []);
-
   useEffect(() => {
+    if ((data.selectedPlotMode === 'Heatmap') === is3DView) {
+      // Prevent from triggering updateSelectedPlotMode when initialize is3DView
+      return;
+    }
+
     updateSelectedPlotMode(is3DView, active);
   }, [is3DView]);
 
@@ -250,6 +253,27 @@ export const GridLayoutPlot = ({
       dataPlot: newDataPlot,
       checkedNodeURI: checkedNodeURI,
     };
+
+    // Remove from synchronized relations deleted dataGrid
+    const oldDataPlot = active.dataPlot.find(
+      (item: DataGridPlot) => item.i === id,
+    );
+    for (const synchronizedId of oldDataPlot.synchronizedGrids.list) {
+      const dataPlotToUpdate = newDataPlot.find(
+        (dp) => synchronizedId === dp.i,
+      );
+      const updatedList = dataPlotToUpdate.synchronizedGrids.list.filter(
+        (id) => id !== oldDataPlot.i,
+      );
+      dataPlotToUpdate.synchronizedGrids = {
+        color:
+          updatedList.length > 0
+            ? dataPlotToUpdate.synchronizedGrids.color
+            : '',
+        list: updatedList,
+      };
+    }
+
     updatedConfiguration(newActive);
   }, []);
 

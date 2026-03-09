@@ -28,7 +28,7 @@ import {
 } from './matrix';
 import * as tf from '@tensorflow/tfjs';
 import { ErrorBar } from 'plotly.js';
-import { removeSuffix } from './functions';
+import { containsFloat, removeSuffix } from './functions';
 
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
@@ -178,6 +178,14 @@ export const handleNewPlot = async (
     response.data.description,
   );
   updatedPlot.dataType = nodes[0].type;
+
+  // Rule to define the default plot mode
+  updatedPlot.selectedPlotMode =
+    updatedPlot.coordinates.length >= 2 &&
+    containsFloat(updatedPlot.coordinates[1]?.data)
+      ? 'Heatmap'
+      : '1D';
+
   updatedActive.dataPlot.push(updatedPlot);
   return updatedActive;
 };
@@ -756,6 +764,9 @@ export function formatConfigBeforeLoadingURIs(
           unit: '',
         } as DataPlotly;
       }),
+      synchronizedGrids: data?.synchronizedGrids
+        ? data.synchronizedGrids
+        : { color: '', list: [] },
     }),
   );
 
@@ -952,6 +963,13 @@ export async function plotNodeUriLoaded(
             updatedPlot.push(plot);
           }
         }
+
+        // Rule to define the default plot mode
+        dataGrid.selectedPlotMode =
+          dataGrid.coordinates.length >= 2 &&
+          containsFloat(dataGrid.coordinates[1]?.data)
+            ? 'Heatmap'
+            : '1D';
 
         const dataGridUpdated = {
           ...dataGrid,
