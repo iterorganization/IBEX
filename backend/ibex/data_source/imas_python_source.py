@@ -777,7 +777,6 @@ class IMASPythonSource(DataSourceInterface):
             # ============= BEGIN resample data onto new time vector =============
 
             def convert_to_lists(data):
-                """TODO: delete after development"""
                 if isinstance(data, list):
                     return [convert_to_lists(d) for d in data]
                 elif isinstance(data, (np.ndarray, IDSNumericArray)):
