@@ -115,7 +115,9 @@ def get_multiple_node_data(uri: str) -> dict:
     )
 
 
-def get_plot_data(uri: str, interpolate_over: List[str] | None, downsampling_method: str | None, downsampled_size: int) -> dict:
+def get_plot_data(
+    uri: str, interpolate_over: List[str] | None, downsampling_method: str | None, downsampled_size: int
+) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_plot_data(
         uri=uri_obj.uri_entry_identifiers,

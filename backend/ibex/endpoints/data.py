@@ -74,7 +74,12 @@ def field_value(
     description="Returns single (or tensorized) data node value with detailed parameters used to plot the data",
 )
 @ibex_service.measure_execution_time
-def plot_data(uri: str, interpolate_over : Optional[List[str]] = Query(None),  downsampling_method: str | None = Query(None), downsampled_size: int = 1000) -> Any:
+def plot_data(
+    uri: str,
+    interpolate_over: Optional[List[str]] = Query(None),
+    downsampling_method: str | None = Query(None),
+    downsampled_size: int = 1000,
+) -> Any:
     """
     IBEX endpoint. Prepares and returns full information about data node and it's coordinates.
 
@@ -114,4 +119,6 @@ def plot_data(uri: str, interpolate_over : Optional[List[str]] = Query(None),  d
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
     """
-    return CustomORJSONResponse(ibex_service.get_plot_data(uri.strip(), interpolate_over, downsampling_method, downsampled_size))
+    return CustomORJSONResponse(
+        ibex_service.get_plot_data(uri.strip(), interpolate_over, downsampling_method, downsampled_size)
+    )

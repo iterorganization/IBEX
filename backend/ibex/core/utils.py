@@ -215,6 +215,7 @@ def downsample_data(data: List, target_size: int, method: str | None = None, x=N
 
     return x, data[s_ds]
 
+
 @dataclass
 class IMAS_URI:
     """
@@ -269,4 +270,3 @@ class IMAS_URI:
             f"OCCURRENCE : {self.occurrence}\n"
             f"NODE_PATH  : {self.node_path}\n"
         )
-
