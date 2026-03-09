@@ -4,6 +4,7 @@ export enum NodeInfoTypeEnum {
   INTEGER = 'INT',
   FLOAT = 'FLT',
   STRING = 'STR',
+  COMPLEX = 'CPX',
 }
 
 export type NodeInfoChildrenResponse = {

@@ -173,6 +173,7 @@ export const CustomizeDataRange = ({
             normalizeIndices(plot.nodeUri),
             updatedDataPlot?.downsampled_method,
             updatedDataPlot?.downsampled_size,
+            updatedDataPlot?.dataType,
           );
 
           if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {

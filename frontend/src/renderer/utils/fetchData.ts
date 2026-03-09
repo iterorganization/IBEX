@@ -8,13 +8,14 @@ import {
   FormDbEntries,
   InfoVersionResponse,
   NodeInfoResponse,
+  NodeInfoTypeEnum,
   PlotDataResponse,
   SearchNodeResponse,
   URDataEntriesResponse,
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
-import { getTensorizedMatrix } from './plot';
+import { getTensorizedMatrix, transformComplexData } from './plot';
 
 /**
  * Retrieves the API configuration.
@@ -167,6 +168,7 @@ export const fetchDataPlot = async (
   uri: string,
   downsamplingMethod?: string,
   downsamplingSize?: number,
+  type?: NodeInfoTypeEnum,
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
@@ -239,6 +241,12 @@ export const fetchDataPlot = async (
     response.data.shape = dataTensorized.shape;
     response.data.downsampled_shape = dataTensorized.shape;
   }
+
+  if (type === 'CPX') {
+    // Transform complex data
+    const updatedData = transformComplexData(response.data.value) as AxisData;
+    response.data.value = updatedData;
+  }
   return response;
 };
 
@@ -258,6 +266,7 @@ export const fetchFieldValue = async (
   uri: string,
   downsamplingMethod?: string,
   downsamplingSize?: number,
+  type?: NodeInfoTypeEnum,
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: FieldValueResponse;
@@ -269,6 +278,12 @@ export const fetchFieldValue = async (
     response = await fetchFromApi<FieldValueResponse>(
       `/data/field_value?uri=${encodeURIComponent(uri)}`,
     );
+  }
+
+  if (type === 'CPX') {
+    // Transform complex data
+    const updatedData = transformComplexData(response.value) as AxisData;
+    response.value = updatedData;
   }
   return response;
 };
