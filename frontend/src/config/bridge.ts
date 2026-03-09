@@ -4,5 +4,8 @@ import { API } from '../preload';
 declare global {
   interface Window {
     api: typeof API;
+    env: {
+      E2E_TEST: string;
+    };
   }
 }

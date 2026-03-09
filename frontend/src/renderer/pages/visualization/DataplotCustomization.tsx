@@ -184,7 +184,11 @@ const Customization = ({
         Customize plot parameters
       </Title>
       <ScrollArea h="79vh">
-        <Accordion value={selectedAccordion} onChange={setSelectedAccordion}>
+        <Accordion
+          value={selectedAccordion}
+          onChange={setSelectedAccordion}
+          {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+        >
           {items}
         </Accordion>
       </ScrollArea>
