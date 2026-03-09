@@ -1052,13 +1052,13 @@ export const transposeDataGrid = async (
   let actualAxeIndexOrder = (
     JSON.parse(JSON.stringify(updatedDataGrid.coordinates)) as Coordinates[]
   ).map((coord) => coord.axeIndex);
+  let transposedDataGrid = JSON.parse(
+    JSON.stringify(updatedDataGrid),
+  ) as DataGridPlot;
   if (
     JSON.stringify(wantedAxeIndexOrder) !== JSON.stringify(actualAxeIndexOrder)
   ) {
     // Get transposed order
-    let transposedDataGrid = JSON.parse(
-      JSON.stringify(updatedDataGrid),
-    ) as DataGridPlot;
     let index = 0;
     for (const wantedAxeIndex of wantedAxeIndexOrder) {
       if (wantedAxeIndex !== actualAxeIndexOrder[index]) {
@@ -1075,8 +1075,8 @@ export const transposeDataGrid = async (
       }
       index++;
     }
-    return transposedDataGrid;
   }
+  return transposedDataGrid;
 };
 
 /**
