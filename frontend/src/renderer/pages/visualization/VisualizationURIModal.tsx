@@ -547,6 +547,9 @@ export const VisualizationURIModal = ({
       size="90%"
       centered
       data-testid="config-uri-selection-modal"
+      {...(window.env.E2E_TEST === 'true' && {
+        transitionProps: { duration: 0 },
+      })}
     >
       <Group justify="space-between" mb={10}>
         <FileInput

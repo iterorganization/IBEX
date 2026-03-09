@@ -17,6 +17,7 @@ import {
   writeTextInCssElement,
 } from './utils';
 import { expect } from 'chai';
+import '../config/bridge';
 
 /**
  * UI Test Suite for the Visualization Component
@@ -76,41 +77,45 @@ describe('UI Tests for plotted data', function () {
     );
 
     ///
-    /// Add the URI 'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106' to the configuration and navigate in the accordion node tree
+    /// Add the URI of iter_scenario_53298_seq1_DD3.nc to the configuration and navigate in the accordion node tree
     ///
+    const dataPath: string = await (
+      await getDriver()
+    ).executeScript(async () => {
+      const path =
+        (await window.api.fs.getZenodoDataPath()) +
+        '/iter_scenario_53298_seq1_DD3.nc';
+      return path;
+    });
     await ensureCssElementIsDisplayed('config-uri-selection-modal');
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
-      'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      dataPath,
+    );
+    const buttonSavingUris = await ensureCssElementIsDisplayed(
+      'config-uri-selection-modal-add-uri-button',
     );
     await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
+    await waitForElementToDisappear(buttonSavingUris);
+
     await findCssElementAndClickIt(
       'config-uri-selection-modal-validate-button',
       100,
       300,
     );
-    await ensureCssElementIsDisplayed(
-      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+    await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
+    await findCssElementAndClickIt(
+      `folder-${dataPath}#core_profiles:0/`,
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      `folder-${dataPath}#core_profiles:0/profiles_1d[:]/`,
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/ion[:]/',
+      `folder-${dataPath}#core_profiles:0/profiles_1d[:]/ion[:]/`,
       200,
       100,
     );
@@ -125,7 +130,7 @@ describe('UI Tests for plotted data', function () {
     );
     // Click on temperature checkbox to start a new plot
     await findCssElementAndClickIt(
-      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/ion[:]/temperature',
+      `checkbox-${dataPath}#core_profiles:0/profiles_1d[:]/ion[:]/temperature`,
     );
     // Check that there is one dataplot created
     await waitForValue(
@@ -149,7 +154,7 @@ describe('UI Tests for plotted data', function () {
     );
     // Click on density checkbox to plot a second axis
     await findCssElementAndClickIt(
-      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/ion[:]/density',
+      `checkbox-${dataPath}#core_profiles:0/profiles_1d[:]/ion[:]/density`,
     );
     // Check that the Y plot is defined
     await waitForValue(
@@ -190,12 +195,20 @@ describe('UI Tests for plotted data', function () {
     );
 
     ///
-    /// Add the URI 'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106' to the configuration and navigate in the accordion node tree
+    /// Add the URI of iter_scenario_53298_seq1_DD3.nc to the configuration and navigate in the accordion node tree
     ///
+    const dataPath: string = await (
+      await getDriver()
+    ).executeScript(async () => {
+      const path =
+        (await window.api.fs.getZenodoDataPath()) +
+        '/iter_scenario_53298_seq1_DD3.nc';
+      return path;
+    });
     await ensureCssElementIsDisplayed('config-uri-selection-modal');
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
-      'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      dataPath,
       true,
     );
     await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
@@ -204,23 +217,15 @@ describe('UI Tests for plotted data', function () {
       100,
       300,
     );
-    await ensureCssElementIsDisplayed(
-      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+    await ensureCssElementIsDisplayed(`uriAccordion-${dataPath}`, 200, 100);
+    await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
+    await findCssElementAndClickIt(
+      `folder-${dataPath}#core_profiles:0/`,
       200,
       100,
     );
     await findCssElementAndClickIt(
-      'uriAccordion-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/',
+      `folder-${dataPath}#core_profiles:0/profiles_1d[:]/`,
       200,
       100,
     );
@@ -235,7 +240,7 @@ describe('UI Tests for plotted data', function () {
     );
     // Click on j_total checkbox to start a new plot
     await findCssElementAndClickIt(
-      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/j_total',
+      `checkbox-${dataPath}#core_profiles:0/profiles_1d[:]/j_total`,
     );
     // Check that there is one dataplot created
     await waitForValue(
@@ -245,7 +250,7 @@ describe('UI Tests for plotted data', function () {
     );
     // Click on j_ohmic checkbox to plot a second data
     await findCssElementAndClickIt(
-      'checkbox-imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106#core_profiles:0/profiles_1d[:]/j_ohmic',
+      `checkbox-${dataPath}#core_profiles:0/profiles_1d[:]/j_ohmic`,
     );
     // Check that there is two dataplot created
     await waitForValue(
@@ -259,7 +264,7 @@ describe('UI Tests for plotted data', function () {
     await waitForValue(
       'First y value of j_total at origin',
       async () => originalDataFromActive.dataPlot[0]?.plot[0]?.y[0],
-      -191505.77227601665,
+      -1018173.9490004762,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -268,13 +273,13 @@ describe('UI Tests for plotted data', function () {
         originalDataFromActive.dataPlot[0]?.plot[0]?.y[
           originalDataFromActive.dataPlot[0]?.plot[0]?.y.length - 1
         ],
-      -12283.374007355182,
+      -379752.40595339175,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
       'First y value of j_ohmic at origin',
       async () => originalDataFromActive.dataPlot[0]?.plot[1]?.y[0],
-      -155459.99347997818,
+      -942579.3029552045,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -283,7 +288,7 @@ describe('UI Tests for plotted data', function () {
         originalDataFromActive.dataPlot[0]?.plot[1]?.y[
           originalDataFromActive.dataPlot[0]?.plot[1]?.y.length - 1
         ],
-      -14479.974999151873,
+      -34126.34158638138,
       (actual, expected) => actual === expected,
     );
 
@@ -293,12 +298,14 @@ describe('UI Tests for plotted data', function () {
     await writeTextInCssElement('data-range-min-input', '0.2', true);
     await writeTextInCssElement('data-range-max-input', '0.8', true);
     await findCssElementAndClickIt('data-range-apply-input');
+    await new Promise((r) => setTimeout(r, 1500));
     await findCssElementAndClickIt('customization-save-button');
+    await new Promise((r) => setTimeout(r, 1500));
     const activeAtFirstApplied = (await getTestState()).active;
     await waitForValue(
       'First y value of j_total at first applied',
       async () => activeAtFirstApplied.dataPlot[0]?.plot[0]?.y[0],
-      -200577.796875,
+      -1409056.125,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -307,13 +314,13 @@ describe('UI Tests for plotted data', function () {
         activeAtFirstApplied.dataPlot[0]?.plot[0]?.y[
           activeAtFirstApplied.dataPlot[0]?.plot[0]?.y.length - 1
         ],
-      -102633.421875,
+      -402749.40625,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
       'First y value of j_ohmic at first applied',
       async () => activeAtFirstApplied.dataPlot[0]?.plot[1]?.y[0],
-      -158003.015625,
+      -1058855.625,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -322,7 +329,7 @@ describe('UI Tests for plotted data', function () {
         activeAtFirstApplied.dataPlot[0]?.plot[1]?.y[
           activeAtFirstApplied.dataPlot[0]?.plot[1]?.y.length - 1
         ],
-      -95764.546875,
+      -274728.34375,
       (actual, expected) => actual === expected,
     );
 
@@ -332,12 +339,14 @@ describe('UI Tests for plotted data', function () {
     await writeTextInCssElement('data-range-min-input', '0.4', true);
     await writeTextInCssElement('data-range-max-input', '0.6', true);
     await findCssElementAndClickIt('data-range-apply-input');
+    await new Promise((r) => setTimeout(r, 1500));
     await findCssElementAndClickIt('customization-save-button');
+    await new Promise((r) => setTimeout(r, 1500));
     const activeAtSecondApplied = (await getTestState()).active;
     await waitForValue(
       'First y value of j_total at second applied',
       async () => activeAtSecondApplied.dataPlot[0]?.plot[0]?.y[0],
-      -220957.3125,
+      -1159740.25,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -346,13 +355,13 @@ describe('UI Tests for plotted data', function () {
         activeAtSecondApplied.dataPlot[0]?.plot[0]?.y[
           activeAtSecondApplied.dataPlot[0]?.plot[0]?.y.length - 1
         ],
-      -195015.078125,
+      -697106.25,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
       'First y value of j_ohmic at second applied',
       async () => activeAtSecondApplied.dataPlot[0]?.plot[1]?.y[0],
-      -200219.234375,
+      -910444.625,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -361,7 +370,7 @@ describe('UI Tests for plotted data', function () {
         activeAtSecondApplied.dataPlot[0]?.plot[1]?.y[
           activeAtSecondApplied.dataPlot[0]?.plot[1]?.y.length - 1
         ],
-      -182456.90625,
+      -506609.75,
       (actual, expected) => actual === expected,
     );
 
@@ -379,14 +388,14 @@ describe('UI Tests for plotted data', function () {
         ).getAttribute('data-loading'),
       null,
       (actual, expected) => actual === expected,
-      10,
     );
     await findCssElementAndClickIt('customization-save-button');
+    await new Promise((r) => setTimeout(r, 1500));
     const activeAtThirdApplied = (await getTestState()).active;
     await waitForValue(
       'First y value of j_total at third applied',
       async () => activeAtThirdApplied.dataPlot[0]?.plot[0]?.y[0],
-      -200577.796875,
+      -1409056.125,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -395,13 +404,13 @@ describe('UI Tests for plotted data', function () {
         activeAtThirdApplied.dataPlot[0]?.plot[0]?.y[
           activeAtThirdApplied.dataPlot[0]?.plot[0]?.y.length - 1
         ],
-      -102633.421875,
+      -402749.40625,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
       'First y value of j_ohmic at third applied',
       async () => activeAtThirdApplied.dataPlot[0]?.plot[1]?.y[0],
-      -158003.015625,
+      -1058855.625,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -410,7 +419,7 @@ describe('UI Tests for plotted data', function () {
         activeAtThirdApplied.dataPlot[0]?.plot[1]?.y[
           activeAtThirdApplied.dataPlot[0]?.plot[1]?.y.length - 1
         ],
-      -95764.546875,
+      -274728.34375,
       (actual, expected) => actual === expected,
     );
 
@@ -429,11 +438,12 @@ describe('UI Tests for plotted data', function () {
       10,
     );
     await findCssElementAndClickIt('customization-save-button');
+    await new Promise((r) => setTimeout(r, 1500));
     const restoredDataFromActive = (await getTestState()).active;
     await waitForValue(
       'First y value of j_total at restoration',
       async () => restoredDataFromActive.dataPlot[0]?.plot[0]?.y[0],
-      -191505.765625,
+      -1018173.9375,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -442,13 +452,13 @@ describe('UI Tests for plotted data', function () {
         restoredDataFromActive.dataPlot[0]?.plot[0]?.y[
           restoredDataFromActive.dataPlot[0]?.plot[0]?.y.length - 1
         ],
-      -12283.3740234375,
+      -379752.40625,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
       'First y value of j_ohmic at restoration',
       async () => restoredDataFromActive.dataPlot[0]?.plot[1]?.y[0],
-      -155460,
+      -942579.3125,
       (actual, expected) => actual === expected,
     );
     await waitForValue(
@@ -457,7 +467,7 @@ describe('UI Tests for plotted data', function () {
         restoredDataFromActive.dataPlot[0]?.plot[1]?.y[
           restoredDataFromActive.dataPlot[0]?.plot[1]?.y.length - 1
         ],
-      -14479.974609375,
+      -34126.33984375,
       (actual, expected) => actual === expected,
     );
   });
@@ -491,14 +501,22 @@ describe('UI Tests for plotted data', function () {
     );
 
     ///
-    /// Add the URI 'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106' to the configuration and navigate in the accordion node tree
+    /// Add the URI of iter_scenario_53298_seq1_DD3.nc to the configuration and navigate in the accordion node tree
     ///
+    const dataPath: string = await (
+      await getDriver()
+    ).executeScript(async () => {
+      const path =
+        (await window.api.fs.getZenodoDataPath()) +
+        '/iter_scenario_53298_seq1_DD3.nc';
+      return path;
+    });
     const uriModal = await ensureCssElementIsDisplayed(
       'config-uri-selection-modal',
     );
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
-      'imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106',
+      dataPath,
       true,
     );
     await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
@@ -614,6 +632,7 @@ describe('UI Tests for plotted data', function () {
       'config-uri-selection-modal',
     );
     await writeTextInCssElement(
+      // TODO : use dataPath
       'config-uri-selection-modal-uri-text-input',
       'imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3',
       true,

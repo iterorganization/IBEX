@@ -636,7 +636,15 @@ export const fetchErrorBands = async (
     // Return dataPlot list with the plot which includes error bands
     return dataPlot;
   } catch (error) {
-    console.error('Error handling error bands: ', error);
+    if (
+      !(
+        error.toString().includes('No data for') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower'))
+      )
+    ) {
+      console.error('Error handling error bands: ', error);
+    }
   }
 };
 
