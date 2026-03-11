@@ -11,6 +11,7 @@ import {
 } from '@mantine/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  IconMathFunction,
   IconFileUnknown,
   IconFolder,
   IconFolderOpen,
@@ -192,6 +193,7 @@ function NodeIcon({
           NodeInfoTypeEnum.INTEGER,
           NodeInfoTypeEnum.FLOAT,
           NodeInfoTypeEnum.STRING,
+          NodeInfoTypeEnum.COMPLEX,
         ].includes(type)
       ) {
         if (hasUserSelectedText()) {
@@ -308,6 +310,9 @@ function NodeIcon({
       ),
       [NodeInfoTypeEnum.STRING]: getCheckboxIcon(
         <IconTypography {...commonProps} className={classes.forcedWidth} />,
+      ),
+      [NodeInfoTypeEnum.COMPLEX]: getCheckboxIcon(
+        <IconMathFunction {...commonProps} className={classes.forcedWidth} />,
       ),
     };
 

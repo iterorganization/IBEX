@@ -5,10 +5,11 @@ import { Layout } from 'plotly.js';
 import {
   Axis,
   AxisData,
+  Complex,
   Configuration,
   Coordinates,
   DataGridPlot,
-} from 'src/renderer/types';
+} from '../../types';
 import classe from './SimplePlotly.module.css';
 import { Center, Grid, Group, Select, Stack, Text } from '@mantine/core';
 import { VerticalSlider } from '../verticalSlider';
@@ -23,6 +24,7 @@ import classes from './Heatmap2D.module.css';
 import { useIbexStore } from '../../stores';
 import { NoDataForURI } from '.';
 import { usePlotLayout } from './hooks/usePlotLayout';
+import { IconLink } from '@tabler/icons-react';
 
 interface Heatmap2DProps {
   itemDataGrid: DataGridPlot;
@@ -254,7 +256,7 @@ export const Heatmap2D = ({
       );
 
       // Get matrix [[]] needed for z in 3D
-      let zData: AxisData | number | string =
+      let zData: AxisData | number | string | Complex =
         itemDataGrid.plot[parseInt(plotIndex)].yData;
 
       const tensor = tf.tensor(zData);
@@ -343,6 +345,7 @@ export const Heatmap2D = ({
                 w={`${width * 0.2}px`}
                 miw={`${(itemDataGrid.coordinates.length - coordsUsedInAxes) * 50}px`}
                 align="flex-end"
+                pos="relative"
               >
                 {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
                   .sort(compareByAxeIndex)
@@ -374,6 +377,22 @@ export const Heatmap2D = ({
                         />
                       ),
                   )}
+                {itemDataGrid.synchronizedGrids.list.length && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 12,
+                      ...(itemDataGrid.coordinates.length > 2
+                        ? { right: -20 }
+                        : { left: 0 }),
+                    }}
+                  >
+                    <IconLink
+                      size={20}
+                      color={itemDataGrid.synchronizedGrids.color}
+                    />
+                  </div>
+                )}
               </Group>
             </Grid.Col>
           </>
