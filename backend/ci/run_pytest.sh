@@ -19,8 +19,8 @@ python -m venv venv
 echo "PWD: " `pwd`
 
 # PREPARE THE ENVIRONMENT
-pip install --upgrade pip setuptools wheel pytest-cov pytest-xdist
-pip install --upgrade .
+pip install --upgrade pip setuptools wheel
+pip install --upgrade .[test]
 
 # RUN PYTEST
 python -m pytest -n auto --cov=ibex --cov-report=term-missing --cov-report=html --junit-xml=test-reports/pytest-report.xml ${BACKEND_ROOT_DIR}/tests

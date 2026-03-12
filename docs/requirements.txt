@@ -1,8 +1,0 @@
-pip
-setuptools
-wheel
-build
-pytest-cov
-sphinx>=7,<9
-sphinx_immaterial
-sphinx-autosummary-accessors==2025.3.1

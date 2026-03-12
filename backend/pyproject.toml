@@ -43,7 +43,6 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "imas-python",
     "imas-idstools",
     "click",
     "uvicorn",
@@ -64,6 +63,8 @@ all = [
 
 test = [
     "pytest",
+    "pytest-cov",
+    "pytest-xdist",
 ]
 
 linting = [
