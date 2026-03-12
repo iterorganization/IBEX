@@ -4,9 +4,6 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.11"
-  jobs:
-    pre_build:
-      - cp LICENSE.txt LICENSE.md
 
 sphinx:
   configuration: docs/source/conf.py
