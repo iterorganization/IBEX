@@ -20,8 +20,8 @@ Second, due to permission issues, only one user can run IBEX from a given source
 For regular, non-development use cases, the production mode is recommended.
 
 * Open a terminal.
-* Clone the repository (ssh://git@git.iter.org/imex/ibex.git) 
-* Run the following commands : 
+* Clone the repository (https://github.com/iterorganization/IBEX.git) 
+* Run the following commands :: 
 
 .. code-block:: bash
 
@@ -39,7 +39,7 @@ The execution stage configures and launches both the backend and frontend using 
 Since the installation process can take several minutes to complete, development mode is recommended when actively modifying the source code and pushing frequent changes.
 
 * Open a terminal.
-* Clone the repository (ssh://git@git.iter.org/imex/ibex.git)
+* Clone the repository (https://github.com/iterorganization/IBEX.git)
 * Run the following commands :
 
 .. code-block:: bash

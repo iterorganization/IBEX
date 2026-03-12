@@ -29,20 +29,17 @@ src_group = GROUP = "IMEX"
 copyright = f"2025-{datetime.datetime.now().year}, ITER Organization"
 # The author name(s) of the document
 author = "ITER Organization"
-src_host = "git.iter.org"
+src_host = "github.com"
 
 # Parse urls here for convenience, to be re-used
 
 # ITER docs
-iter_projects = "https://git.iter.org/projects/"
-imas_repos = urljoin(iter_projects, "IMAS/")
-imex_repos = urljoin(iter_projects, "IMEX/")
-issue_url = jira_url = "https://jira.iter.org/browse/"
+issue_url = "https://github.com/iterorganization/IBEX/issues"
 
-# Ibex
-repository_url = f"{iter_projects}/{src_group}/repos/{src_project}/"
-blob_url = urljoin(repository_url, "browse/")
-mr_url = urljoin(repository_url, "/pull-requests")
+# Ibex (now on GitHub)
+repository_url = "https://github.com/iterorganization/IBEX/"
+blob_url = urljoin(repository_url, "blob/main/")
+mr_url = urljoin(repository_url, "pull/")
 
 
 # Configuration of sphinx.ext.extlinks
@@ -130,7 +127,7 @@ html_theme = "sphinx_immaterial"
 # and
 # https://sphinx-immaterial.readthedocs.io/en/latest/customization.html#confval-html_theme_options
 html_theme_options = {
-    "repo_url": "https://git.iter.org/projects/IMEX/repos/ibex",
+    "repo_url": "https://github.com/iterorganization/IBEX",
     "repo_name": "ibex",
     "icon": {
         "repo": "fontawesome/brands/bitbucket",
