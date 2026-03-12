@@ -15,6 +15,12 @@ import sphinx_autosummary_accessors
 from jinja2.defaults import DEFAULT_FILTERS
 from packaging.version import Version
 
+# Get version from setuptools_scm (written to _version.py during package build)
+try:
+    from ibex._version import __version__ as ibex_version
+except ImportError:
+    ibex_version = "0.0.1"
+
 print("python exec:", sys.executable)
 print("sys.path:", sys.path)
 
@@ -51,7 +57,7 @@ extlinks = {
     "merge": (mr_url + "%s", "!%s"),
 }
 
-full_version = Version("0.0.1")  # = Version(ibex.__version__)
+full_version = Version(ibex_version)
 
 # version: The major project version, used as the replacement for |version|.
 #   For example, for the Python documentation, this may be something like 2.6.
@@ -130,7 +136,7 @@ html_theme_options = {
     "repo_url": "https://github.com/iterorganization/IBEX",
     "repo_name": "ibex",
     "icon": {
-        "repo": "fontawesome/brands/bitbucket",
+        "repo": "fontawesome/brands/github",
     },
     "features": [
         # "navigation.expand",
