@@ -261,6 +261,9 @@ htmlhelp_basename = "ibex_doc"
 # Configuration of sphinx.ext.autodoc
 # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
 autodoc_typehints = "signature"
+# Exclude __init__ from :members: to avoid duplicating the explicit
+# .. automethod:: __init__ in custom-class-template.rst
+autodoc_default_options = {"exclude-members": "__init__"}
 
 
 # Configuration of sphinx.ext.autosummary

@@ -17,9 +17,6 @@ class CustomORJSONResponse(ORJSONResponse):
     Custom ORJSON serializer. Uses serializer from data_source to transform arbitrary types (e.g. IDSNumericArray) to ones supported by ORJSON serializer (e.g. np.array).
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def render(self, content) -> bytes:
         return orjson.dumps(
             content, default=ibex_service.data_source.data_serializer_custom, option=orjson.OPT_SERIALIZE_NUMPY
