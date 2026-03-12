@@ -21,7 +21,7 @@ For regular, non-development use cases, the production mode is recommended.
 
 * Open a terminal.
 * Clone the repository (https://github.com/iterorganization/IBEX.git) 
-* Run the following commands :: 
+* Run the following commands:
 
 .. code-block:: bash
 
@@ -40,7 +40,7 @@ Since the installation process can take several minutes to complete, development
 
 * Open a terminal.
 * Clone the repository (https://github.com/iterorganization/IBEX.git)
-* Run the following commands :
+* Run the following commands:
 
 .. code-block:: bash
 
