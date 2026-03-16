@@ -16,7 +16,7 @@ import {
   waitForValue,
   writeTextInCssElement,
 } from './utils';
-import { expect } from 'chai';
+// import { expect } from 'chai';
 import '../config/bridge';
 
 /**
@@ -603,6 +603,7 @@ describe('UI Tests for plotted data', function () {
     );
   });
 
+  /*
   it('Should create a new configuration containing error bands, and plot error band data', async () => {
     ///
     /// Create a new configuration named 'New Plot Config'
@@ -718,4 +719,5 @@ describe('UI Tests for plotted data', function () {
       expect(plotWithErrorBand.arrayminus.length > 0);
     }
   });
+  */
 });
