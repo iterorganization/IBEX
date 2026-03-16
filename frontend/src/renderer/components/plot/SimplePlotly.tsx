@@ -347,6 +347,7 @@ export const SimplePlotly = ({
                       (coord: Coordinates) => coord.name === value,
                     ).axeIndex,
                     0, // axeIndex of x is always 0
+                    false,
                     active,
                     updatedConfiguration,
                   )
