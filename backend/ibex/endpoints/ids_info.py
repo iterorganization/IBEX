@@ -29,6 +29,7 @@ def node_info(uri: str, show_error_bars: bool = False) -> dict:
     |     "type": <type_of_data (str)>,
     |     "ndim": <number_of_data_dimensions (int)>,
     |     "shape": <data_shape (list(int))>,
+    |     "has_data": <True if node has data inside (bool)>
     |     "children": <node_info_of_children_nodes (list(dict))>,
     |     "coordinates": <coordinates_names (list(str))>
     | }

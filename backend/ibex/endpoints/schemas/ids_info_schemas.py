@@ -9,6 +9,7 @@ class NodeInfoChildModel(BaseModel):
     name: str = Field(description="Node name", examples=["t_i_average", "psi"])
     type: str = Field(description="Node type", examples=["FLT", "STR"])
     ndim: int = Field(description="Number of data dimensions stored in node", examples=[1, 5, 7])
+    has_data: bool = Field(description="True if node contains data", examples=[True, False])
 
 
 class NodeInfoResponse(BaseModel):
@@ -18,6 +19,7 @@ class NodeInfoResponse(BaseModel):
     type: str = Field(description="Node type", examples=["struct_array", "FLT", "STR"])
     ndim: int = Field(description="Number of data dimensions stored in node", examples=[1, 5, 7])
     shape: list[int] = Field(description="Shape of the data", examples=[[3], [5], [2, 5, 10]])
+    has_data: bool = Field(description="True if node contains data", examples=[True, False])
     children: list[NodeInfoChildModel] = Field(description="Node info about node's children")
     coordinates: list[str] = Field(
         description="Node coordinate paths", examples=[["time"], ["rho_tor_norm"], ["dim1", "dim2"]]
@@ -30,7 +32,7 @@ class NodeInfoResponse(BaseModel):
 class FindPathsResponse(BaseModel):
     """Response for /ids_info/find_paths endpoint"""
 
-    paths: list[str] = Field(description="List of found paths", examples=[["t_i_average", "temperature_average"]])
+    paths: list[dict] = Field(description="List of dicts with path name and information if path contains data", examples=[[{"path":"t_i_average", "has_data":True}, {"path":"psi", "has_data":False}]])
 
 
 # ========== ARRAY SUMMARY ==========

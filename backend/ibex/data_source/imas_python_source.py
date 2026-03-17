@@ -189,6 +189,21 @@ class IMASPythonSource(DataSourceInterface):
             # flatten list
             metadata_dict["coordinates"] = list(chain.from_iterable(metadata_dict["coordinates"]))
 
+            # ========== check if node and it's children have data ==========
+
+            filled_paths = entry.list_filled_paths(ids, int(occurrence))
+            # pattern to remove array access operators from path ([:], [123]...)
+            pattern = r'\[:\]|\[\d+\]'
+            node_full_path = re.sub(pattern, '', f"{node_path}/{metadata_dict['name']}")
+            metadata_dict["has_data"] = node_full_path in filled_paths
+
+            if "children" in metadata_dict.keys():
+                for c in metadata_dict["children"]:
+                    c_name = re.sub(pattern, '', f"{node_path}/{c['name']}")
+                    c["has_data"] = c_name in filled_paths
+
+            # ========== END check if node and it's children have data ==========
+
             # fill 'shape', but omit it if path points to more than one node
             if metadata_dict["ndim"] > 0 and ":" not in node_path:
                 ids_path = IDSPath(node_path)
@@ -393,10 +408,11 @@ class IMASPythonSource(DataSourceInterface):
         :param range:
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
-
         with self._open_entry(uri) as entry:
-            ids_root = self._get_ids_from_entry(entry, ids, occurrence)
-
+            try:
+                ids_root = self._get_ids_from_entry(entry, ids, occurrence)
+            except imas.exception.DataEntryException as e:
+                raise IdsNotFoundException(str(e)) from None
             ids_path = IDSPath(node_path)
             path_elements = list(ids_path.items())
             ids_data = self._get_raw_data(ids_root, path_elements)
@@ -458,6 +474,7 @@ class IMASPythonSource(DataSourceInterface):
 
             for ids in ids_list:
                 try:
+                    filled_paths = entry.list_filled_paths(ids, occurrence=0)
                     ids_obj = entry.get(ids, occurrence=0, autoconvert=False, lazy=True)
                     paths = [node for node in imas.util.find_paths(ids_obj, searched_node)]
                     for path in paths:
@@ -469,7 +486,8 @@ class IMASPythonSource(DataSourceInterface):
                         # collect only leaf nodes
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
-                            found_paths.append(f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}")
+                            path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
+                            found_paths.append({"path":path_name, "has_data":path in filled_paths})
 
                 except imas.exception.DataEntryException:
                     continue
