@@ -222,8 +222,8 @@ export const VisualizationURIModal = ({
       <Table.Th>Select</Table.Th>
       <Table.Th>Name</Table.Th>
       <Table.Th>URI</Table.Th>
-      <Table.Td>
-        {dataDbEntries.length && (
+      {dataDbEntries.length ? (
+        <Table.Th>
           <Tooltip label="Delete all URIs" openDelay={300}>
             <ActionIcon
               variant="filled"
@@ -238,8 +238,8 @@ export const VisualizationURIModal = ({
               />
             </ActionIcon>
           </Tooltip>
-        )}
-      </Table.Td>
+        </Table.Th>
+      ) : undefined}
     </Table.Tr>
   );
 
