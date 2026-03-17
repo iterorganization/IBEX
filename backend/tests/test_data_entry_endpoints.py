@@ -22,5 +22,5 @@ def test_entry_available_entries(entry_path):
     response = pytest.test_client.get("/data_entry/available_entries", params=parameters)
 
     # TODO: fix missing os.environ["IMAS_HOME"] used by IDStools
-    #assert response.status_code == 200
+    # assert response.status_code == 200
     # TODO: test when functionality will be ready

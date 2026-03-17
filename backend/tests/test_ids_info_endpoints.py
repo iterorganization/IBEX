@@ -50,9 +50,9 @@ def test_find_paths(entry_path):
 
     assert response.status_code == 200
     assert response.json()["paths"] == [
-        {"path":"#core_profiles/ids_properties/version_put/data_dictionary", "has_data": True},
-        {"path":"#core_profiles/ids_properties/version_put/access_layer", "has_data": True},
-        {"path":"#core_profiles/ids_properties/version_put/access_layer_language", "has_data": True},
+        {"path": "#core_profiles/ids_properties/version_put/data_dictionary", "has_data": True},
+        {"path": "#core_profiles/ids_properties/version_put/access_layer", "has_data": True},
+        {"path": "#core_profiles/ids_properties/version_put/access_layer_language", "has_data": True},
     ]
 
 
