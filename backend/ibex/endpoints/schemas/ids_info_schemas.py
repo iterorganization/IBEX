@@ -32,7 +32,10 @@ class NodeInfoResponse(BaseModel):
 class FindPathsResponse(BaseModel):
     """Response for /ids_info/find_paths endpoint"""
 
-    paths: list[dict] = Field(description="List of dicts with path name and information if path contains data", examples=[[{"path":"t_i_average", "has_data":True}, {"path":"psi", "has_data":False}]])
+    paths: list[dict] = Field(
+        description="List of dicts with path name and information if path contains data",
+        examples=[[{"path": "t_i_average", "has_data": True}, {"path": "psi", "has_data": False}]],
+    )
 
 
 # ========== ARRAY SUMMARY ==========

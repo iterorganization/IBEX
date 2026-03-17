@@ -193,13 +193,13 @@ class IMASPythonSource(DataSourceInterface):
 
             filled_paths = entry.list_filled_paths(ids, int(occurrence))
             # pattern to remove array access operators from path ([:], [123]...)
-            pattern = r'\[:\]|\[\d+\]'
-            node_full_path = re.sub(pattern, '', f"{node_path}/{metadata_dict['name']}")
+            pattern = r"\[:\]|\[\d+\]"
+            node_full_path = re.sub(pattern, "", f"{node_path}/{metadata_dict['name']}")
             metadata_dict["has_data"] = node_full_path in filled_paths
 
             if "children" in metadata_dict.keys():
                 for c in metadata_dict["children"]:
-                    c_name = re.sub(pattern, '', f"{node_path}/{c['name']}")
+                    c_name = re.sub(pattern, "", f"{node_path}/{c['name']}")
                     c["has_data"] = c_name in filled_paths
 
             # ========== END check if node and it's children have data ==========
@@ -487,7 +487,7 @@ class IMASPythonSource(DataSourceInterface):
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
                             path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
-                            found_paths.append({"path":path_name, "has_data":path in filled_paths})
+                            found_paths.append({"path": path_name, "has_data": path in filled_paths})
 
                 except imas.exception.DataEntryException:
                     continue
