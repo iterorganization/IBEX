@@ -1,12 +1,12 @@
+=======================
 Frontend development
 =======================
 
 .. toctree::
-   :caption: Backend development
+   :caption: This documentation is intended for developers working on the Ibex frontend. It includes:
    :maxdepth: 1
 
    frontend_development_introduction
-   prerequisites
    installation
    commands
    executable
