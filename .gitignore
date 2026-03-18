@@ -106,3 +106,6 @@ saxon*.jar
 /.asv
 
 .idea/
+
+# Local folder for E2E tests
+e2e_datasets
