@@ -5,6 +5,15 @@ Commands
 Development Commands
 --------------------
 
+
+* Install packages
+
+Install the dependencies using npm:
+
+.. code-block:: bash
+
+  npm install
+
 * Start the application
 
 Starts the Electron application in development mode with hot-reloading:

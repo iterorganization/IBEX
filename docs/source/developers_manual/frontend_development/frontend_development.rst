@@ -8,5 +8,6 @@ Frontend development
 
    frontend_development_introduction
    installation
+   testing
    commands
    executable
