@@ -738,7 +738,7 @@ export function formatConfigBeforeLoadingURIs(
                 ...coord,
                 name: '',
                 shape: [],
-                coordinates: [],
+                coord_dependencies: [],
                 data: [],
               };
             })
@@ -788,7 +788,7 @@ function formatCoordinates(
         name: coordinate.name,
         shape: coordinate.shape,
         downsampled_shape: coordinate.downsampled_shape,
-        coordinates: coordinate.coordinates,
+        coord_dependencies: coordinate.coordinates,
         data: coordinate.value,
         valueIndex: valueIndex,
         path:
@@ -888,7 +888,7 @@ export async function plotNodeUriLoaded(
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
               matchingCoord.shape = responseCoordinates.downsampled_shape;
-              matchingCoord.coordinates = responseCoordinates.coordinates;
+              matchingCoord.coord_dependencies = responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
               matchingCoord.target = updateIndexFieldName(
@@ -1887,7 +1887,7 @@ export async function applyRangeInCoord(
     }
 
     const dependencyIndex = (
-      JSON.parse(JSON.stringify(coordDependencie.coordinates)) as string[]
+      JSON.parse(JSON.stringify(coordDependencie.coord_dependencies)) as string[]
     )
       .reverse() // We reverse dependencies to get dependency index in the order of the matrix
       .findIndex((dep) => dep === coordinate.name);
