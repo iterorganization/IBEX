@@ -32,7 +32,7 @@ export interface BaseCoordinates {
 export interface Coordinates extends BaseCoordinates {
   name: string;
   shape: number[] | 'irregular';
-  coordinates: string[];
+  coord_dependencies: string[];
   data: AxisData;
   unit?: string;
 }

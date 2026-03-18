@@ -34,7 +34,7 @@ export const getArrayValueFromDependance = (
   const wantedCoordinate: Coordinates = coordinates.find(
     (coord) => coord.axeIndex === axeIndexWanted,
   );
-  if (!wantedCoordinate.coordinates.length) {
+  if (!wantedCoordinate.coord_dependencies.length) {
     // get first array value when having no dependance
     return getFirstArrayValueFromShape(
       wantedCoordinate.data,
@@ -43,7 +43,7 @@ export const getArrayValueFromDependance = (
   }
 
   // get sorted valueIndex list (sorted by shape length) to access to data matrix
-  const dependances = wantedCoordinate.coordinates;
+  const dependances = JSON.parse(JSON.stringify(wantedCoordinate.coord_dependencies)).reverse();
   const sortedIndexValueDependances: number[] = [];
   for (const dependance of dependances) {
     const coordDep = coordinates.find(
