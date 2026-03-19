@@ -1,12 +1,30 @@
 ================
-Commands
+Useful commands
 ================
 
-Development Commands
+Start the application
 --------------------
 
+**Development mode**
 
-* Install packages
+Starts the Electron application in development mode with hot-reloading:
+
+.. code-block:: bash
+
+  ./launch-dev.sh
+
+**Production mode**
+
+Starts the Electron application in production mode:
+
+.. code-block:: bash
+
+  ./install.sh
+  ./launch.sh
+
+
+Install packages
+--------------------
 
 Install the dependencies using npm:
 
@@ -14,69 +32,42 @@ Install the dependencies using npm:
 
   npm install
 
-* Start the application
+Format & lint the code
+--------------------
 
-Starts the Electron application in development mode with hot-reloading:
+**Format**
 
-.. code-block:: bash
-
-  npm run start
-
-* Lint the code
-
-Checks the code for style and syntax issues using ESLint:
-
-.. code-block:: bash
-
-  npm run lint
-
-* Format the code
-
-Automatically formats the codebase using Prettier:
+Formats the codebase before committing using Prettier:
 
 .. code-block:: bash
 
   npm run format
 
-Build and Packaging Commands
-----------------------------
+**Lint**
 
-* Build the application
-
-Prepares the application for production by bundling the code:
+Checks the code for style and syntax issues before committing using ESLint:
 
 .. code-block:: bash
 
-  npm run build
+  npm run lint
 
-* Package the application
+Build the documentation
+--------------------
 
-Packages the application into a distributable format (e.g., .exe, .deb, .dmg):
+**Install sphinx dependencies**
 
-.. code-block:: bash
-
-  npm run package
-
-* Generate platform-specific binaries
-
-Creates platform-specific builds for your application:
+Install sphinx dependencies to be able to build the documentation:
 
 .. code-block:: bash
 
-  npm run make
+  . ibex_venv/bin/activate
+  pip install -U sphinx sphinx-autosummary-accessors sphinx_immaterial
 
-* Publish the application
+**Build the documentation**
 
-Publishes the application to a distribution platform:
-
-.. code-block:: bash
-
-  npm run publish
-
-* Run app with debug mode
-
-Run the application with debug mode, enable logs details to understand the application flow:
+After having installed required dependencies, you can build the documentation:
 
 .. code-block:: bash
 
-  npm run debug
+  . ibex_venv/bin/activate
+  make -C docs html

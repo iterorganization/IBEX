@@ -11,4 +11,3 @@ Frontend development
    architecture
    testing
    commands
-   executable

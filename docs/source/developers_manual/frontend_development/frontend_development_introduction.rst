@@ -51,3 +51,9 @@ Testing
 ~~~~~~~~~~~~~~~
 
 * **Selenium** is used for **end-to-end (E2E) UI testing**, validating user workflows in the Electron application.
+
+~~~~~~~~~~~~~~~
+Documentation
+~~~~~~~~~~~~~~~
+
+* **Sphinx** — used to generate the IBEX documentation.
