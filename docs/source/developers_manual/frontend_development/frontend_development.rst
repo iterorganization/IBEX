@@ -8,6 +8,7 @@ Frontend development
 
    frontend_development_introduction
    installation
+   architecture
    testing
    commands
    executable
