@@ -24,11 +24,13 @@ Technology Stack
 UI and Application Framework
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+* **Electron** — desktop runtime environment for packaging the application.
+
 * **React** — component-based architecture for building interactive user interfaces.
 
 * **Mantine** — UI component library with theming and styling utilities.
 
-* **Electron** — desktop runtime environment for packaging the application.
+* **Plotly** — interactive data visualization library used to generate dynamic and configurable scientific plots.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 State Management
