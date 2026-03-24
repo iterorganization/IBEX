@@ -11,7 +11,7 @@ class TimeIdsInfoEndpointsSuite:
         self.test_client = TestClient(app)
 
     def time_node_info(self, uri, node_path):
-        parameters = {"uri": f"{uri}/{node_path}"}
+        parameters = {"uri": f"{uri}{node_path}"}
         self.test_client.get("/data_entry/node_info", params=parameters)
 
     time_node_info.param_names = param_names + ["node path"]
@@ -35,7 +35,7 @@ class TimeIdsInfoEndpointsSuite:
     time_find_field.params = (uris, ["v_loop"])
 
     def time_array_summary(self, uri, node_path):
-        parameters = {"uri": f"{uri}/{node_path}"}
+        parameters = {"uri": f"{uri}{node_path}"}
         self.test_client.get("/data_entry/array_summary", params=parameters)
 
     time_array_summary.param_names = param_names + ["node path"]

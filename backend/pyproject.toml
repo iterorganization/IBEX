@@ -13,7 +13,7 @@ authors = [
 description = "Data visualization for IMAS IDS data"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.7"
-license-files = ["LICENSE.txt"]
+license = {text = "LGPL-3.0-only"}
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -39,12 +39,10 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Software Development :: Libraries",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"
+    "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 dynamic = ["version"]
 dependencies = [
-    "imas-python",
     "imas-idstools",
     "click",
     "uvicorn",
@@ -65,6 +63,8 @@ all = [
 
 test = [
     "pytest",
+    "pytest-cov",
+    "pytest-xdist",
 ]
 
 linting = [
@@ -72,8 +72,8 @@ linting = [
 ]
 
 docs =[
-    "sphinx",
-    "sphinx-autosummary-accessors",
+    "sphinx>=7,<9",
+    "sphinx-autosummary-accessors==2025.3.1",
     "sphinx_immaterial",
 ]
 
@@ -83,6 +83,10 @@ benchmark = [
 
 [project.urls]
 homepage = "https://github.com/iterorganization/IBEX"
+
+[tool.setuptools]
+# license-files must be here, not in [project], for setuptools <77 compatibility
+license-files = ["LICENSE.txt"]
 
 [tool.setuptools.packages.find]
 where = ["."]

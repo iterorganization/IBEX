@@ -11,7 +11,7 @@ HTTPS :
 
 .. code-block:: bash
 
-  git clone https://git.iter.org/scm/imex/ibex.git
+  git clone https://github.com/iterorganization/IBEX.git
 
 or
 
@@ -19,7 +19,7 @@ SSH :
 
 .. code-block:: bash
   
-  git clone ssh://git@git.iter.org/imex/ibex.git
+  git clone git@github.com:iterorganization/IBEX.git
 
 
 after

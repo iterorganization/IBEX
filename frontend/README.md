@@ -25,11 +25,11 @@ module load nodejs
 
 Clone this repository and install the dependencies:
 
-HTTPS : `git clone https://git.iter.org/scm/imex/ibex.git`
+HTTPS : `git clone https://github.com/iterorganization/IBEX.git`
 
 or
 
-SSH : `git clone ssh://git@git.iter.org/imex/ibex.git`
+SSH : `git clone git@github.com:iterorganization/IBEX.git`
 
 ```
 cd frontend

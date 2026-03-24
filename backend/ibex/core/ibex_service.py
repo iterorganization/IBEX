@@ -34,7 +34,6 @@ class IMAS_URI:
     def __init__(self, full_uri):
         """
         IMAS_URI constructor
-        :param full_uri: pulsefile uri along with #fragment part
         """
 
         self.full_uri = full_uri

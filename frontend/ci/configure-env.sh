@@ -8,6 +8,9 @@ module purge
 
 # Set up environment
 module load nodejs
+module load Xvfb/21.1.9-GCCcore-13.2.0
+module load Python
+module load IMAS-Core
 
 # Debuggging:
 echo "Done loading modules"
