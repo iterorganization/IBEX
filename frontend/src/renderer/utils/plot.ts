@@ -1946,8 +1946,8 @@ export const applyRange = async (
 
     return {
       ...customizedDataGrid,
-      coordinates: updatedDataPlot.coordinates,
-      plot: updatedDataPlot.plot,
+      coordinates: [...updatedDataPlot.coordinates],
+      plot: [...updatedDataPlot.plot],
     } as DataGridPlot;
   } catch (error) {
     console.error('Error applying the range: ', error);
