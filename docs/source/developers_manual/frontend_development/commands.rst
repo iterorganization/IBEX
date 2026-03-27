@@ -3,7 +3,7 @@ Useful commands
 ================
 
 Start the application
---------------------
+----------------------------
 
 **Development mode**
 
@@ -33,7 +33,7 @@ Install the dependencies using npm:
   npm install
 
 Format & lint the code
---------------------
+------------------------------
 
 **Format**
 
@@ -52,7 +52,7 @@ Checks the code for style and syntax issues before committing using ESLint:
   npm run lint
 
 Build the documentation
---------------------
+-------------------------------
 
 **Install sphinx dependencies**
 

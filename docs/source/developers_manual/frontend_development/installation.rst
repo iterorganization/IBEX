@@ -32,7 +32,7 @@ Clone this repository and install the dependencies:
   git clone https://github.com/iterorganization/IBEX.git
 
 Launch in developer mode
-------------
+------------------------------------
 
 Get into the root folder and launch it by using this command.
 

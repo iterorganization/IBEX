@@ -23,7 +23,7 @@ This separation ensures:
 The majority of the business logic and application workflows are implemented in the Renderer process, while the Main process remains focused on system integration and application lifecycle management.
 
 Directory Structure
-----------------
+-------------------------
 
 Each directory has a specific responsibility:
 

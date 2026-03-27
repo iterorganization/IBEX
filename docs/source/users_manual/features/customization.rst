@@ -64,7 +64,7 @@ Applies a downsampling method to reduce the data size while preserving its origi
    :align: center
 
 Dataplot synchronization
---------------------
+---------------------------------
 
 Allows you to link plots by their coordinates to facilitate comparison when using sliders:
 
