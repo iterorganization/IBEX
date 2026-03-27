@@ -16,6 +16,7 @@ Description of features
    features/plot_data
    features/draggable_component
    features/metadatas
+   features/customization
    features/save_configuration
    features/configuration_file
    features/default_configuration

@@ -43,11 +43,6 @@ Install the dependencies using npm:
 npm install
 ```
 
-### Environment Variables
-
-To define the environment variables, create a `.env` file in the root directory of the project. You can define different PORT or API_URL using by application.
-Refer to the `.env.example` file for the list of environment variables.
-
 ## Available Commands
 
 Here are the commands you can use to manage the project:
