@@ -11,9 +11,11 @@ import {
   ErrorBandData,
   PlotCoordinatesResponse,
   PlotDataResponse,
+  PlotLine,
   URIData,
   URITreeNodeData,
 } from '../types';
+import { ScatterData } from 'plotly.js';
 import { fetchDataPlot, fetchFieldValue } from './fetchData';
 import { generateNewGridPlot } from './grid';
 import {
@@ -27,8 +29,7 @@ import {
   getFirstArrayValueFromShape,
 } from './matrix';
 import * as tf from '@tensorflow/tfjs';
-import { ErrorBar } from 'plotly.js';
-import { containsFloat, removeSuffix } from './functions';
+import { containsFloat, rgbToRgba } from './functions';
 
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
@@ -508,35 +509,33 @@ export const fetchErrorBandsInConfig = async (
   active: Configuration,
   uri: string,
 ) => {
-  let dataPlotWithErrBands: DataGridPlot[];
-  const data = active.dataPlot.find((d) => d.isEditing);
-  if (!data) {
+  const selectedDataPlot = active.dataPlot.find((d) => d.isEditing);
+  if (!selectedDataPlot) {
     // Don't get error bands when no editing dataPlot
     return;
   }
 
-  const selectedDataPlot = active.dataPlot.find(
-    (dataPlot) => dataPlot.i === data.i,
-  );
   if (!selectedDataPlot.displayErrorBand) {
-    // Stop error bands when the dataPlot switch is off
+    // Stop error bands when the dataPlot error_bands switch is off
     return;
   }
 
   try {
-    dataPlotWithErrBands = active.dataPlot;
-    const updatedDataPlot = dataPlotWithErrBands.find((d) => d.i === data.i);
+    const updatedPlot = selectedDataPlot.plot.find(
+      (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
+    );
+
+    if (updatedPlot?.error_bands) {
+      // Stop fetch of error bands when the dataPlot error_bands switch is on but already have error_bands (case occuring after saving customization in editing mode)
+      return;
+    }
+
+    const updatedDataPlot = selectedDataPlot;
     const errBandsResponse = await fetchErrorBands(updatedDataPlot, uri);
 
     if (errBandsResponse) {
-      const plot = selectedDataPlot.plot.find(
-        (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
-      );
-      const updatedPlot = dataPlotWithErrBands
-        .find((dataPlot) => dataPlot.i === data.i)
-        .plot.find((plotToUpdate) => plotToUpdate.nodeUri === plot.nodeUri);
       const updatedCheckedNodeURI = active.checkedNodeURI;
-      if (data.isEditing && updatedPlot?.error_bands) {
+      if (selectedDataPlot.isEditing && updatedPlot?.error_bands) {
         // Check error bands in tree
         for (const error_band of updatedPlot.error_bands) {
           const newCheckedNode = {
@@ -665,55 +664,9 @@ const formatErrorBands = (
     return;
   }
 
-  // Change the plot format to show error bands
-  let error_suffix = '';
-  if (nodeUri.endsWith('_error_lower')) {
-    error_suffix = '_error_lower';
-  } else if (nodeUri.endsWith('_error_upper')) {
-    error_suffix = '_error_upper';
-  }
-  const mainNodeUri = removeSuffix(nodeUri, error_suffix);
-
   if (foundedPlot && !foundedPlot?.error_bands) {
     // Init error_bands
     foundedPlot.error_bands = [];
-  }
-
-  if (!foundedPlot?.error_y) {
-    // Init error_y
-    foundedPlot.error_y = {
-      type: 'data',
-      symmetric: true,
-      array: yValue,
-    };
-  }
-
-  if (foundedPlot?.error_bands?.length) {
-    // We are not in symectric case when there is more than one selected error band
-    foundedPlot.error_y.symmetric = false;
-  }
-
-  if (
-    error_suffix === '_error_lower' &&
-    foundedPlot?.error_bands.find(
-      (error_band) =>
-        error_band.path === normalizeIndices(mainNodeUri) + '_error_upper',
-    ) &&
-    foundedPlot?.error_y?.type === 'data'
-  ) {
-    // Set to arrayminus when lower & other error_band
-    foundedPlot.error_y.arrayminus = yValue;
-  } else if (
-    error_suffix === '_error_upper' &&
-    foundedPlot?.error_bands.find(
-      (error_band) =>
-        error_band.path === normalizeIndices(mainNodeUri) + '_error_lower',
-    ) &&
-    foundedPlot?.error_y?.type === 'data'
-  ) {
-    // Set lower as arrayminus when select upper & having lower
-    foundedPlot.error_y.arrayminus = foundedPlot.error_y.array;
-    foundedPlot.error_y.array = yValue;
   }
 
   foundedPlot.error_bands = foundedPlot.error_bands.filter(
@@ -723,7 +676,175 @@ const formatErrorBands = (
   foundedPlot.error_bands.push({
     path: normalizeIndices(nodeUri),
     yData: yData,
+    array: yValue,
   });
+};
+
+const formatErrorBandLayout = (
+  error_band_type: 'upper' | 'lower',
+  mainPlot: DataPlotly,
+  coordinates: Coordinates[],
+  symmetricalCase?: boolean,
+) => {
+  const mainY = mainPlot.y as number[];
+  const lineShape = (mainPlot.line?.shape ?? 'linear') as 'linear' | 'hv';
+
+  const errBandTypePosition = symmetricalCase
+    ? 0
+    : error_band_type === 'lower'
+      ? 1
+      : 0;
+  const yDiff = getVectorData(
+    coordinates,
+    mainPlot.error_bands[errBandTypePosition].yData,
+  );
+  const length = Math.min(mainPlot.y.length, yDiff.length);
+  const yErrBandPart = new Array<number>(length);
+  for (let i = 0; i < length; i++) {
+    if (error_band_type === 'lower') {
+      yErrBandPart[i] = mainY[i] - yDiff[i];
+    } else {
+      yErrBandPart[i] = mainY[i] + yDiff[i];
+    }
+  }
+  const errBandPartPlot: Partial<ScatterData> = {
+    x: mainPlot.x,
+    y: yErrBandPart,
+    type: 'scatter',
+    mode: 'lines',
+    line: { width: 0, shape: lineShape },
+    hoverinfo: 'skip',
+  };
+  if (error_band_type === 'lower') {
+    errBandPartPlot.showlegend = false;
+  } else {
+    errBandPartPlot.name = 'error bands';
+    errBandPartPlot.fill = 'tonexty';
+    errBandPartPlot.fillcolor = mainPlot.line?.color
+      ? rgbToRgba(mainPlot.line?.color, 0.2)
+      : rgbToRgba('rgb(0, 0, 0)', 0);
+  }
+  return errBandPartPlot;
+};
+
+export function getErrorsAreaToPlot(
+  mainPlots: DataPlotly[],
+  coordinates: Coordinates[],
+) {
+  const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
+
+  for (const mainPlot of mainPlots) {
+    if (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) {
+      // Add lower and upper
+      const lowerPlot = formatErrorBandLayout('lower', mainPlot, coordinates);
+      entirePlotList.push(lowerPlot);
+      const upperPlot = formatErrorBandLayout('upper', mainPlot, coordinates);
+      entirePlotList.push(upperPlot);
+    } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
+      // Symmetrical case: use upper for the interval
+      const lowerPlot = formatErrorBandLayout(
+        'lower',
+        mainPlot,
+        coordinates,
+        true,
+      );
+      entirePlotList.push(lowerPlot);
+      const upperPlot = formatErrorBandLayout(
+        'upper',
+        mainPlot,
+        coordinates,
+        true,
+      );
+      entirePlotList.push(upperPlot);
+    }
+
+    if (mainPlot?.error_bands) {
+      // Add main plot
+      if (mainPlot.error_bands.length === 2) {
+        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
+          mainPlot.error_bands[0].array[i],
+          mainPlot.error_bands[1].array[i],
+        ]);
+      } else {
+        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
+          mainPlot.error_bands[0].array[i],
+        ]);
+      }
+      mainPlot.hovertemplate = 'x: %{x}<br>' + 'y: %{y}<br>';
+      if (mainPlot?.error_bands?.length) {
+        mainPlot.hovertemplate +=
+          mainPlot.error_bands.length === 2
+            ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
+            : 'y error bands: ±%{customdata[0]}<br>';
+      }
+      mainPlot.hovertemplate += '<extra></extra>';
+    }
+    entirePlotList.push(mainPlot);
+  }
+  return entirePlotList;
+}
+
+/**
+ * Init plots color by adding color in plot.line for each plot
+ */
+export const initPlotColors = async (
+  customizedDataGrid: DataGridPlot,
+  customContainerRef: React.MutableRefObject<HTMLDivElement>,
+  setterForCustomization?: React.Dispatch<React.SetStateAction<DataGridPlot>>,
+) => {
+  // Get plot colors when select 1D plots accordion
+  const customContainer = customContainerRef.current;
+  if (!customContainer) return;
+  // Get child elements from the legend
+  const legends = customContainer.querySelectorAll<SVGGElement>('g.layers');
+
+  const updatedPlotColors = setterForCustomization
+    ? JSON.parse(JSON.stringify(customizedDataGrid))
+    : customizedDataGrid;
+
+  if (updatedPlotColors.plot.length > 1 && legends.length) {
+    // When we have a color legend (so several plots)
+    let plotIndex = 0;
+    let shouldUpdateColors = false;
+    for (const plot of updatedPlotColors.plot) {
+      // Get from DOM & set color in plot.line for each plots
+      if (!plot?.line?.color) {
+        shouldUpdateColors = true;
+      }
+
+      const line = legends[plotIndex].querySelector<SVGGElement>(
+        'g.legendlines > path',
+      );
+      // We get color from point when plot.mode === "markers"
+      const point = legends[plotIndex].querySelector<SVGGElement>(
+        'g.legendpoints > path',
+      );
+      const colorFromDOM = line?.style?.stroke || point?.style?.fill;
+
+      if (!plot?.line) {
+        plot.line = { color: colorFromDOM } as PlotLine;
+      } else {
+        plot.line.color = colorFromDOM;
+      }
+      plotIndex++;
+    }
+    if (!shouldUpdateColors) {
+      return;
+    }
+  } else if (
+    updatedPlotColors.plot.length === 1 &&
+    !updatedPlotColors.plot[0]?.line?.color
+  ) {
+    // When we have only one plot, there is no legend so we set manualy to the first plotly color
+    updatedPlotColors.plot[0].line = {
+      color: 'rgb(31, 119, 180)',
+    } as PlotLine;
+  }
+  if (setterForCustomization) {
+    setterForCustomization(updatedPlotColors);
+  } else {
+    return updatedPlotColors;
+  }
 };
 
 /**
@@ -896,7 +1017,8 @@ export async function plotNodeUriLoaded(
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
               matchingCoord.shape = responseCoordinates.downsampled_shape;
-              matchingCoord.coord_dependencies = responseCoordinates.coordinates;
+              matchingCoord.coord_dependencies =
+                responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
               matchingCoord.target = updateIndexFieldName(
@@ -1145,25 +1267,16 @@ export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
 
 export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
   // Get error bands vectors switch coordinates indexes
-  const updated_error_y: ErrorBar = JSON.parse(JSON.stringify(plot.error_y));
-
-  if (updated_error_y?.type === 'data') {
-    if (updated_error_y?.arrayminus) {
-      updated_error_y.arrayminus = getVectorData(
-        coordinates,
-        plot.error_bands.find((err_b) => err_b.path.endsWith('_error_lower'))
-          .yData,
-      );
-    }
-    const error_array_yData =
-      plot.error_bands.find((err_b) => err_b.path.endsWith('_error_upper'))
-        ?.yData ||
-      plot.error_bands.find((err_b) => err_b.path.endsWith('_error_lower'))
-        ?.yData;
-
-    updated_error_y.array = getVectorData(coordinates, error_array_yData);
+  const updated_error_bands: ErrorBandData[] = JSON.parse(
+    JSON.stringify(plot.error_bands),
+  );
+  for (const updated_error_band of updated_error_bands) {
+    updated_error_band.array = getVectorData(
+      coordinates,
+      updated_error_band.yData,
+    );
   }
-  return updated_error_y;
+  return updated_error_bands;
 }
 
 /**
@@ -1381,12 +1494,12 @@ export const swapAxis = async (
     plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
 
     if (plot?.error_bands?.length) {
-      // Update error_y vectors after transpositions
-      const swapped_error_y = getErrorYVectors(
+      // Update error_bands vectors after transpositions
+      const swapped_error_bands = getErrorYVectors(
         plot,
         updatedDataPlot.coordinates,
       );
-      plot.error_y = swapped_error_y;
+      plot.error_bands = swapped_error_bands;
     }
   }
 
@@ -1524,11 +1637,7 @@ async function transposeAxis(
     plotToTranspose.yData = transposedDataY;
     plotToTranspose.shape = tensorizedDataY.shape;
 
-    if (
-      plotToTranspose?.error_bands &&
-      plotToTranspose?.error_y &&
-      plotToTranspose.error_y.type === 'data'
-    ) {
+    if (plotToTranspose?.error_bands) {
       for (const error_band of plotToTranspose.error_bands) {
         if (!isMatrixPlottable(error_band.yData)) {
           // Control to prevent from transposing error y axis when unplottable data
@@ -1895,7 +2004,9 @@ export async function applyRangeInCoord(
     }
 
     const dependencyIndex = (
-      JSON.parse(JSON.stringify(coordDependencie.coord_dependencies)) as string[]
+      JSON.parse(
+        JSON.stringify(coordDependencie.coord_dependencies),
+      ) as string[]
     )
       .reverse() // We reverse dependencies to get dependency index in the order of the matrix
       .findIndex((dep) => dep === coordinate.name);
@@ -1961,11 +2072,10 @@ export async function applyRangeInPlot(
     if (updatedPlot?.error_bands) {
       for (const error_band of updatedPlot.error_bands) {
         if (
-          updatedPlot.error_y.type === 'data' &&
-          ((error_band.path.endsWith('_error_upper') &&
-            updatedPlot.error_y.array.length === 0) ||
-            (error_band.path.endsWith('_error_lower') &&
-              updatedPlot.error_y.arrayminus.length === 0))
+          (error_band.path.endsWith('_error_upper') &&
+            error_band.array.length === 0) ||
+          (error_band.path.endsWith('_error_lower') &&
+            error_band.array.length === 0)
         ) {
           continue;
         }
@@ -1990,8 +2100,8 @@ export async function applyRangeInPlot(
         const newYData = (await trimmed.array()) as AxisData;
         error_band.yData = newYData;
       }
-      const swapped_error_y = getErrorYVectors(updatedPlot, coordinates);
-      updatedPlot.error_y = swapped_error_y;
+      const swapped_error_bands = getErrorYVectors(updatedPlot, coordinates);
+      updatedPlot.error_bands = swapped_error_bands;
     }
   }
 }

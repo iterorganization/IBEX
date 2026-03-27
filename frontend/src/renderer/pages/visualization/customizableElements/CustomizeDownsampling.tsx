@@ -52,7 +52,7 @@ export const CustomizeDownsampling = ({
           updatedDataPlot?.dataType,
         );
 
-        if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {
+        if (plot?.error_bands?.length) {
           // Downsample error bands with provided parameters if error bands exists for this plot
           await fetchErrorBands(
             updatedDataPlot,

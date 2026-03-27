@@ -128,15 +128,28 @@ export const GridLayoutPlot = ({
             );
 
             if (plotItem?.error_bands?.length) {
-              const updated_error_y = getErrorYVectors(
+              const updated_error_bands = getErrorYVectors(
                 plotItem,
                 updatedCoordinatesValue,
               );
+              let customdata;
+              if (plotItem.error_bands.length === 2) {
+                customdata = plotItem.error_bands[0].array.map((v, i) => [
+                  plotItem.error_bands[0].array[i],
+                  plotItem.error_bands[1].array[i],
+                ]);
+              } else {
+                customdata = plotItem.error_bands[0].array.map((v, i) => [
+                  plotItem.error_bands[0].array[i],
+                ]);
+              }
+
               return {
                 ...plotItem,
                 x: newXData,
                 y: newYData,
-                error_y: updated_error_y,
+                customdata: customdata,
+                error_bands: updated_error_bands,
                 nodeUri: updatedNodeUri,
                 path: updatedPath,
               };

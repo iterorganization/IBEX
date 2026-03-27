@@ -96,7 +96,6 @@ export const HoverButtons = React.memo(
                 ?.includes(checkedNode.uri),
           );
           delete plot?.error_bands;
-          delete plot?.error_y;
         }
       },
       [active],
