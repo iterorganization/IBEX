@@ -636,7 +636,15 @@ export const fetchErrorBands = async (
     // Return dataPlot list with the plot which includes error bands
     return dataPlot;
   } catch (error) {
-    console.error('Error handling error bands: ', error);
+    if (
+      !(
+        error.toString().includes('No data for') &&
+        (error.toString().includes('_error_upper') ||
+          error.toString().includes('_error_lower'))
+      )
+    ) {
+      console.error('Error handling error bands: ', error);
+    }
   }
 };
 
@@ -733,18 +741,15 @@ export function formatConfigBeforeLoadingURIs(
       static: false,
       coordinates:
         data.coordinates && data.coordinates.length > 0
-          ? data.coordinates.map(
-              (coord: BaseCoordinates, index): Coordinates => {
-                return {
-                  ...coord,
-                  name: '',
-                  shape: [],
-                  coordinates: [],
-                  data: [],
-                  axeIndex: index,
-                };
-              },
-            )
+          ? data.coordinates.map((coord: BaseCoordinates): Coordinates => {
+              return {
+                ...coord,
+                name: '',
+                shape: [],
+                coord_dependencies: [],
+                data: [],
+              };
+            })
           : [],
       plot: data.plot.map((plot): DataPlotly => {
         // Update plot.nodeUri with selected URIs
@@ -791,7 +796,7 @@ function formatCoordinates(
         name: coordinate.name,
         shape: coordinate.shape,
         downsampled_shape: coordinate.downsampled_shape,
-        coordinates: coordinate.coordinates,
+        coord_dependencies: coordinate.coordinates,
         data: coordinate.value,
         valueIndex: valueIndex,
         path:
@@ -891,7 +896,7 @@ export async function plotNodeUriLoaded(
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
               matchingCoord.shape = responseCoordinates.downsampled_shape;
-              matchingCoord.coordinates = responseCoordinates.coordinates;
+              matchingCoord.coord_dependencies = responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
               matchingCoord.target = updateIndexFieldName(
@@ -911,14 +916,6 @@ export async function plotNodeUriLoaded(
                 lastField,
                 matchingCoord.valueIndex,
               );
-
-              if (response.data.coordinates.length > 0 && index === 0) {
-                // Update x axis informations to plot right x axis title in a saved file with transposition (useless if transposition will be restored at load)
-                updatedXAxisData.name = response.data.coordinates[0].name;
-                updatedXAxisData.unit = response.data.coordinates[0].unit;
-                updatedXAxisData.path = response.data.coordinates[0].path;
-                delete updatedXAxisData.type;
-              }
 
               matchingCoordList.push(matchingCoord);
             }
@@ -977,6 +974,37 @@ export async function plotNodeUriLoaded(
           plot: updatedPlot,
         } as DataGridPlot;
 
+        // Transpose dataGrid at launch
+        if (
+          JSON.stringify(
+            dataGrid.coordinates.map((coord) => coord.axeIndex),
+          ) !==
+          JSON.stringify(dataGrid.coordinates.map((coord, index) => index))
+        ) {
+          const customizedDataGrid = JSON.parse(
+            JSON.stringify(dataGrid),
+          ) as DataGridPlot;
+          const updatedDataPlot = JSON.parse(
+            JSON.stringify(dataGridUpdated),
+          ) as DataGridPlot;
+          for (const [index, coord] of updatedDataPlot.coordinates.entries()) {
+            // Set to original axe indexes in order apply the transposition
+            coord.axeIndex = index;
+          }
+
+          // Apply swap axis if different from default
+          const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
+            (coord) => coord.axeIndex,
+          );
+
+          const transposedDataPlot = await transposeDataGrid(
+            updatedDataPlot,
+            wantedAxeIndexOrder,
+            true,
+          );
+          dataGridUpdated.coordinates = transposedDataPlot.coordinates;
+          dataGridUpdated.plot = transposedDataPlot.plot;
+        }
         return dataGridUpdated;
       }),
     );
@@ -1034,6 +1062,48 @@ export async function plotNodeUriLoaded(
     return dataGridPlot;
   }
 }
+
+/**
+ * Transpose dataGrid
+ * @param updatedDataGrid
+ * @param wantedAxeIndexOrder
+ * @param keepValueIndex
+ * @returns the transposed dataGrid
+ */
+export const transposeDataGrid = async (
+  updatedDataGrid: DataGridPlot,
+  wantedAxeIndexOrder: number[],
+  keepValueIndex?: boolean,
+) => {
+  let actualAxeIndexOrder = (
+    JSON.parse(JSON.stringify(updatedDataGrid.coordinates)) as Coordinates[]
+  ).map((coord) => coord.axeIndex);
+  let transposedDataGrid = JSON.parse(
+    JSON.stringify(updatedDataGrid),
+  ) as DataGridPlot;
+  if (
+    JSON.stringify(wantedAxeIndexOrder) !== JSON.stringify(actualAxeIndexOrder)
+  ) {
+    // Get transposed order
+    let index = 0;
+    for (const wantedAxeIndex of wantedAxeIndexOrder) {
+      if (wantedAxeIndex !== actualAxeIndexOrder[index]) {
+        const newTransposedDataGrid = await swapAxis(
+          transposedDataGrid,
+          wantedAxeIndex,
+          actualAxeIndexOrder[index],
+          keepValueIndex,
+        );
+        actualAxeIndexOrder = newTransposedDataGrid.coordinates.map(
+          (coord) => coord.axeIndex,
+        );
+        transposedDataGrid = newTransposedDataGrid;
+      }
+      index++;
+    }
+  }
+  return transposedDataGrid;
+};
 
 /**
  * @description Retrieves vector data from a plot item based on the provided URI and coordinates.
@@ -1200,10 +1270,21 @@ export const getTensorizedMatrix = async (matrix: AxisData) => {
   return dataTensorized;
 };
 
+/**
+ * Transpose all plots from a dataGrid and update paths with related value indexes
+ * @param itemDataGrid
+ * @param axeIndexToSwap
+ * @param axeIndexOfTargetAxis
+ * @param keepValueIndex
+ * @param active
+ * @param updatedConfiguration
+ * @returns The transposed dataGrid
+ */
 export const swapAxis = async (
   itemDataGrid: DataGridPlot,
   axeIndexToSwap: number,
   axeIndexOfTargetAxis: number,
+  keepValueIndex?: boolean,
   active?: Configuration,
   updatedConfiguration?: (configuration: Configuration) => void,
 ) => {
@@ -1231,52 +1312,54 @@ export const swapAxis = async (
     axeIndexOfTargetAxis;
 
   // Reset indexValue
-  updatedDataPlot.coordinates[actualTargetAxisIndex].valueIndex = 0;
-  updatedDataPlot.coordinates[itemToSwitchIndex].valueIndex = 0;
+  if (!keepValueIndex) {
+    updatedDataPlot.coordinates[actualTargetAxisIndex].valueIndex = 0;
+    updatedDataPlot.coordinates[itemToSwitchIndex].valueIndex = 0;
 
-  // Update all coordinates targets & paths impacted with resetted indexValue
-  const actualXAxisTargetLastName = getLastIndexedField(
-    updatedDataPlot.coordinates[actualTargetAxisIndex].target,
-  );
-  const itemToSwitchTargetLastName = getLastIndexedField(
-    updatedDataPlot.coordinates[itemToSwitchIndex].target,
-  );
-  const actualXAxisupdatedPath = updateIndexFieldName(
-    updatedDataPlot.coordinates[actualTargetAxisIndex].target || '',
-    actualXAxisTargetLastName,
-    0,
-  );
-  updateIndexFieldName(actualXAxisupdatedPath, itemToSwitchTargetLastName, 0);
-  const itemToSwitchupdatedPath = updateIndexFieldName(
-    updatedDataPlot.coordinates[itemToSwitchIndex].target || '',
-    itemToSwitchTargetLastName,
-    0,
-  );
-  updateIndexFieldName(itemToSwitchupdatedPath, actualXAxisTargetLastName, 0);
-
-  // Modify targets from each coordinates
-  for (const coordinate of updatedDataPlot.coordinates) {
-    coordinate.target = updateIndexFieldName(
-      coordinate.target || '',
-      itemToSwitchTargetLastName,
-      0,
+    // Update all coordinates targets & paths impacted with resetted indexValue
+    const actualXAxisTargetLastName = getLastIndexedField(
+      updatedDataPlot.coordinates[actualTargetAxisIndex].target,
     );
-    coordinate.target = updateIndexFieldName(
-      coordinate.target,
+    const itemToSwitchTargetLastName = getLastIndexedField(
+      updatedDataPlot.coordinates[itemToSwitchIndex].target,
+    );
+    const actualXAxisupdatedPath = updateIndexFieldName(
+      updatedDataPlot.coordinates[actualTargetAxisIndex].target || '',
       actualXAxisTargetLastName,
       0,
     );
-
-    coordinate.path = updateIndexFieldName(
-      coordinate.path || '',
+    updateIndexFieldName(actualXAxisupdatedPath, itemToSwitchTargetLastName, 0);
+    const itemToSwitchupdatedPath = updateIndexFieldName(
+      updatedDataPlot.coordinates[itemToSwitchIndex].target || '',
       itemToSwitchTargetLastName,
       0,
     );
-    coordinate.path = updateIndexFieldName(
-      coordinate.path,
-      actualXAxisTargetLastName,
-      0,
-    );
+    updateIndexFieldName(itemToSwitchupdatedPath, actualXAxisTargetLastName, 0);
+
+    // Modify targets from each coordinates
+    for (const coordinate of updatedDataPlot.coordinates) {
+      coordinate.target = updateIndexFieldName(
+        coordinate.target || '',
+        itemToSwitchTargetLastName,
+        0,
+      );
+      coordinate.target = updateIndexFieldName(
+        coordinate.target,
+        actualXAxisTargetLastName,
+        0,
+      );
+
+      coordinate.path = updateIndexFieldName(
+        coordinate.path || '',
+        itemToSwitchTargetLastName,
+        0,
+      );
+      coordinate.path = updateIndexFieldName(
+        coordinate.path,
+        actualXAxisTargetLastName,
+        0,
+      );
+    }
   }
 
   // Set new xAxis plot
@@ -1574,6 +1657,7 @@ const trimPlotData = async (
  * @param updatedCoord
  * @param trimmed
  * @param coordinateAffectingDependency
+ * @param keepValueIndex
  */
 const formatTrimmedCoordinate = async (
   updatedCoord: Coordinates,
@@ -1811,7 +1895,7 @@ export async function applyRangeInCoord(
     }
 
     const dependencyIndex = (
-      JSON.parse(JSON.stringify(coordDependencie.coordinates)) as string[]
+      JSON.parse(JSON.stringify(coordDependencie.coord_dependencies)) as string[]
     )
       .reverse() // We reverse dependencies to get dependency index in the order of the matrix
       .findIndex((dep) => dep === coordinate.name);

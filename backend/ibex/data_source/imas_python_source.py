@@ -98,6 +98,8 @@ class IMASPythonSource(DataSourceInterface):
             return ids_root
         except imas.exception.IDSNameError as e:
             raise IdsNotFoundException(e) from None
+        except imas.exception.DataEntryException as e:
+            raise IdsNotFoundException(e) from None
 
     def data_entry_exists(self, uri: str) -> bool:
         """

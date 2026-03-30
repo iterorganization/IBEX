@@ -29,10 +29,3 @@ Manual
 
    developers_manual/frontend_development/frontend_development
    developers_manual/backend_development/backend_development
-
-
-LICENSE
--------
-
-.. literalinclude:: ../../LICENSE.txt
-   :language: text

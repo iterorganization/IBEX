@@ -26,7 +26,7 @@ export async function startApp() {
         ...process.env,
         ELECTRON_ENABLE_LOGGING: 'true',
         ELECTRON_ENABLE_STACK_DUMPING: 'true',
-        // E2E_TEST: 'true',
+        E2E_TEST: process.env.E2E_TEST,
       },
     },
   );

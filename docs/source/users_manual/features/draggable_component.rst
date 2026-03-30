@@ -35,9 +35,13 @@ Allows you to select how you want the data to be displayed. In 1D, it will be re
 
 This opens a ":doc:`Metadata <metadatas>`" component that displays various information related to all nodes (path, min, max, average, value, coordinates, etc.). This gives the user a broader overview of the data.
 
+**Customize the grid:**
+
+It opens a ":doc:`Customization <customization>`" component which allows to personnalize the grid.
+
 **Edit Grid:**
 
-This option allows the user to edit the grid (add or remove nodes), if applicable to their use case.
+This option allows the user to edit the grid (add or remove nodes), if applicable to their use case. This also allows you to explore the data by moving the sliders.
 
 **Delete Grid:**
 

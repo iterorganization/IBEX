@@ -166,7 +166,11 @@ const Customization = ({
       opened={item?.disabled ? null : false}
     >
       <Accordion.Item value={item.value}>
-        <Accordion.Control icon={item.icon} disabled={item?.disabled || false}>
+        <Accordion.Control
+          icon={item.icon}
+          disabled={item?.disabled || false}
+          data-testid={`customization-${item.value}-accordion`}
+        >
           {item.value}
         </Accordion.Control>
         <Accordion.Panel>{item.component}</Accordion.Panel>
@@ -180,7 +184,11 @@ const Customization = ({
         Customize plot parameters
       </Title>
       <ScrollArea h="79vh">
-        <Accordion value={selectedAccordion} onChange={setSelectedAccordion}>
+        <Accordion
+          value={selectedAccordion}
+          onChange={setSelectedAccordion}
+          {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+        >
           {items}
         </Accordion>
       </ScrollArea>

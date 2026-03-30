@@ -53,8 +53,10 @@ export const SimplePlotly = ({
       zeroline: false,
       type:
         (itemDataGrid?.xAxisData?.type as AxisType) ||
-        typeof itemDataGrid.plot[0].x[0] === 'string'
-          ? 'category'
+        (itemDataGrid.plot.length > 0 && itemDataGrid.plot[0].x?.length > 0)
+          ? typeof itemDataGrid.plot[0]?.x[0] === 'string'
+            ? 'category'
+            : 'linear'
           : 'linear',
       exponentformat: 'power',
       showexponent: 'all',
@@ -347,6 +349,7 @@ export const SimplePlotly = ({
                       (coord: Coordinates) => coord.name === value,
                     ).axeIndex,
                     0, // axeIndex of x is always 0
+                    false,
                     active,
                     updatedConfiguration,
                   )

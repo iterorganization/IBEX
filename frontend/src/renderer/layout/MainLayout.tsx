@@ -116,6 +116,7 @@ export function MainLayout() {
         coordinates: dataGrid.coordinates.map(
           (coord: Coordinates): BaseCoordinates => {
             return {
+              axeIndex: coord.axeIndex,
               path: coord.path,
               target: coord.target,
               valueIndex: coord.valueIndex,
