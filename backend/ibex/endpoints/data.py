@@ -114,6 +114,7 @@ def plot_data(
     | }
 
     :param uri: IMAS URI with the path to leaf node
+    :param interpolate_over: list of IMAS URIs used in interpolation. E.g. imas:hdf5?path=/home/ITER/wasikj/Desktop/work/IBEX/testdb2#equilibrium/time_slice[:]/profiles_2d[:]/psi
     :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
     :param downsampled_size: target size of downsampled data
     :rtype: dict (automatically converted to JSON by FastAPI)

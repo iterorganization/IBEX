@@ -53,6 +53,7 @@ dependencies = [
     "tsdownsample",
     "orjson",
     "autodoc_pydantic",
+    "scipy",
 ]
 
 [project.optional-dependencies]

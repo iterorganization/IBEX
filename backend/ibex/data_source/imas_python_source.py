@@ -604,6 +604,9 @@ class IMASPythonSource(DataSourceInterface):
         :param ids: name of ids e.g. core_profiles
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
+        :param interpolate_over: list of uris used in interpolation
+        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
+        :param downsampled_size: target size of downsampled data
         :return: Dictionary containing data values, metadata and coordinates.
         """
 
