@@ -52,6 +52,7 @@ export const TabsListCustom = ({
               <ActionIcon
                 variant="filled"
                 aria-label="Metadatas"
+                data-testid="customization-save-button"
                 color="yellow"
                 onClick={() => saveAndClose()}
               >

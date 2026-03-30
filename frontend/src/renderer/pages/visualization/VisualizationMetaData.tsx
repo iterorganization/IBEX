@@ -125,7 +125,11 @@ const RenderMetaDataCoordinates = ({
         {coordinates.length === 0 ? (
           'N/A'
         ) : (
-          <Accordion chevronPosition="left" variant="filled">
+          <Accordion
+            chevronPosition="left"
+            variant="filled"
+            {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+          >
             {coordinates.map((coordinate, index) => (
               <Accordion.Item key={index} value={coordinate.name}>
                 <AccordionControl>{coordinate.name}</AccordionControl>

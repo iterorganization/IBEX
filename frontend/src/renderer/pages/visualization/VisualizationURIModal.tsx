@@ -222,8 +222,8 @@ export const VisualizationURIModal = ({
       <Table.Th>Select</Table.Th>
       <Table.Th>Name</Table.Th>
       <Table.Th>URI</Table.Th>
-      <Table.Td>
-        {dataDbEntries.length && (
+      {dataDbEntries.length ? (
+        <Table.Th>
           <Tooltip label="Delete all URIs" openDelay={300}>
             <ActionIcon
               variant="filled"
@@ -238,8 +238,8 @@ export const VisualizationURIModal = ({
               />
             </ActionIcon>
           </Tooltip>
-        )}
-      </Table.Td>
+        </Table.Th>
+      ) : undefined}
     </Table.Tr>
   );
 
@@ -547,6 +547,9 @@ export const VisualizationURIModal = ({
       size="90%"
       centered
       data-testid="config-uri-selection-modal"
+      {...(window.env.E2E_TEST === 'true' && {
+        transitionProps: { duration: 0 },
+      })}
     >
       <Group justify="space-between" mb={10}>
         <FileInput

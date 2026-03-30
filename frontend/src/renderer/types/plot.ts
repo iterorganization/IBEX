@@ -21,6 +21,7 @@ export type AxisData =
   | (number | string | Complex)[];
 
 export interface BaseCoordinates {
+  axeIndex: number;
   path: string;
   target: string;
   valueIndex: number;
@@ -31,9 +32,8 @@ export interface BaseCoordinates {
 export interface Coordinates extends BaseCoordinates {
   name: string;
   shape: number[] | 'irregular';
-  coordinates: string[];
+  coord_dependencies: string[];
   data: AxisData;
-  axeIndex: number;
   unit?: string;
 }
 

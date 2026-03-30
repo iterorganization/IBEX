@@ -9,14 +9,9 @@ export async function getCssElementFromDataTestId(
   const cssElement = await getDriver().wait(
     until.elementLocated(By.css(`[data-testid="${cssElementDataTestIdName}"]`)),
     timeout,
+    `Element "${cssElementDataTestIdName}" not found`,
   );
-
-  if (!cssElement) {
-    throw new Error(
-      `No CSS element found under the name ${cssElementDataTestIdName}, abort`,
-    );
-  }
-
+  await getDriver().wait(until.elementIsVisible(cssElement), timeout);
   return cssElement;
 }
 
@@ -62,18 +57,12 @@ export async function ensureCssElementIsDisplayed(
   delayMs = 100,
 ): Promise<WebElement> {
   console.info('Ensuring element is displayed : ', cssElementDataTestIdName);
-  const cssElement = await getCssElementFromDataTestId(
+  const cssElement: WebElement = await getCssElementFromDataTestId(
     cssElementDataTestIdName,
     retries * delayMs,
   );
 
-  for (let i = 0; i < retries; i++) {
-    await new Promise((res) => setTimeout(res, delayMs));
-
-    if (await cssElement.isDisplayed()) {
-      break;
-    }
-  }
+  await getDriver().wait(until.elementIsVisible(cssElement), retries * delayMs);
 
   expect(
     await cssElement.isDisplayed(),
@@ -91,7 +80,7 @@ export async function writeTextInCssElement(
   if (clearText) {
     if (
       (await input.getAttribute('value')) != undefined &&
-      (await input.getAttribute('value')).length > 0
+      (await input.getAttribute('value'))?.length > 0
     ) {
       while ((await input.getAttribute('value')).length > 0) {
         await input.sendKeys(Key.BACK_SPACE);
@@ -106,23 +95,16 @@ export async function findCssElementAndClickIt(
   retries = 100,
   delayMs = 100,
 ) {
-  const button = await ensureCssElementIsDisplayed(
+  const button = await getCssElementFromDataTestId(
     cssElementDataTestIdName,
-    retries,
-    delayMs,
+    retries * delayMs,
   );
 
-  for (let i = 0; i < retries; i++) {
-    await new Promise((res) => setTimeout(res, delayMs));
-
-    if (await button.isEnabled()) {
-      break;
-    }
-  }
+  await getDriver().wait(until.elementIsEnabled(button), retries * delayMs);
 
   expect(
-    await button.isEnabled(),
-    `Button "${cssElementDataTestIdName}" was found but isEnabled() returned false.`,
+    await button.isDisplayed(),
+    `Button "${cssElementDataTestIdName}" was found but isDisplayed() returned false.`,
   ).to.be.true;
   await button.click();
 }
