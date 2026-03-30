@@ -43,6 +43,7 @@ from ibex.data_source.imas_python_source_utils import (
     resample_data,
     pad_to_rectangular,
     flatten,
+    expand
 )
 
 
@@ -828,8 +829,7 @@ class IMASPythonSource(DataSourceInterface):
                         x["value"] = sorted(set(flatten(x["value"]) + flatten(convert_to_lists(y["value"]))))
 
                 # reverse coordinates list so it matches data dimensions
-                new_common_coords.reverse()
-                common_coords_values = [c["value"] for c in new_common_coords]
+                common_coords_values = [c["value"] for c in reversed(new_common_coords)]
                 # =================== INTERPOLATE ===================
 
                 # === make data vector rectangular ===
@@ -837,6 +837,10 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = resample_data(
                     tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                 )
+
+                # expand flattened coordinates
+                for c in coordinates_to_be_returned:
+                    c["value"] = expand(c["value"],c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
 

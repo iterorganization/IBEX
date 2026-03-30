@@ -18,6 +18,28 @@ def flatten(lst):
             result.append(item)
     return result
 
+def expand(data: list, grid_shape: list):
+    """
+    Expands 1D data to a multidimensional grid using NumPy broadcasting.
+
+    The function reshapes the input array and broadcasts it over the given
+    grid dimensions so that the result matches the original coordinate shape (un-flattened).
+
+    :param data: 1D input array of shape (N,)
+    :param grid_shape: target grid shape (e.g. [4, 3, 5])
+    :return: broadcasted array of shape (*grid_shape, N)
+
+    :raises ValueError: if input data is not 1-dimensional
+    """
+    data = np.asarray(data)
+
+    if data.ndim != 1:
+        raise ValueError("Input data must be 1-dimensional")
+
+    reshaped = data.reshape((1,) * len(grid_shape) + (data.shape[0],))
+    result = np.broadcast_to(reshaped, tuple(grid_shape) + (data.shape[0],))
+
+    return result
 
 def get_max_shape(lst, level=0, shape=None):
     """
