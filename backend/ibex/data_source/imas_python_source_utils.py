@@ -18,6 +18,7 @@ def flatten(lst):
             result.append(item)
     return result
 
+
 def expand(data: list, grid_shape: list):
     """
     Expands 1D data to a multidimensional grid using NumPy broadcasting.
@@ -40,6 +41,7 @@ def expand(data: list, grid_shape: list):
     result = np.broadcast_to(reshaped, tuple(grid_shape) + (data.shape[0],))
 
     return result
+
 
 def get_max_shape(lst, level=0, shape=None):
     """

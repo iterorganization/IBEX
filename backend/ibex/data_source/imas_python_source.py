@@ -43,7 +43,7 @@ from ibex.data_source.imas_python_source_utils import (
     resample_data,
     pad_to_rectangular,
     flatten,
-    expand
+    expand,
 )
 
 
@@ -846,7 +846,7 @@ class IMASPythonSource(DataSourceInterface):
 
                 # expand flattened coordinates
                 for c in coordinates_to_be_returned:
-                    c["value"] = expand(c["value"],c["shape"][:-1])
+                    c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
 
