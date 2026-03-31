@@ -44,6 +44,7 @@ from ibex.data_source.imas_python_source_utils import (
     pad_to_rectangular,
     flatten,
     expand,
+    calculate_coordinate_shapes,
 )
 
 
@@ -844,8 +845,15 @@ class IMASPythonSource(DataSourceInterface):
                     tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                 )
 
+                new_coordinate_shapes = calculate_coordinate_shapes(
+                    list(np.asarray(data_to_be_returned).shape),
+                    first_value.metadata.ndim,
+                    len(coordinates_to_be_returned),
+                )
+
                 # expand flattened coordinates
-                for c in coordinates_to_be_returned:
+                for i, c in enumerate(coordinates_to_be_returned):
+                    c["shape"] = list(new_coordinate_shapes[i])
                     c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
