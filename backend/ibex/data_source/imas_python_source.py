@@ -780,6 +780,12 @@ class IMASPythonSource(DataSourceInterface):
             first_value = find_first_value_in_list(ids_data)
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
+            if first_value.metadata.ndim == 2:
+                # Transform 2D arrays.
+                # By default first dimension of 2D has coordinate that is second on the list
+                # FE expects data's first dimension to be connected with second dimension, thus this transformation
+                data_to_be_returned = transform_2D_data(data_to_be_returned)
+
             # ============= BEGIN resample data onto new time vector =============
 
             def convert_to_lists(data):
@@ -844,11 +850,6 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END resample data onto new time vector =============
 
-            if first_value.metadata.ndim == 2:
-                # Transform 2D arrays.
-                # By default first dimension of 2D has coordinate that is second on the list
-                # FE expects data's first dimension to be connected with second dimension, thus this transformation
-                data_to_be_returned = transform_2D_data(data_to_be_returned)
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape
             except ValueError:
