@@ -35,14 +35,14 @@ def calculate_coordinate_shapes(shape: list[int], dims: int, n_coords: int):
     if dims < 0 or dims >= len(shape):
         raise ValueError("dims must be >= 0 and < len(shape)")
 
-    # Base dimensions (shared grid), e.g. [4, 5]
+    # Base dimensions (dimensions added by AoS in path), e.g. [4, 5]
     base = shape[:dims]
     # Remaining dimensions are coordinate dimensions, e.g. [10, 15]
     tail = shape[dims:]
     result = []
 
     # Create shapes for each coordinate dimension
-    for size in tail:
+    for size in reversed(tail):
         result.append(base + [size])
 
     # Add progressively reduced base shapes
