@@ -27,3 +27,6 @@ export function containsFloat(value: AxisValue): boolean {
 export function rgbToRgba(rgb: string, alpha: number): string {
   return rgb.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
 }
+
+export const round = (value: number, digits = 4) =>
+  Math.round(value * 10 ** digits) / 10 ** digits;

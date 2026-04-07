@@ -29,7 +29,7 @@ import {
   getFirstArrayValueFromShape,
 } from './matrix';
 import * as tf from '@tensorflow/tfjs';
-import { containsFloat, rgbToRgba } from './functions';
+import { containsFloat, rgbToRgba, round } from './functions';
 
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
@@ -734,32 +734,49 @@ export function getErrorsAreaToPlot(
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
 
   for (const mainPlot of mainPlots) {
-    if (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) {
-      // Add lower and upper
-      const lowerPlot = formatErrorBandLayout('lower', mainPlot, coordinates);
-      entirePlotList.push(lowerPlot);
-      const upperPlot = formatErrorBandLayout('upper', mainPlot, coordinates);
-      entirePlotList.push(upperPlot);
-    } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
-      // Symmetrical case: use upper for the interval
+    if (
+      (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) ||
+      (mainPlot?.error_bands && mainPlot?.error_bands.length === 1)
+    ) {
+      // Determine if we are in symmetrical case to use only upper for the interval
+      const isSymmetric =
+        mainPlot?.error_bands && mainPlot?.error_bands.length === 1;
+
+      // Add lower and upper plots
       const lowerPlot = formatErrorBandLayout(
         'lower',
         mainPlot,
         coordinates,
-        true,
+        isSymmetric,
       );
       entirePlotList.push(lowerPlot);
       const upperPlot = formatErrorBandLayout(
         'upper',
         mainPlot,
         coordinates,
-        true,
+        isSymmetric,
       );
       entirePlotList.push(upperPlot);
-    }
 
-    if (mainPlot?.error_bands) {
-      // Add main plot
+      // Format hovertemplate
+      const hoverText = mainPlot.error_bands[0].array.map((v, i) => {
+        const upperRounded = round(
+          mainPlot.error_bands[0].array[i] as number,
+          4,
+        );
+        if (mainPlot.error_bands.length === 1) {
+          return `y error bands: ±${Math.abs(upperRounded)}<br>`;
+        } else {
+          const lowerRounded = round(
+            mainPlot.error_bands[1].array[i] as number,
+            4,
+          );
+          if (upperRounded === lowerRounded) {
+            return `y error bands: ±${Math.abs(upperRounded)}<br>`;
+          }
+          return `upper y: +${Math.abs(upperRounded)}<br>lower y: ${-Math.abs(lowerRounded)}<br>`;
+        }
+      });
       if (mainPlot.error_bands.length === 2) {
         mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
           mainPlot.error_bands[0].array[i],
@@ -770,15 +787,13 @@ export function getErrorsAreaToPlot(
           mainPlot.error_bands[0].array[i],
         ]);
       }
+      mainPlot.text = hoverText;
       mainPlot.hovertemplate = 'x: %{x}<br>' + 'y: %{y}<br>';
-      if (mainPlot?.error_bands?.length) {
-        mainPlot.hovertemplate +=
-          mainPlot.error_bands.length === 2
-            ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
-            : 'y error bands: ±%{customdata[0]}<br>';
-      }
+      mainPlot.hovertemplate += '%{text}';
       mainPlot.hovertemplate += '<extra></extra>';
     }
+
+    // Add main plot
     entirePlotList.push(mainPlot);
   }
   return entirePlotList;
