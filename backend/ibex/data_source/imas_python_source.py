@@ -190,17 +190,22 @@ class IMASPythonSource(DataSourceInterface):
             metadata_dict["coordinates"] = list(chain.from_iterable(metadata_dict["coordinates"]))
 
             # ========== check if node and it's children have data ==========
+            try:
+                filled_paths = entry.list_filled_paths(ids, int(occurrence))
+                # pattern to remove array access operators from path ([:], [123]...)
+                pattern = r"\[:\]|\[\d+\]"
+                node_full_path = re.sub(pattern, "", f"{node_path}/{metadata_dict['name']}")
+                metadata_dict["has_data"] = node_full_path in filled_paths
 
-            filled_paths = entry.list_filled_paths(ids, int(occurrence))
-            # pattern to remove array access operators from path ([:], [123]...)
-            pattern = r"\[:\]|\[\d+\]"
-            node_full_path = re.sub(pattern, "", f"{node_path}/{metadata_dict['name']}")
-            metadata_dict["has_data"] = node_full_path in filled_paths
-
-            if "children" in metadata_dict.keys():
-                for c in metadata_dict["children"]:
-                    c_name = re.sub(pattern, "", f"{node_path}/{c['name']}")
-                    c["has_data"] = c_name in filled_paths
+                if "children" in metadata_dict.keys():
+                    for c in metadata_dict["children"]:
+                        c_name = re.sub(pattern, "", f"{node_path}/{c['name']}")
+                        c["has_data"] = c_name in filled_paths
+            except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                # proceed
+                ...
 
             # ========== END check if node and it's children have data ==========
 
