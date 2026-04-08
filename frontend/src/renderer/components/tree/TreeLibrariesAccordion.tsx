@@ -93,7 +93,11 @@ export const TreeLibrariesAccordion = ({
 
   return (
     <ScrollArea h={height}>
-      <Accordion onChange={handleAccordionChange} value={value || null}>
+      <Accordion
+        onChange={handleAccordionChange}
+        value={value || null}
+        {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+      >
         {items}
       </Accordion>
     </ScrollArea>

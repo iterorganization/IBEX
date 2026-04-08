@@ -25,11 +25,11 @@ module load nodejs
 
 Clone this repository and install the dependencies:
 
-HTTPS : `git clone https://git.iter.org/scm/imex/ibex.git`
+HTTPS : `git clone https://github.com/iterorganization/IBEX.git`
 
 or
 
-SSH : `git clone ssh://git@git.iter.org/imex/ibex.git`
+SSH : `git clone git@github.com:iterorganization/IBEX.git`
 
 ```
 cd frontend
@@ -42,11 +42,6 @@ Install the dependencies using npm:
 ```
 npm install
 ```
-
-### Environment Variables
-
-To define the environment variables, create a `.env` file in the root directory of the project. You can define different PORT or API_URL using by application.
-Refer to the `.env.example` file for the list of environment variables.
 
 ## Available Commands
 

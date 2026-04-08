@@ -24,8 +24,10 @@ export function PreferenceModal({
       centered
       transitionProps={{
         transition: 'fade',
-        duration: 0,
       }}
+      {...(window.env.E2E_TEST === 'true' && {
+        transitionProps: { duration: 0 },
+      })}
     >
       <Stack>
         {/* Main content */}

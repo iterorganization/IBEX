@@ -5,6 +5,7 @@ IBEX (IMAS variaBles EXplorer) is a general purpose graphical tool for exploring
 > [!NOTE]
 > This project is under active development, important changes may occur including in the backend endpoint API. 
 
+**Documentation:** https://imas-ibex.readthedocs.io/
 
 [Frontend readme](frontend/README.md)
 

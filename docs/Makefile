@@ -6,7 +6,7 @@
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = source
-GENERATEDDIR  = $(SOURCEDIR)/generated
+GENERATEDDIR  = $(SOURCEDIR)/developers_manual/backend_development/generated
 BUILDDIR      = _build
 PROJECT_ROOT  = ../backend
 
@@ -30,7 +30,7 @@ clean: Makefile
 # This recipe generates source files, so put result in source
 MODULE_EXCLUDE=""
 apidocs: Makefile
-	sphinx-apidoc --implicit-namespaces -o "$(GENERATEDDIR)" "$(PROJECT_ROOT)/backend/ibex" $(MODULE_EXCLUDE)
+	sphinx-apidoc --implicit-namespaces -o "$(GENERATEDDIR)" "$(PROJECT_ROOT)/ibex" $(MODULE_EXCLUDE)
 
 # Sphinx will run this automatically
 autogen: Makefile

@@ -1,13 +1,41 @@
 #!/bin/bash
 
 # Script to run E2E tests
+FRONTEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/..")
+
+BACKEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../../backend")
+
+echo "FRONTEND_ROOT_DIR: ${FRONTEND_ROOT_DIR}"
+echo "BACKEND_ROOT_DIR: ${BACKEND_ROOT_DIR}"
 
 # Root directory of the frontend
-FRONTEND_ROOT_DIR=$(realpath "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/..")
 source ${FRONTEND_ROOT_DIR}/ci/configure-env.sh
+
+cd ${BACKEND_ROOT_DIR}
+which python
+python --version
+
+python -m venv venv
+. venv/bin/activate
+echo "PWD: " `pwd`
+
+# PREPARE THE ENVIRONMENT
+pip install --upgrade pip setuptools wheel pytest-cov pytest-xdist
+pip install --upgrade .
 
 # Set up environment
 cd ${FRONTEND_ROOT_DIR}
+
+# Install frontend dependencies (required for cross-env and other local binaries)
+echo "Installing frontend npm dependencies..."
+npm ci
+
+# Start a virtual framebuffer so Electron can run headlessly in CI (no $DISPLAY)
+echo "Starting Xvfb virtual display..."
+Xvfb :99 -screen 0 1920x1080x24 &
+XVFB_PID=$!
+export DISPLAY=:99
+sleep 2  # give Xvfb time to initialise
 
 # Start Electron app
 echo "Starting Electron app for E2E tests..."
@@ -42,6 +70,12 @@ if ps -p "$APP_PID" > /dev/null; then
   kill -9 "$APP_PID" || true
 else
   echo "App stopped successfully."
+fi
+
+# Stop Xvfb virtual display
+if [ -n "$XVFB_PID" ]; then
+  echo "Stopping Xvfb (PID $XVFB_PID)..."
+  kill $XVFB_PID || true
 fi
 
 if [ $TEST_RESULT -eq 0 ]; then
