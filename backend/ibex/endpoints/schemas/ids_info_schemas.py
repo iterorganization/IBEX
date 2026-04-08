@@ -30,12 +30,18 @@ class NodeInfoResponse(BaseModel):
 # ========== FIND PATHS ==========
 
 
+class FoundPathModel(BaseModel):
+    """Inner model for FindPathsResponse"""
+
+    path: str = Field(description="", examples=["t_i_average", "path"])
+    has_data: Optional[bool] = Field(default=None, description="True if node contains data", examples=[True, False])
+
+
 class FindPathsResponse(BaseModel):
     """Response for /ids_info/find_paths endpoint"""
 
-    paths: list[dict] = Field(
-        description="List of dicts with path name and information if path contains data",
-        examples=[[{"path": "t_i_average", "has_data": True}, {"path": "psi", "has_data": False}]],
+    paths: list[FoundPathModel] = Field(
+        description="List of dicts with path name and information if path contains data"
     )
 
 

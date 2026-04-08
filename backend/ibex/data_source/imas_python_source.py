@@ -488,7 +488,13 @@ class IMASPythonSource(DataSourceInterface):
 
             for ids in ids_list:
                 try:
-                    filled_paths = entry.list_filled_paths(ids, occurrence=0)
+                    try:
+                        filled_paths = entry.list_filled_paths(ids, occurrence=0)
+                    except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                        # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                        # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                        # proceed
+                        filled_paths = []
                     ids_obj = entry.get(ids, occurrence=0, autoconvert=False, lazy=True)
                     paths = [node for node in imas.util.find_paths(ids_obj, searched_node)]
                     for path in paths:
@@ -501,7 +507,12 @@ class IMASPythonSource(DataSourceInterface):
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
                             path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
-                            found_paths.append({"path": path_name, "has_data": path in filled_paths})
+                            if not filled_paths:
+                                # every ids has at least one filled path. If not, it means functionality is not available.
+                                found_paths.append({"path": path_name, "has_data": None})
+                            else:
+                                path_has_data = path_in_filled_paths(path, filled_paths)
+                                found_paths.append({"path": path_name, "has_data": path_has_data})
 
                 except imas.exception.DataEntryException:
                     continue

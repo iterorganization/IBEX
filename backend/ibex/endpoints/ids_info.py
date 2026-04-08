@@ -59,10 +59,10 @@ def find_field(uri: str, searched_node: str, show_error_bars: bool = False) -> d
     | Response JSON is constructed as follows:
     | {
     |   "paths": [
-    |   <path_1 (str)>,
-    |   <path_2 (str)>,
+    |   {"path" : <path_1 (str)>, "has_data" : <has_data (bool)>},
+    |   {"path" : <path_2 (str)>, "has_data" : <has_data (bool)>},
     |   ...
-    |   <path_N (str)>,
+    |   {"path" : <path_N (str)>, "has_data" : <has_data (bool)>},
     |   ]
     | }
 
