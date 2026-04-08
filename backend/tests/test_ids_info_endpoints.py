@@ -1,4 +1,6 @@
 import pytest
+import imas_core
+from packaging.version import Version
 
 
 def test_node_info_coordinates(entry_path):
@@ -41,10 +43,6 @@ def test_node_info_empty_path(entry_path):
     assert set(root_children).issubset(set(response_children))
 
 
-import imas_core
-from packaging.version import Version
-
-
 @pytest.mark.skipif(
     Version(imas_core.__version__) < Version("5.7"), reason="List filled paths functionality requires IMAS-Core >= 5.7"
 )
@@ -65,8 +63,7 @@ def test_node_info_filled_paths(entry_path):
 
     json_dict = response.json()
     assert response.status_code == 200
-    print(json_dict)
-    assert json_dict["has_data"] == True
+    assert json_dict["has_data"]
     for child in json_dict["children"]:
         try:
             assert child["has_data"] == children_has_data[child["name"]]
