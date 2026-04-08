@@ -37,6 +37,7 @@ from ibex.data_source.exception import (
     InvalidParametersException,
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
+from ibex.data_source.imas_python_source_utils import path_in_filled_paths
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -197,12 +198,18 @@ class IMASPythonSource(DataSourceInterface):
                 # pattern to remove array access operators from path ([:], [123]...)
                 pattern = r"\[:\]|\[\d+\]"
                 node_full_path = re.sub(pattern, "", f"{node_path}/{metadata_dict['name']}")
-                metadata_dict["has_data"] = node_full_path in filled_paths
+                metadata_dict["has_data"] = path_in_filled_paths(node_full_path, filled_paths)
+
+                if node_path == "":
+                    # ids roots always have data (otherwise they cannot be obtained)
+                    metadata_dict["has_data"] = True
 
                 if "children" in metadata_dict.keys():
                     for c in metadata_dict["children"]:
                         c_name = re.sub(pattern, "", f"{node_path}/{c['name']}")
-                        c["has_data"] = c_name in filled_paths
+                        c_name = c_name[1:] if c_name[0] == "/" else c_name
+                        c["has_data"] = path_in_filled_paths(c_name, filled_paths)
+
             except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
                 # AttributeError - current version of IMAS-Python doesn't support list_filled paths
                 # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths

@@ -41,6 +41,40 @@ def test_node_info_empty_path(entry_path):
     assert set(root_children).issubset(set(response_children))
 
 
+import imas_core
+from packaging.version import Version
+
+
+@pytest.mark.skipif(
+    Version(imas_core.__version__) < Version("5.7"), reason="List filled paths functionality requires IMAS-Core >= 5.7"
+)
+def test_node_info_filled_paths(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles",
+    }
+    response = pytest.test_client.get("/ids_info/node_info", params=parameters)
+
+    # test some core_profiles nodes
+    children_has_data = {
+        "ids_properties": True,
+        "profiles_1d": True,
+        "profiles_2d": True,
+        "global_quantities": False,
+        "time": True,
+    }
+
+    json_dict = response.json()
+    assert response.status_code == 200
+    print(json_dict)
+    assert json_dict["has_data"] == True
+    for child in json_dict["children"]:
+        try:
+            assert child["has_data"] == children_has_data[child["name"]]
+        except KeyError:
+            # child node not used in this test
+            ...
+
+
 def test_find_paths(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}",
