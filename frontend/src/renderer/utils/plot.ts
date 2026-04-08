@@ -60,6 +60,7 @@ export const plotData = (
     y: yValue,
     yData: yData,
     name: name ? `${name}_${labelUri}` : '',
+    line: {},
     mode: 'lines',
     nodeUri: nodeUri,
     description: description,
@@ -734,6 +735,9 @@ export function getErrorsAreaToPlot(
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
 
   for (const mainPlot of mainPlots) {
+    // Add main plot
+    entirePlotList.push(mainPlot);
+
     if (
       (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) ||
       (mainPlot?.error_bands && mainPlot?.error_bands.length === 1)
@@ -792,9 +796,6 @@ export function getErrorsAreaToPlot(
       mainPlot.hovertemplate += '%{text}';
       mainPlot.hovertemplate += '<extra></extra>';
     }
-
-    // Add main plot
-    entirePlotList.push(mainPlot);
   }
   return entirePlotList;
 }
@@ -811,13 +812,20 @@ export const initPlotColors = async (
   const customContainer = customContainerRef.current;
   if (!customContainer) return;
   // Get child elements from the legend
-  const legends = customContainer.querySelectorAll<SVGGElement>('g.layers');
+  const legends = Array.from(
+    customContainer.querySelectorAll<SVGGElement>('g.layers'),
+  ).filter((g) => {
+    return g.previousSibling.textContent?.trim() !== 'error bands';
+  });
 
   const updatedPlotColors = setterForCustomization
-    ? JSON.parse(JSON.stringify(customizedDataGrid))
+    ? (JSON.parse(JSON.stringify(customizedDataGrid)) as DataGridPlot)
     : customizedDataGrid;
 
-  if (updatedPlotColors.plot.length > 1 && legends.length) {
+  if (
+    updatedPlotColors.plot.length &&
+    legends.length === updatedPlotColors.plot.length
+  ) {
     // When we have a color legend (so several plots)
     let plotIndex = 0;
     let shouldUpdateColors = false;
@@ -846,14 +854,21 @@ export const initPlotColors = async (
     if (!shouldUpdateColors) {
       return;
     }
-  } else if (
-    updatedPlotColors.plot.length === 1 &&
-    !updatedPlotColors.plot[0]?.line?.color
-  ) {
-    // When we have only one plot, there is no legend so we set manualy to the first plotly color
-    updatedPlotColors.plot[0].line = {
-      color: 'rgb(31, 119, 180)',
-    } as PlotLine;
+  } else if (updatedPlotColors.plot.length) {
+    // When we have only one plot, there is no legend so we set manualy to his default plotly color
+    const defaultColorsRGB = [
+      'rgb(31, 119, 180)',
+      'rgb(255, 127, 14)',
+      'rgb(44, 160, 44)',
+      'rgb(214, 39, 40)',
+      'rgb(148, 103, 189)',
+      'rgb(140, 86, 75)',
+    ];
+    for (const [index, plot] of updatedPlotColors.plot.entries()) {
+      if (!plot?.line?.color) {
+        plot.line = { ...plot.line, color: defaultColorsRGB[index] };
+      }
+    }
   }
   if (setterForCustomization) {
     setterForCustomization(updatedPlotColors);

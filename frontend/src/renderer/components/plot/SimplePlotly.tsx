@@ -99,6 +99,7 @@ export const SimplePlotly = ({
       x: 1.1,
       y: 1,
       orientation: 'v',
+      traceorder: 'normal',
     },
     plot_bgcolor: '#c7c7c7',
     dragmode: 'zoom',
