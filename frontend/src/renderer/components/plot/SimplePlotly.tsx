@@ -318,12 +318,15 @@ export const SimplePlotly = ({
     setTitle(itemDataGrid.title);
   }, [itemDataGrid.title]);
 
-  const handleInitPlotColor = async () => {
+  const handleInitPlotColor = async (
+    customContainerRef: React.MutableRefObject<HTMLDivElement>,
+    itemDataGrid: DataGridPlot,
+  ) => {
     await initPlotColors(itemDataGrid, customContainerRef);
   };
 
   useEffect(() => {
-    handleInitPlotColor();
+    handleInitPlotColor(customContainerRef, itemDataGrid);
   }, [customContainerRef.current, itemDataGrid.plot.length]);
 
   return (

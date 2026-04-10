@@ -31,6 +31,15 @@ import {
 import * as tf from '@tensorflow/tfjs';
 import { containsFloat, rgbToRgba } from './functions';
 
+const defaultColorsRGB = [
+  'rgb(31, 119, 180)',
+  'rgb(255, 127, 14)',
+  'rgb(44, 160, 44)',
+  'rgb(214, 39, 40)',
+  'rgb(148, 103, 189)',
+  'rgb(140, 86, 75)',
+];
+
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
  * @param coordinates The coordinates to include in the plot.
@@ -723,7 +732,7 @@ const formatErrorBandLayout = (
     errBandPartPlot.fill = 'tonexty';
     errBandPartPlot.fillcolor = mainPlot.line?.color
       ? rgbToRgba(mainPlot.line?.color, 0.2)
-      : rgbToRgba('rgb(0, 0, 0)', 0);
+      : rgbToRgba(defaultColorsRGB[0], 0.2);
   }
   return errBandPartPlot;
 };
@@ -843,14 +852,6 @@ export const initPlotColors = async (
     }
   } else if (updatedPlotColors.plot.length) {
     // When we have only one plot, there is no legend so we set manualy to his default plotly color
-    const defaultColorsRGB = [
-      'rgb(31, 119, 180)',
-      'rgb(255, 127, 14)',
-      'rgb(44, 160, 44)',
-      'rgb(214, 39, 40)',
-      'rgb(148, 103, 189)',
-      'rgb(140, 86, 75)',
-    ];
     for (const [index, plot] of updatedPlotColors.plot.entries()) {
       if (!plot?.line?.color) {
         plot.line = { ...plot.line, color: defaultColorsRGB[index] };
