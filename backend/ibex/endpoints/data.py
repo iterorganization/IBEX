@@ -1,7 +1,7 @@
 """Endpoints extracting data from data source"""
 
 import orjson
-from typing import List, Any
+from typing import List, Any, Optional
 
 from fastapi import APIRouter, Query  # type: ignore
 from fastapi.responses import ORJSONResponse  # type: ignore
@@ -74,7 +74,12 @@ def field_value(
     description="Returns single (or tensorized) data node value with detailed parameters used to plot the data",
 )
 @ibex_service.measure_execution_time
-def plot_data(uri: str, downsampling_method: str | None = Query(None), downsampled_size: int = 1000) -> Any:
+def plot_data(
+    uri: str,
+    interpolate_over: Optional[List[str]] = Query(None),
+    downsampling_method: str | None = Query(None),
+    downsampled_size: int = 1000,
+) -> Any:
     """
     IBEX endpoint. Prepares and returns full information about data node and it's coordinates.
 
@@ -109,9 +114,12 @@ def plot_data(uri: str, downsampling_method: str | None = Query(None), downsampl
     | }
 
     :param uri: IMAS URI with the path to leaf node
+    :param interpolate_over: list of IMAS URIs used in interpolation. E.g. imas:hdf5?path=/home/ITER/wasikj/Desktop/work/IBEX/testdb2#equilibrium/time_slice[:]/profiles_2d[:]/psi
     :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
     :param downsampled_size: target size of downsampled data
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
     """
-    return CustomORJSONResponse(ibex_service.get_plot_data(uri.strip(), downsampling_method, downsampled_size))
+    return CustomORJSONResponse(
+        ibex_service.get_plot_data(uri.strip(), interpolate_over, downsampling_method, downsampled_size)
+    )
