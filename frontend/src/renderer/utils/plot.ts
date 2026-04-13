@@ -694,6 +694,7 @@ const formatErrorBandLayout = (
   error_band_type: 'upper' | 'lower',
   mainPlot: DataPlotly,
   coordinates: Coordinates[],
+  plotIndex: number,
   symmetricalCase?: boolean,
 ) => {
   const mainY = mainPlot.y as number[];
@@ -732,7 +733,7 @@ const formatErrorBandLayout = (
     errBandPartPlot.fill = 'tonexty';
     errBandPartPlot.fillcolor = mainPlot.line?.color
       ? rgbToRgba(mainPlot.line?.color, 0.2)
-      : rgbToRgba(defaultColorsRGB[0], 0.2);
+      : rgbToRgba(defaultColorsRGB[plotIndex], 0.2);
   }
   return errBandPartPlot;
 };
@@ -743,15 +744,25 @@ export function getErrorsAreaToPlot(
 ) {
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
 
-  for (const mainPlot of mainPlots) {
+  for (const [plotIndex, mainPlot] of mainPlots.entries()) {
     // Add main plot
     entirePlotList.push(mainPlot);
 
     if (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) {
       // Add lower and upper
-      const lowerPlot = formatErrorBandLayout('lower', mainPlot, coordinates);
+      const lowerPlot = formatErrorBandLayout(
+        'lower',
+        mainPlot,
+        coordinates,
+        plotIndex,
+      );
       entirePlotList.push(lowerPlot);
-      const upperPlot = formatErrorBandLayout('upper', mainPlot, coordinates);
+      const upperPlot = formatErrorBandLayout(
+        'upper',
+        mainPlot,
+        coordinates,
+        plotIndex,
+      );
       entirePlotList.push(upperPlot);
     } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
       // Symmetrical case: use upper for the interval
@@ -759,6 +770,7 @@ export function getErrorsAreaToPlot(
         'lower',
         mainPlot,
         coordinates,
+        plotIndex,
         true,
       );
       entirePlotList.push(lowerPlot);
@@ -766,6 +778,7 @@ export function getErrorsAreaToPlot(
         'upper',
         mainPlot,
         coordinates,
+        plotIndex,
         true,
       );
       entirePlotList.push(upperPlot);
