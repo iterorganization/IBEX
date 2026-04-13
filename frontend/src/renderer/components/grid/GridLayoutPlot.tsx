@@ -12,7 +12,6 @@ import { Center, Container, Text } from '@mantine/core';
 import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import {
-  containsFloat,
   getArrayValueFromDependance,
   getErrorYVectors,
   getLastIndexedField,
@@ -201,40 +200,9 @@ export const GridLayoutPlot = ({
     }
   }, [data.plot]);
 
-  const updateSelectedPlotMode = (is3DView: boolean, active: Configuration) => {
-    const updatedDataPlot: DataGridPlot[] = JSON.parse(
-      JSON.stringify(active.dataPlot),
-    );
-    const selectedDataPlot = updatedDataPlot.find(
-      (dataPlot) => dataPlot.i === data.i,
-    );
-    if (selectedDataPlot?.selectedPlotMode) {
-      selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
-    } else {
-      selectedDataPlot.selectedPlotMode =
-        data.coordinates.length >= 2 &&
-        containsFloat(
-          data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
-        )
-          ? 'Heatmap'
-          : '1D';
-    }
-
-    const updatedActive: Configuration = {
-      ...active,
-      dataPlot: updatedDataPlot,
-    };
-    updatedConfiguration(updatedActive);
-  };
-
   useEffect(() => {
-    if ((data.selectedPlotMode === 'Heatmap') === is3DView) {
-      // Prevent from triggering updateSelectedPlotMode when initialize is3DView
-      return;
-    }
-
-    updateSelectedPlotMode(is3DView, active);
-  }, [is3DView]);
+    setIs3DView(data?.selectedPlotMode === 'Heatmap' ? true : false);
+  }, [data.selectedPlotMode]);
 
   /**
    * Handle the delete grid event
@@ -378,7 +346,6 @@ export const GridLayoutPlot = ({
           handleCustomization={handleCustomization}
           handleDeleteGrid={handleDeleteGrid}
           is3DView={is3DView}
-          setIs3DView={setIs3DView}
           active3DTab={active3DTab}
           setActive3DTab={setActive3DTab}
         />

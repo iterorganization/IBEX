@@ -896,7 +896,8 @@ export async function plotNodeUriLoaded(
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
               matchingCoord.shape = responseCoordinates.downsampled_shape;
-              matchingCoord.coord_dependencies = responseCoordinates.coordinates;
+              matchingCoord.coord_dependencies =
+                responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
               matchingCoord.target = updateIndexFieldName(
@@ -1895,7 +1896,9 @@ export async function applyRangeInCoord(
     }
 
     const dependencyIndex = (
-      JSON.parse(JSON.stringify(coordDependencie.coord_dependencies)) as string[]
+      JSON.parse(
+        JSON.stringify(coordDependencie.coord_dependencies),
+      ) as string[]
     )
       .reverse() // We reverse dependencies to get dependency index in the order of the matrix
       .findIndex((dep) => dep === coordinate.name);
