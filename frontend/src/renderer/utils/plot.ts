@@ -232,15 +232,6 @@ export const handleExistingPlot = async (
 
   for (const node of dataToPlot) {
     let defaultUri = node.uri;
-    if (defaultUri.split('#')[0] !== nodes[0].uri.split('#')[0]) {
-      showNotification({
-        title: 'Plot',
-        message: 'Unable to plot data from different URIs',
-        color: 'yellow',
-      });
-      updatedActive.checkedNodeURI = nodes.filter((n) => n !== node);
-      continue;
-    }
 
     // For each dataPlot call fetchDataPlot to get data from BE
     const response = await fetchDataPlot(
@@ -248,6 +239,7 @@ export const handleExistingPlot = async (
       findDataPlot?.downsampled_method,
       findDataPlot?.downsampled_size,
       node.type,
+      // TODO : send interpolate_over
     );
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
@@ -997,23 +989,12 @@ export async function plotNodeUriLoaded(
           try {
             const defaultUri = normalizeIndices(plot.nodeUri); // Normalize the URI to ensure it matches the expected format
 
-            if (
-              defaultUri.split('#')[0] !==
-              dataGrid.plot[0].nodeUri.split('#')[0]
-            ) {
-              showNotification({
-                title: 'Plot',
-                message: 'Unable to plot data from different URIs',
-                color: 'yellow',
-              });
-              continue;
-            }
-
             const response = await fetchDataPlot(
               defaultUri,
               dataGrid?.downsampled_method,
               dataGrid?.downsampled_size,
               dataGrid?.dataType,
+              // TODO : send interpolate_over
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
