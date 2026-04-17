@@ -5,7 +5,7 @@ from fastapi import APIRouter  # type: ignore
 from ibex.core import ibex_service
 from ibex.core.utils import DownsamplingMethods
 from ibex import __version__
-from ibex.endpoints.schemas.info_schemas import VersionResponse, DownsamplingMethodsResponse
+from ibex.endpoints.schemas.response_info_schemas import VersionResponse, DownsamplingMethodsResponse
 
 router = APIRouter()
 

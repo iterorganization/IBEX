@@ -1,13 +1,14 @@
 """Endpoints extracting data from data source"""
 
 import orjson
-from typing import List, Any, Optional
+from typing import List, Any, Annotated
 
 from fastapi import APIRouter, Query  # type: ignore
 from fastapi.responses import ORJSONResponse  # type: ignore
 
 from ibex.core import ibex_service
-from ibex.endpoints.schemas.data_schemas import FieldValueResponse, PlotDataResponse
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
+from ibex.endpoints.schemas.response_data_schemas import FieldValueResponse, PlotDataResponse
 
 router = APIRouter()
 
@@ -75,10 +76,7 @@ def field_value(
 )
 @ibex_service.measure_execution_time
 def plot_data(
-    uri: str,
-    interpolate_over: Optional[List[str]] = Query(None),
-    downsampling_method: str | None = Query(None),
-    downsampled_size: int = 1000,
+    plot_data_query: Annotated[PlotDataRequestModel, Query()]
 ) -> Any:
     """
     IBEX endpoint. Prepares and returns full information about data node and it's coordinates.
@@ -121,5 +119,5 @@ def plot_data(
     :return: JSON response
     """
     return CustomORJSONResponse(
-        ibex_service.get_plot_data(uri.strip(), interpolate_over, downsampling_method, downsampled_size)
+        ibex_service.get_plot_data(plot_data_query.uri.strip(), plot_data_query.interpolate_over, plot_data_query.downsampling_method, plot_data_query.downsampled_size)
     )
