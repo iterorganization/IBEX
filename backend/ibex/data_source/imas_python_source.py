@@ -207,17 +207,9 @@ class IMASPythonSource(DataSourceInterface):
                     metadata_dict["has_data"] = True
 
                 # update metadata dict
-                for child_metadata in metadata:
-                    try:
-                        child_dict = next(
-                            child
-                            for child in metadata_dict["children"]
-                            if child["name"] == f"{child_metadata.path_string.split('/')[-1]}"
-                        )
-                        child_dict["has_data"] = path_in_filled_paths(child_metadata.path_string, filled_paths)
-                    except StopIteration:
-                        # happens when searching for _error nodes when they are disabled in the endpoint
-                        ...
+                for child_dict in metadata_dict["children"]:
+                    child_metadata = metadata[child_dict["name"]]
+                    child_dict["has_data"] = path_in_filled_paths(child_metadata.path_string, filled_paths)
 
             # ========== END check if node and it's children have data ==========
 
