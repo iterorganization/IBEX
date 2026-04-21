@@ -9,6 +9,7 @@ import {
   DataGridPlot,
   DataPlotly,
   ErrorBandData,
+  FieldValueResponse,
   NodeInfoTypeEnum,
   PlotCoordinatesResponse,
   PlotDataResponse,
@@ -698,15 +699,58 @@ export const fetchErrorBands = async (
       forcedDownsamplingMethod || dataPlot?.downsampled_method;
     const downsamplingSize: number =
       forcedDownsamplingSize || dataPlot?.downsampled_size;
+    const urisToInterpolate = [
+      ...new Set(
+        dataPlot.plot
+          .map((p) => normalizeIndices(p.nodeUri))
+          .filter(
+            (nodeUri) =>
+              normalizeIndices(nodeUri) !== normalizeIndices(plot.nodeUri),
+          ),
+      ),
+    ];
+
+    let upperResponse, lowerResponse: FieldValueResponse;
 
     // Get error bands
-    const upperResponse = await fetchFieldValue(
-      // TODO : call plot_data if interpolated, else call field_value
-      normalizeIndices(plot.nodeUri) + '_error_upper',
-      downsamplingMethod,
-      downsamplingSize,
-      dataPlot?.dataType,
-    );
+    if (urisToInterpolate.length) {
+      const interpolatedUpper = await fetchDataPlot(
+        normalizeIndices(plot.nodeUri) + '_error_upper',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+        urisToInterpolate,
+      );
+      upperResponse = {
+        value: interpolatedUpper.data.value,
+      } as FieldValueResponse;
+
+      const interpolatedLower = await fetchDataPlot(
+        normalizeIndices(plot.nodeUri) + '_error_lower',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+        urisToInterpolate,
+      );
+      lowerResponse = {
+        value: interpolatedLower.data.value,
+      } as FieldValueResponse;
+    } else {
+      upperResponse = await fetchFieldValue(
+        normalizeIndices(plot.nodeUri) + '_error_upper',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+      );
+
+      lowerResponse = await fetchFieldValue(
+        normalizeIndices(plot.nodeUri) + '_error_lower',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+      );
+    }
+
     const defaultUpperYValue = getVectorData(
       dataPlot.coordinates,
       upperResponse.value,
@@ -718,13 +762,6 @@ export const fetchErrorBands = async (
       plot.nodeUri + '_error_upper',
     );
 
-    const lowerResponse = await fetchFieldValue(
-      // TODO : call plot_data if interpolated, else call field_value
-      normalizeIndices(plot.nodeUri) + '_error_lower',
-      downsamplingMethod,
-      downsamplingSize,
-      dataPlot?.dataType,
-    );
     const defaultLowerYValue = getVectorData(
       dataPlot.coordinates,
       lowerResponse.value,
