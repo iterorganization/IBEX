@@ -169,21 +169,30 @@ export const fetchDataPlot = async (
   downsamplingMethod?: string,
   downsamplingSize?: number,
   type?: NodeInfoTypeEnum,
+  interpolateOver?: string[],
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
   let firstMethod: string;
 
+  // Provide interpolate_over param if needed
+  let encodedInterpolateOver: string = '';
+  if (interpolateOver) {
+    for (const uriToInterpolate of interpolateOver) {
+      encodedInterpolateOver += `&interpolate_over=${encodeURIComponent(uriToInterpolate)}`;
+    }
+  }
+
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}`,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}`,
         5000,
       );
     } catch (error) {
@@ -195,7 +204,7 @@ export const fetchDataPlot = async (
           methods?.downsampling_methods.find((meth) => meth.name === 'M4')
             ?.name || methods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
         );
       }
     }
