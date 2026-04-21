@@ -9,6 +9,7 @@ import {
   DataGridPlot,
   DataPlotly,
   ErrorBandData,
+  NodeInfoTypeEnum,
   PlotCoordinatesResponse,
   PlotDataResponse,
   PlotLine,
@@ -140,11 +141,7 @@ export const handleNewPlot = async (
     };
 
     //Get coordinates data
-    formattedCoordinates = formatCoordinates(
-      response.data.coordinates,
-      defaultUri,
-      0,
-    );
+    formattedCoordinates = formatCoordinates(response.data.coordinates, 0);
   }
 
   // Set the yAxis properties
@@ -202,6 +199,84 @@ export const handleNewPlot = async (
 };
 
 /**
+ * Update DataGridPlot provided by including interpolation with the newest plot. In delete case, interpolate without the deleted one.
+ * @param findDataPlot
+ * @param plotToAdd
+ */
+const updateInterpolatedPlots = async (
+  findDataPlot: DataGridPlot,
+  plotToAdd?: string,
+  nodeType?: NodeInfoTypeEnum,
+) => {
+  let formattedCoordinates: Coordinates[];
+  const isInDeleteCase = !plotToAdd;
+  for (const [index, plot] of findDataPlot.plot.entries()) {
+    // Update all plots with the interpolation parameter
+    const urisToInterpolate = [
+      ...findDataPlot.plot
+        .map((p) => normalizeIndices(p.nodeUri))
+        .filter((p) => p !== normalizeIndices(plot.nodeUri)),
+    ];
+    if (plotToAdd) urisToInterpolate.push(plotToAdd);
+
+    const plotInterpolated = await fetchDataPlot(
+      normalizeIndices(plot.nodeUri),
+      findDataPlot?.downsampled_method,
+      findDataPlot?.downsampled_size,
+      nodeType,
+      urisToInterpolate,
+    );
+
+    let defaultXValue: number[] = [];
+    if (plotInterpolated.data.coordinates.length > 0) {
+      defaultXValue = getFirstArrayValueFromShape(
+        plotInterpolated.data.coordinates[0].value, // TODO transposition & valueIndex should we get axe index 0 instead
+        plotInterpolated.data.coordinates[0].shape as number[],
+      );
+    }
+    const defaultYValue = getFirstArrayValueFromShape(
+      plotInterpolated.data.value,
+      plotInterpolated.data.shape as number[],
+    );
+
+    // Update x, y & yData
+    plot.yData = plotInterpolated.data.value;
+    plot.x = defaultXValue;
+    plot.y = defaultYValue;
+
+    if (index === 0 && isInDeleteCase) {
+      // Update coordinates in delete case
+      formattedCoordinates = formatCoordinates(
+        plotInterpolated.data.coordinates,
+        0,
+      );
+      // Update common coordinates to the new interpolation in delete case
+      for (const [index, coord] of findDataPlot.coordinates.entries()) {
+        if (coord?.rangeValues)
+          formattedCoordinates[index].rangeValues = coord.rangeValues;
+      }
+      findDataPlot.coordinates = formattedCoordinates;
+    }
+
+    if (isInDeleteCase) {
+      // TODO : when calling BE for interpolation, we should reapply: transposition, valueIndex, cut (DONE)
+      // Apply range in delete case
+      for (const coordinate of findDataPlot.coordinates) {
+        if (coordinate?.rangeValues) {
+          findDataPlot = await applyRange(
+            coordinate,
+            coordinate.rangeValues,
+            findDataPlot,
+            [plot.nodeUri],
+            // ! Warning, if we want to preserve valueIndex we must add keepValueIndex to true
+          );
+        }
+      }
+    }
+  }
+};
+
+/**
  * @description Handles existing plots by checking if the nodes match the plot's nodes.
  * If they do, it updates the plot; otherwise, it fetches new data for the nodes.
  * @param nodes The nodes to update plots for.
@@ -227,11 +302,17 @@ export const handleExistingPlot = async (
   );
 
   if (dataToPlot.length === 0) {
-    return updateExistingPlot(nodes, findDataPlot, updatedActive);
+    // Delete a plot
+    return await updateExistingPlot(nodes, findDataPlot, updatedActive);
   }
 
   for (const node of dataToPlot) {
     let defaultUri = node.uri;
+    const urisToInterpolate = [
+      ...new Set(
+        findDataPlot.plot.map((plot) => normalizeIndices(plot.nodeUri)),
+      ),
+    ];
 
     // For each dataPlot call fetchDataPlot to get data from BE
     const response = await fetchDataPlot(
@@ -239,8 +320,25 @@ export const handleExistingPlot = async (
       findDataPlot?.downsampled_method,
       findDataPlot?.downsampled_size,
       node.type,
-      // TODO : send interpolate_over
+      urisToInterpolate,
     );
+    // STEP 1 : interpolate all plots
+    await updateInterpolatedPlots(findDataPlot, defaultUri, node.type);
+
+    // STEP 2 : Update the common coordinates from interpolation
+    // Update coordinates with the new interpolation
+    // ! Warning, at the moment we reset coordinates (transposition & values)
+    const formattedCoordinates = formatCoordinates(
+      response.data.coordinates,
+      0,
+    );
+    for (const [index, coord] of findDataPlot.coordinates.entries()) {
+      if (coord?.rangeValues)
+        formattedCoordinates[index].rangeValues = coord.rangeValues;
+    }
+
+    // Update coordinates to have a common one with interpolation
+    findDataPlot.coordinates = formattedCoordinates;
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
 
@@ -444,7 +542,7 @@ export const handleExistingPlot = async (
 
     // Apply range to new error bands when adding another plot
     for (const coordinate of updatedPlot.coordinates) {
-      if (coordinate?.range) {
+      if (coordinate?.rangeValues) {
         updatedPlot = await applyRange(
           coordinate,
           coordinate.rangeValues,
@@ -465,11 +563,11 @@ export const handleExistingPlot = async (
  * @param updatedActive The updated active configuration.
  * @returns The updated active configuration.
  */
-const updateExistingPlot = (
+const updateExistingPlot = async (
   nodes: URITreeNodeData[],
   findDataPlot: DataGridPlot,
   updatedActive: Configuration,
-): Configuration => {
+): Promise<Configuration> => {
   const plots = findDataPlot?.plot.filter((plot: DataPlotly) =>
     nodes.some(
       (node: URITreeNodeData) =>
@@ -499,6 +597,8 @@ const updateExistingPlot = (
     ...updatedActive.dataPlot.filter((plot) => plot.i !== findDataPlot.i),
     findDataPlot,
   ];
+  // Update all plots with interpolation here (in delete case)
+  await updateInterpolatedPlots(findDataPlot);
   return updatedActive;
 };
 
@@ -601,6 +701,7 @@ export const fetchErrorBands = async (
 
     // Get error bands
     const upperResponse = await fetchFieldValue(
+      // TODO : call plot_data if interpolated, else call field_value
       normalizeIndices(plot.nodeUri) + '_error_upper',
       downsamplingMethod,
       downsamplingSize,
@@ -618,6 +719,7 @@ export const fetchErrorBands = async (
     );
 
     const lowerResponse = await fetchFieldValue(
+      // TODO : call plot_data if interpolated, else call field_value
       normalizeIndices(plot.nodeUri) + '_error_lower',
       downsamplingMethod,
       downsamplingSize,
@@ -930,7 +1032,6 @@ export function formatConfigBeforeLoadingURIs(
  */
 function formatCoordinates(
   receivedCoords: PlotCoordinatesResponse[],
-  uri: string,
   valueIndex: number,
 ) {
   const formattedCoordinates: Coordinates[] = receivedCoords.map(
@@ -951,7 +1052,6 @@ function formatCoordinates(
           valueIndex === 0
             ? getDefaultUri(coordinate.target)
             : updateIndexFieldName(coordinate.target, lastField, valueIndex),
-        nodeUri: uri,
         axeIndex: index,
         unit: coordinate.unit || '',
       };
@@ -988,13 +1088,18 @@ export async function plotNodeUriLoaded(
 
           try {
             const defaultUri = normalizeIndices(plot.nodeUri); // Normalize the URI to ensure it matches the expected format
+            const urisToInterpolate = [
+              ...new Set(
+                dataGrid.plot.map((plot) => normalizeIndices(plot.nodeUri)),
+              ),
+            ];
 
             const response = await fetchDataPlot(
               defaultUri,
               dataGrid?.downsampled_method,
               dataGrid?.downsampled_size,
               dataGrid?.dataType,
-              // TODO : send interpolate_over
+              urisToInterpolate,
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);

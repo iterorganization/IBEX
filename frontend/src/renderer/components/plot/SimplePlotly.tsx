@@ -440,7 +440,7 @@ export const SimplePlotly = ({
           </Grid.Col>
         )}
 
-      {itemDataGrid.plot.every((plot) =>
+      {itemDataGrid.plot.some((plot) =>
         [plot.x, plot.y].every(isMatrixPlottable),
       ) ? (
         <Grid.Col
