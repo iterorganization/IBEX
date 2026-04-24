@@ -12,6 +12,7 @@ import {
   updateIndexFieldName,
   getLastIndexedField,
   transposeDataGrid,
+  getUrisToInterpolate,
 } from '../../../utils';
 import {
   Button,
@@ -169,17 +170,10 @@ export const CustomizeDataRange = ({
         let plotIndex = 0;
         for (const plot of updatedDataPlot.plot) {
           // Get original data for each plot
-          const urisToInterpolate = [
-            ...new Set(
-              updatedDataPlot.plot
-                .map((p) => normalizeIndices(p.nodeUri))
-                .filter(
-                  (nodeUri) =>
-                    normalizeIndices(nodeUri) !==
-                    normalizeIndices(plot.nodeUri),
-                ),
-            ),
-          ];
+          const urisToInterpolate = getUrisToInterpolate(
+            plot.nodeUri,
+            updatedDataPlot.plot,
+          );
           const dataRestored = await fetchDataPlot(
             normalizeIndices(plot.nodeUri),
             updatedDataPlot?.downsampled_method,
