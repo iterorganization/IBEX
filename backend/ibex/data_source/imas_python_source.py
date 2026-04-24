@@ -45,6 +45,7 @@ from ibex.data_source.imas_python_source_utils import (
     flatten,
     expand,
     calculate_coordinate_shapes,
+    data_smoothing,
 )
 
 
@@ -598,6 +599,8 @@ class IMASPythonSource(DataSourceInterface):
         node_path: str,
         occurrence: int = 0,
         interpolate_over: List[str] | None = None,
+        apply_smoothing: bool | None = False,
+        smoothing_sigma: float | None = 1,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
     ):
@@ -786,6 +789,13 @@ class IMASPythonSource(DataSourceInterface):
                 # By default first dimension of 2D has coordinate that is second on the list
                 # FE expects data's first dimension to be connected with second dimension, thus this transformation
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
+
+            # ============= BEGIN data smoothing =============
+            if apply_smoothing or True:
+                if smoothing_sigma is None:
+                    smoothing_sigma = 1
+                data_to_be_returned = data_smoothing(data_to_be_returned, smoothing_sigma)
+            # ============= END data smoothing =============
 
             # ============= BEGIN resample data onto new time vector =============
 

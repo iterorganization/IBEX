@@ -6,6 +6,7 @@ Backend development
 
    backend_development_introduction
    data_interpolation
+   data_manipulation
    adding_new_data_source
    adding_new_downsampling_method
    benchmarking

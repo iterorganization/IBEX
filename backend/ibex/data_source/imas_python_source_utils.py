@@ -3,6 +3,14 @@ from functools import reduce
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
 from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import gaussian_filter
+
+
+def data_smoothing(data: list, sigma: float = 1):
+    if isinstance(data, list):
+        return [data_smoothing(x) for x in data]
+    if isinstance(data, (np.ndarray, IDSNumericArray)):
+        return gaussian_filter(data, sigma=sigma)
 
 
 def union_arrays(data: list):

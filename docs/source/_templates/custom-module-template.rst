@@ -58,6 +58,7 @@
 .. autosummary::
    :toctree:
    :template: custom-module-template.rst
+   :recursive:
 {% for item in modules | reject("equalto", "test") %}
    {{ item }}
 {%- endfor %}

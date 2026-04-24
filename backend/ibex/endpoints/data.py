@@ -75,9 +75,7 @@ def field_value(
     description="Returns single (or tensorized) data node value with detailed parameters used to plot the data",
 )
 @ibex_service.measure_execution_time
-def plot_data(
-    plot_data_query: Annotated[PlotDataRequestModel, Query()]
-) -> Any:
+def plot_data(plot_data_query: Annotated[PlotDataRequestModel, Query()]) -> CustomORJSONResponse:
     """
     IBEX endpoint. Prepares and returns full information about data node and it's coordinates.
 
@@ -110,14 +108,21 @@ def plot_data(
     |     "value": <value(s)_of_selected_data_node>
     |   }
     | }
+    :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+    :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
 
-    :param uri: IMAS URI with the path to leaf node
-    :param interpolate_over: list of IMAS URIs used in interpolation. E.g. imas:hdf5?path=/home/ITER/wasikj/Desktop/work/IBEX/testdb2#equilibrium/time_slice[:]/profiles_2d[:]/psi
-    :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-    :param downsampled_size: target size of downsampled data
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
+
     """
+
     return CustomORJSONResponse(
-        ibex_service.get_plot_data(plot_data_query.uri.strip(), plot_data_query.interpolate_over, plot_data_query.downsampling_method, plot_data_query.downsampled_size)
+        ibex_service.get_plot_data(
+            uri=plot_data_query.uri.strip(),
+            interpolate_over=plot_data_query.interpolate_over,
+            apply_smoothing=plot_data_query.apply_smoothing,
+            smoothing_sigma=plot_data_query.smoothing_sigma,
+            downsampling_method=plot_data_query.downsampling_method,
+            downsampled_size=plot_data_query.downsampled_size,
+        )
     )

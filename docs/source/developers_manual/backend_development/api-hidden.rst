@@ -12,3 +12,6 @@ API autosummary
    :template: custom-module-template.rst
 
    ibex
+   ibex.endpoints.schemas
+
+
