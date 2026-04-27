@@ -19,10 +19,9 @@ def interpolation_entry_path_directory(tmp_path_factory):
         eq.time = np.asarray([1, 2, 3, 4])
         eq.time_slice.resize(4)
         for ts in eq.time_slice:
-
-            ts.profiles_1d.psi = np.asarray([1.0,1.2,1.3,1.4,1.5,1.6])
-            ts.profiles_1d.psi_error_upper = np.asarray([2.0,2.0,2.0,2.0,2.0,2.0])
-            ts.profiles_1d.psi_error_lower = np.asarray([0.5,0.5,0.5,0.5,0.5,0.5])
+            ts.profiles_1d.psi = np.asarray([1.0, 1.2, 1.3, 1.4, 1.5, 1.6])
+            ts.profiles_1d.psi_error_upper = np.asarray([2.0, 2.0, 2.0, 2.0, 2.0, 2.0])
+            ts.profiles_1d.psi_error_lower = np.asarray([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
 
             ts.profiles_2d.resize(2)
             for p2d in ts.profiles_2d:
@@ -38,10 +37,9 @@ def interpolation_entry_path_directory(tmp_path_factory):
         eq.time = np.asarray([1, 2, 3])
         eq.time_slice.resize(3)
         for ts in eq.time_slice:
-
-            ts.profiles_1d.psi = np.asarray([1.8,1.9,2.0,2.1])
-            ts.profiles_1d.psi_error_upper = np.asarray([2.5,2.5,2.5,2.5])
-            #ts.profiles_1d.psi_error_lower = np.asarray([1.5,1.5,1.5,1.5])
+            ts.profiles_1d.psi = np.asarray([1.8, 1.9, 2.0, 2.1])
+            ts.profiles_1d.psi_error_upper = np.asarray([2.5, 2.5, 2.5, 2.5])
+            # ts.profiles_1d.psi_error_lower = np.asarray([1.5,1.5,1.5,1.5])
 
             ts.profiles_2d.resize(4)
             for p2d in ts.profiles_2d:
