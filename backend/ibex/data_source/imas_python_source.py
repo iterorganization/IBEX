@@ -623,7 +623,7 @@ class IMASPythonSource(DataSourceInterface):
             self._check_data_is_leaf_node(ids_data)
 
             if self._is_empty(ids_data):
-                raise NoDataException(f"No data for {node_path}")
+                raise NoDataException(f"No data for {uri}#{ids}/{node_path}")
             coordinates_to_be_returned = []
 
             # =================================
@@ -641,7 +641,7 @@ class IMASPythonSource(DataSourceInterface):
                     # iterate over path elements. X stands target node path element, while Y stands for coordinate path elements
                     # we do this in order to fill dummy indexes with indexes extracted from target node path
                     for x, y in zip_longest(_node_path.items(), IDSPath(_coordinate_path).items()):
-                        # x[0] is node name in path eg. profiles_1d
+                        # x[0] is node name in path e.g. profiles_1d
                         # x[1] is indices or single index. For instance x=profiles_1d[123] -> x[0]=profiles_1d & x[1]=123
                         # the same applies to y
 
@@ -810,9 +810,13 @@ class IMASPythonSource(DataSourceInterface):
                     _uri_obj = IMAS_URI(_uri)
 
                     if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
-                        raise InvalidParametersException(
-                            "IDS name and node path should be the same for source and target URI when interpolating data"
-                        )
+                        if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
+                            # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
+                            ...
+                        else:
+                            raise InvalidParametersException(
+                                "IDS name and node path should be the same for source and target URI when interpolating data"
+                            )
 
                     interpolate_to_coordinates = self.get_plot_data(
                         uri=_uri_obj.uri_entry_identifiers,

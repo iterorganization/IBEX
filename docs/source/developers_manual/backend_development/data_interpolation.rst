@@ -17,6 +17,17 @@ Interpolation is only supported when the following condition is satisfied:
 The IDS name and node path must be identical for all URIs participating in the interpolation process
 (``e.g. #equilibrium/time_slice[:]/profiles_2d[:]/psi``)
 
+.. note::
+
+   There is one exception to this rule:
+
+   If the data node URI refers to an error bar node (i.e., a node with the _error_upper or _error_lower suffix),
+   the interpolate_over URI may instead point directly to the corresponding data node rather than another error bar node.
+
+   This behavior is particularly useful in cases where the error node provided via the ``interpolate_over`` parameter is empty.
+
+   e.g. ``uri=<IMAS_URI1>#equilibrium/time_slice[:]/profiles_2d[:]/psi_error_upper`` and ``interpolate_over=uri=<IMAS_URI2>#equilibrium/time_slice[:]/profiles_2d[:]/psi``
+
 Failure to meet this requirement will prevent interpolation from being performed.
 
 Implementation
