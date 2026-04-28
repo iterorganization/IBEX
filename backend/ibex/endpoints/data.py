@@ -108,6 +108,7 @@ def plot_data(plot_data_query: Annotated[PlotDataRequestModel, Query()]) -> Cust
     |     "value": <value(s)_of_selected_data_node>
     |   }
     | }
+
     :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
     :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
 
