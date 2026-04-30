@@ -8,18 +8,19 @@ import {
 } from '@mantine/core';
 import { DataGridPlot, DataPlotly } from '../../../types';
 import { useEffect, useState } from 'react';
+import { initPlotColors } from '../../../utils';
 
 interface Customize1DPlotProps {
   customizedDataGrid: DataGridPlot;
   selectedPlot: DataPlotly | null;
+  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
-  initPlotColors: () => void;
 }
 export const Customize1DPlot = ({
   customizedDataGrid,
   selectedPlot,
+  customContainerRef,
   setCustomizedDataGrid,
-  initPlotColors,
 }: Customize1DPlotProps) => {
   const [colorPlot, setColorPlot] = useState(selectedPlot?.line?.color || '');
 
@@ -87,7 +88,11 @@ export const Customize1DPlot = ({
       // Init color plot in component
       setColorPlot(selectedPlot.line.color);
     } else {
-      initPlotColors();
+      initPlotColors(
+        customizedDataGrid,
+        customContainerRef,
+        setCustomizedDataGrid,
+      );
     }
   }, [selectedPlot?.line]);
 
