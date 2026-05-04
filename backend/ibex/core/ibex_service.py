@@ -116,7 +116,11 @@ def get_multiple_node_data(uri: str) -> dict:
 
 
 def get_plot_data(
-    uri: str, interpolate_over: List[str] | None, downsampling_method: str | None, downsampled_size: int
+    uri: str,
+    interpolate_over: List[str] | None,
+    interpolation_method: str | None,
+    downsampling_method: str | None,
+    downsampled_size: int,
 ) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_plot_data(
@@ -125,6 +129,7 @@ def get_plot_data(
         node_path=uri_obj.node_path,
         occurrence=uri_obj.occurrence,
         interpolate_over=interpolate_over,
+        interpolation_method=interpolation_method,
         downsampling_method=downsampling_method,
         downsampled_size=downsampled_size,
     )

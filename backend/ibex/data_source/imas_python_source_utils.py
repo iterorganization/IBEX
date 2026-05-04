@@ -126,7 +126,9 @@ def pad_to_rectangular(lst):
     return arr
 
 
-def resample_data(original_coords: list, data: list, target_coords: list):
+def resample_data_with_interpolation(
+    original_coords: list, data: list, target_coords: list, interpolation_method: str | None = None
+):
     """
     Resamples data onto new set of coordinates.
     :param original_coords: List of original data coordinates.
@@ -134,7 +136,9 @@ def resample_data(original_coords: list, data: list, target_coords: list):
     :param target_coords: List of target coordinates.
     :return: Resampled data array.
     """
-    interpolator = RegularGridInterpolator(original_coords, data, bounds_error=False)
+    if not interpolation_method:
+        interpolation_method = "linear"
+    interpolator = RegularGridInterpolator(original_coords, data, bounds_error=False, method=interpolation_method)
 
     # build mesh grid (manipulate coordinates to be list of coordinates e.g. [[x1,y1,z1,h1...], [x2,y2,z2,h3...]])
     mesh = np.meshgrid(*target_coords, indexing="ij")
@@ -144,6 +148,44 @@ def resample_data(original_coords: list, data: list, target_coords: list):
 
     # revert mesh shape
     result = result.reshape([len(c) for c in target_coords])
+
+    return result
+
+
+def resample_data_without_interpolation(original_coords, data, target_coords):
+    """
+    Fast exact resampling using dictionaries.
+    Best for large grids / many dimensions.
+    """
+
+    # Create output array filled with NaN
+    output_shape = []
+    for target in target_coords:
+        output_shape.append(len(target))
+
+    result = np.full(output_shape, np.nan, dtype=float)
+
+    # Build target indices for each axis
+    target_indices = []
+
+    for orig, target in zip(original_coords, target_coords):
+        # Build dictionary: coordinate -> target index
+        lookup = {}
+        for i, value in enumerate(target):
+            lookup[value] = i
+
+        axis_indices = []
+
+        for value in orig:
+            axis_indices.append(lookup[value])
+
+        target_indices.append(axis_indices)
+
+    # Create mesh
+    mesh = np.meshgrid(*target_indices, indexing="ij")
+
+    # Copy data
+    result[tuple(mesh)] = data
 
     return result
 
