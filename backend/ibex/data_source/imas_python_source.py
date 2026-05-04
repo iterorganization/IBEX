@@ -40,7 +40,8 @@ from ibex.core.utils import downsample_data, transform_2D_data, find_first_value
 from ibex.core.utils import IMAS_URI
 from ibex.data_source.imas_python_source_utils import (
     convert_ids_data_into_numpy_array,
-    resample_data,
+    resample_data_with_interpolation,
+    resample_data_without_interpolation,
     pad_to_rectangular,
     flatten,
     expand,
@@ -598,6 +599,7 @@ class IMASPythonSource(DataSourceInterface):
         node_path: str,
         occurrence: int = 0,
         interpolate_over: List[str] | None = None,
+        interpolation_method: str | None = None,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
     ):
@@ -609,6 +611,7 @@ class IMASPythonSource(DataSourceInterface):
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
         :param interpolate_over: list of uris used in interpolation
+        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
         :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
         :param downsampled_size: target size of downsampled data
         :return: Dictionary containing data values, metadata and coordinates.
@@ -841,9 +844,19 @@ class IMASPythonSource(DataSourceInterface):
 
                 # === make data vector rectangular ===
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
-                data_to_be_returned = resample_data(
-                    tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
-                )
+
+                # === run interpolation ===
+                if interpolation_method == "exact_value":
+                    data_to_be_returned = resample_data_without_interpolation(
+                        tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
+                    )
+                else:
+                    data_to_be_returned = resample_data_with_interpolation(
+                        tuple(original_coord_values),
+                        data_to_be_returned,
+                        tuple(common_coords_values),
+                        interpolation_method=interpolation_method,
+                    )
 
                 new_coordinate_shapes = calculate_coordinate_shapes(
                     list(np.asarray(data_to_be_returned).shape),
