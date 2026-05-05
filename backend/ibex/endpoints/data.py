@@ -77,7 +77,7 @@ def field_value(
 def plot_data(
     uri: str,
     interpolate_over: Optional[List[str]] = Query(None),
-    interpolation_method: Optional[List[str]] = Query(None),
+    interpolation_method: Optional[str] = Query(None),
     downsampling_method: str | None = Query(None),
     downsampled_size: int = 1000,
 ) -> Any:

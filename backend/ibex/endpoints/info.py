@@ -111,7 +111,7 @@ def data_manipulation_methods() -> dict:
                         "description": "Method used during data interpolation. All possible for scipy.interpolate.RegularGridInterpolator 'method' parameter or 'exact'",
                         "possible_values": [
                             {
-                                "value": "exact",
+                                "value": "exact_value",
                                 "description": "values are present only on data points where they were originally. Rest of the data grid is filled with NaNs",
                             },
                             {

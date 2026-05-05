@@ -3,6 +3,7 @@ from functools import reduce
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
 from scipy.interpolate import RegularGridInterpolator
+from ibex.data_source.exception import InvalidParametersException
 
 
 def union_arrays(data: list):
@@ -138,7 +139,11 @@ def resample_data_with_interpolation(
     """
     if not interpolation_method:
         interpolation_method = "linear"
-    interpolator = RegularGridInterpolator(original_coords, data, bounds_error=False, method=interpolation_method)
+    try:
+        interpolator = RegularGridInterpolator(original_coords, data, bounds_error=False, method=interpolation_method)
+    except ValueError as e:
+        message = f"Invalid parameter passed to interpolator: {e}"
+        raise InvalidParametersException(message) from None
 
     # build mesh grid (manipulate coordinates to be list of coordinates e.g. [[x1,y1,z1,h1...], [x2,y2,z2,h3...]])
     mesh = np.meshgrid(*target_coords, indexing="ij")

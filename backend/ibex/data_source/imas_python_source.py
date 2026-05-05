@@ -846,7 +846,7 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
                 # === run interpolation ===
-                if interpolation_method == "exact_value":
+                if interpolation_method == "exact_value" or not interpolation_method:
                     data_to_be_returned = resample_data_without_interpolation(
                         tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                     )

@@ -16,7 +16,7 @@ def interpolation_entry_path_directory(tmp_path_factory):
         eq = entry.factory.equilibrium()
 
         eq.ids_properties.homogeneous_time = 1
-        eq.time = np.asarray([1, 2, 3, 4])
+        eq.time = np.asarray([1, 2, 3, 4], dtype=float)
         eq.time_slice.resize(4)
         for ts in eq.time_slice:
             ts.profiles_2d.resize(2)
@@ -30,7 +30,7 @@ def interpolation_entry_path_directory(tmp_path_factory):
         eq = entry.factory.equilibrium()
 
         eq.ids_properties.homogeneous_time = 1
-        eq.time = np.asarray([1, 2, 3])
+        eq.time = np.asarray([1, 2, 3], dtype=float)
         eq.time_slice.resize(3)
         for ts in eq.time_slice:
             ts.profiles_2d.resize(4)
