@@ -19,6 +19,21 @@ The IDS name and node path must be identical for all URIs participating in the i
 
 Failure to meet this requirement will prevent interpolation from being performed.
 
+Configuration
+--------------
+
+IBEX supports configurable interpolation behavior via the ``interpolation_method`` parameter of the ``/data/plot_data`` endpoint.
+
+By default, the ``exact_value`` method is used. In this mode, the interpolated dataset retains values only at the original data points, while the coordinate grid may be extended.
+No new values are computed between existing points.
+
+Other supported interpolation methods include ``linear``, ``nearest``, ``slinear``, ``cubic``, ``quintic``, and ``pchip``.
+These methods generate interpolated values across the full coordinate grid and follow the behavior described in the SciPy documentation for ``RegularGridInterpolator``.
+
+You can retrieve the full list of available interpolation methods by querying the ``/info/data_manipulation_methods`` endpoint.
+
+
+
 Implementation
 ---------------
 
