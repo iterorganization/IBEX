@@ -145,7 +145,9 @@ def list_idses(uri: str) -> dict:
 
 def find_paths(uri: str, searched_node: str, show_error_bars: bool = False) -> dict:
     uri_obj = IMAS_URI(uri)
-    return data_source.find_paths(uri_obj.uri_entry_identifiers, searched_node, show_error_bars)
+    return data_source.find_paths(
+        uri=uri_obj.uri_entry_identifiers, searched_node=searched_node, show_error_bars=show_error_bars
+    )
 
 
 def array_summary(uri: str) -> dict:

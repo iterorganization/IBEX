@@ -37,6 +37,7 @@ from ibex.data_source.exception import (
     InvalidParametersException,
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
+from ibex.data_source.imas_python_source_utils import path_in_filled_paths
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -190,6 +191,27 @@ class IMASPythonSource(DataSourceInterface):
             metadata_dict["coordinates"] = list(coordinates.values())
             # flatten list
             metadata_dict["coordinates"] = list(chain.from_iterable(metadata_dict["coordinates"]))
+
+            # ========== check if node and it's children have data ==========
+            try:
+                filled_paths = entry.list_filled_paths(ids, int(occurrence))
+            except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                ...  # proceed
+            else:
+                metadata_dict["has_data"] = path_in_filled_paths(metadata.path_string, filled_paths)
+
+                if metadata.path_string == "":
+                    # ids roots always have data (otherwise they cannot be obtained)
+                    metadata_dict["has_data"] = True
+
+                # update metadata dict
+                for child_dict in metadata_dict["children"]:
+                    child_metadata = metadata[child_dict["name"]]
+                    child_dict["has_data"] = path_in_filled_paths(child_metadata.path_string, filled_paths)
+
+            # ========== END check if node and it's children have data ==========
 
             # fill 'shape', but omit it if path points to more than one node
             if metadata_dict["ndim"] > 0 and ":" not in node_path:
@@ -395,10 +417,11 @@ class IMASPythonSource(DataSourceInterface):
         :param range:
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
-
         with self._open_entry(uri) as entry:
-            ids_root = self._get_ids_from_entry(entry, ids, occurrence)
-
+            try:
+                ids_root = self._get_ids_from_entry(entry, ids, occurrence)
+            except imas.exception.DataEntryException as e:
+                raise IdsNotFoundException(str(e)) from None
             ids_path = IDSPath(node_path)
             path_elements = list(ids_path.items())
             ids_data = self._get_raw_data(ids_root, path_elements)
@@ -460,6 +483,13 @@ class IMASPythonSource(DataSourceInterface):
 
             for ids in ids_list:
                 try:
+                    try:
+                        filled_paths = entry.list_filled_paths(ids, occurrence=0)
+                    except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                        # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                        # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                        # proceed
+                        filled_paths = []
                     ids_obj = entry.get(ids, occurrence=0, autoconvert=False, lazy=True)
                     paths = [node for node in imas.util.find_paths(ids_obj, searched_node)]
                     for path in paths:
@@ -471,7 +501,13 @@ class IMASPythonSource(DataSourceInterface):
                         # collect only leaf nodes
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
-                            found_paths.append(f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}")
+                            path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
+                            if not filled_paths:
+                                # every ids has at least one filled path. If not, it means functionality is not available.
+                                found_paths.append({"path": path_name, "has_data": None})
+                            else:
+                                path_has_data = path_in_filled_paths(path, filled_paths)
+                                found_paths.append({"path": path_name, "has_data": path_has_data})
 
                 except imas.exception.DataEntryException:
                     continue
