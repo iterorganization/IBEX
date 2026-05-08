@@ -1,4 +1,4 @@
-import { Data, ErrorBar } from 'plotly.js';
+import { Data } from 'plotly.js';
 import { Layout } from 'react-grid-layout';
 import { NodeInfoTypeEnum } from './nodes';
 
@@ -52,17 +52,21 @@ export type DataPlotly = BaseDataPlotly &
     y: (string | number)[];
     yData: AxisData;
     unit: string;
-    error_y?: ErrorBar;
     error_bands?: ErrorBandData[];
     path?: string;
     dimensions?: number;
     shape?: number[];
     description?: string;
+    hovertemplate?: string;
+    customdata?: Datum[] | Datum[][];
   };
+
+type Datum = string | number | Date;
 
 export type ErrorBandData = {
   path: string;
   yData: AxisData;
+  array: Datum[];
 };
 
 export type CustomPreferences = {

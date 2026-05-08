@@ -176,7 +176,7 @@ export const CustomizeDataRange = ({
             updatedDataPlot?.dataType,
           );
 
-          if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {
+          if (plot?.error_bands?.length > 0) {
             // Downsample restored error bands with latest parameters used if error bands exists for this plot
             await fetchErrorBands(updatedDataPlot, plot.nodeUri);
           }
@@ -282,8 +282,8 @@ export const CustomizeDataRange = ({
 
         const newCustomizedDataGrid = {
           ...customizedDataGrid,
-          coordinates: updatedDataPlot.coordinates,
-          plot: updatedDataPlot.plot,
+          coordinates: [...updatedDataPlot.coordinates],
+          plot: [...updatedDataPlot.plot],
         } as DataGridPlot;
         setCustomizedDataGrid(newCustomizedDataGrid);
         return newCustomizedDataGrid;

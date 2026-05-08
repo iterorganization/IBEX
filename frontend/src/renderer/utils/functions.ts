@@ -23,3 +23,7 @@ export function containsFloat(value: AxisValue): boolean {
 
   return typeof value === 'number' && !Number.isInteger(value);
 }
+
+export function rgbToRgba(rgb: string, alpha: number): string {
+  return rgb.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
+}
