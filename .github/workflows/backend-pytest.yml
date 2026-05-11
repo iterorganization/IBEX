@@ -1,4 +1,4 @@
-name: IBEX backend pytest
+name: backend pytest
 
 on: 
   push:
@@ -33,5 +33,20 @@ jobs:
           python -m pip install .[test]
 
       - name: Test with pytest
+        working-directory: backend
         run: |
+          mkdir -p test-reports
           python -m pytest -n auto --cov=ibex --cov-report=term-missing --cov-report=html --junit-xml=test-reports/pytest-report.xml tests
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: backend/test-reports/pytest-report.xml
+
+      - name: Upload coverage html
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: backend/htmlcov
+        
