@@ -62,7 +62,7 @@ def expand(data: list, grid_shape: list):
 
     :param data: 1D input array of shape (N,)
     :param grid_shape: target grid shape (e.g. [4, 3, 5])
-    :return: broadcasted array of shape (*grid_shape, N)
+    :return: broadcasted array of shape ``(*grid_shape, N)``
 
     :raises ValueError: if input data is not 1-dimensional
     """
