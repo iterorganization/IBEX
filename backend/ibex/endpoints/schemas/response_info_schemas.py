@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from ibex.core import data_manipulation_methods
 
 
 # ========== VERSION ==========
@@ -61,9 +62,4 @@ class DataManipulationMethodModel(BaseModel):
     )
 
 
-class DataManipulationMethodsResponse(BaseModel):
-    """Response for /info/data_manipulation_methods endpoint"""
-
-    data_manipulation_methods: list[DataManipulationMethodModel] = Field(
-        description="Available data manipulation methods"
-    )
+DataManipulationMethodsResponse = data_manipulation_methods.DataManipulationMethodsResponse
