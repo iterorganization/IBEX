@@ -122,8 +122,6 @@ def plot_data(plot_data_query: Annotated[PlotDataRequestModel, Query()]) -> Cust
             uri=plot_data_query.uri.strip(),
             interpolate_over=plot_data_query.interpolate_over,
             interpolation_method=plot_data_query.interpolation_method,
-            apply_smoothing=plot_data_query.apply_smoothing,
-            smoothing_sigma=plot_data_query.smoothing_sigma,
             downsampling_method=plot_data_query.downsampling_method,
             downsampled_size=plot_data_query.downsampled_size,
         )
