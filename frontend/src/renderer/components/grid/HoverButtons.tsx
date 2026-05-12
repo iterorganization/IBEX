@@ -243,6 +243,7 @@ export const HoverButtons = React.memo(
               {data.coordinates.length >= 2 && !shouldDisplayMetadata && (
                 <Tooltip label="Toggle 1D/Heatmap view">
                   <ActionIcon
+                    data-testid="toggle-plot-mode-button"
                     variant="filled"
                     aria-label="Toggle 1D/Heatmap view"
                     onClick={() =>

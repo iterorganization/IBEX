@@ -302,7 +302,7 @@ export const VisualizationTree = ({
 
   const getCurrentSelectedURI = useCallback(() => {
     return uriSelectedRef.current?.uri;
-  }, [uriSelected]);
+  }, [uriSelectedRef.current]);
 
   /**
    * Handle accordion change
