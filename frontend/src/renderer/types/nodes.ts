@@ -11,12 +11,14 @@ export type NodeInfoChildrenResponse = {
   name: string;
   ndim: number;
   type: NodeInfoTypeEnum;
+  has_data: boolean;
 };
 
 export type NodeInfoResponse = NodeInfoChildrenResponse & {
   shape: number[];
   coordinates: string[];
   children: NodeInfoChildrenResponse[];
+  has_data: boolean;
 };
 
 export type SearchNodeResponse = {
