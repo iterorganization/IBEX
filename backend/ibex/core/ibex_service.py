@@ -69,7 +69,7 @@ def get_node_info(uri: str, recursive: bool = False, show_error_bars: bool = Fal
     )
 
 
-def get_data(uri: str, downsampling_method: str | None, downsampled_size: int, range: List[int]) -> dict:
+def get_data(uri: str, downsampling_method: str | None, downsampled_size: int) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_data(
         uri=uri_obj.uri_entry_identifiers,
@@ -78,7 +78,6 @@ def get_data(uri: str, downsampling_method: str | None, downsampled_size: int, r
         occurrence=uri_obj.occurrence,
         downsampling_method=downsampling_method,
         downsampled_size=downsampled_size,
-        range=range,
     )
 
 
