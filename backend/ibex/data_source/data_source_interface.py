@@ -56,7 +56,15 @@ class DataSourceInterface(ABC):
         ...
 
     @abstractmethod
-    def get_data(self, uri: str, ids: str, node_path: str, occurrence: int = 0, downsampling_method: str | None = None, downsampled_size: int = 1000,) -> dict:
+    def get_data(
+        self,
+        uri: str,
+        ids: str,
+        node_path: str,
+        occurrence: int = 0,
+        downsampling_method: str | None = None,
+        downsampled_size: int = 1000,
+    ) -> dict:
         """
         Returns data extracted from IDS, converted into dictionary
 
