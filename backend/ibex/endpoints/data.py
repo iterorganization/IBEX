@@ -42,7 +42,6 @@ def field_value(
     uri: str,
     downsampling_method: str | None = Query(None),
     downsampled_size: int = 1000,
-    range: List[int] = Query(None),
 ) -> Any:
     """
     IBEX endpoint. Returns value extracted from pulsefile's leaf node.
@@ -59,7 +58,7 @@ def field_value(
     :return: JSON response
 
     """
-    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size, range))
+    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size))
 
 
 @router.get(
