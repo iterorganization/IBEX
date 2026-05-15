@@ -393,7 +393,6 @@ class IMASPythonSource(DataSourceInterface):
         occurrence: int = 0,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
-        range: List[int] | None = None,
     ) -> dict:
         """
         Returns data extracted from IDS, converted into dictionary
@@ -402,7 +401,8 @@ class IMASPythonSource(DataSourceInterface):
         :param ids: name of ids e.g. core_profiles
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
-        :param range:
+        :param downsampling_method: method to be used during downsampling process
+        :param downsampled_size: target size for downsampling
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
 
@@ -602,7 +602,7 @@ class IMASPythonSource(DataSourceInterface):
         interpolation_method: str | None = None,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
-    ):
+    ) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 

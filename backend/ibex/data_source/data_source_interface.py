@@ -56,7 +56,7 @@ class DataSourceInterface(ABC):
         ...
 
     @abstractmethod
-    def get_data(self, uri: str, ids: str, node_path: str, occurrence: int = 0, range: List[int] | None = None) -> dict:
+    def get_data(self, uri: str, ids: str, node_path: str, occurrence: int = 0, downsampling_method: str | None = None, downsampled_size: int = 1000,) -> dict:
         """
         Returns data extracted from IDS, converted into dictionary
 
@@ -64,7 +64,8 @@ class DataSourceInterface(ABC):
         :param ids: name of ids e.g. core_profiles
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
-        :param range:
+        :param downsampling_method: method to be used during downsampling process
+        :param downsampled_size: target size for downsampling
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
         ...
@@ -111,5 +112,31 @@ class DataSourceInterface(ABC):
         :param database: searched database name: default(None)
         :param version: searched AL major version:
         :return: dictionary {'entries': [<uri1>, <uri2>, ...]}
+        """
+        ...
+
+    def get_plot_data(
+        self,
+        uri: str,
+        ids: str,
+        node_path: str,
+        occurrence: int = 0,
+        interpolate_over: List[str] | None = None,
+        interpolation_method: str | None = None,
+        downsampling_method: str | None = None,
+        downsampled_size: int = 1000,
+    ) -> dict:
+        """
+        Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
+
+        :param uri: imas URI
+        :param ids: name of ids e.g. core_profiles
+        :param node_path: path to ids node e.g. ids_properties/version_put
+        :param occurrence: ids occurrence number
+        :param interpolate_over: list of uris used in interpolation
+        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
+        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
+        :param downsampled_size: target size of downsampled data
+        :return: Dictionary containing data values, metadata and coordinates.
         """
         ...
