@@ -116,12 +116,4 @@ def plot_data(plot_data_query: Annotated[PlotDataRequestModel, Query()]) -> Cust
 
     """
 
-    return CustomORJSONResponse(
-        ibex_service.get_plot_data(
-            uri=plot_data_query.uri.strip(),
-            interpolate_over=plot_data_query.interpolate_over,
-            interpolation_method=plot_data_query.interpolation_method,
-            downsampling_method=plot_data_query.downsampling_method,
-            downsampled_size=plot_data_query.downsampled_size,
-        )
-    )
+    return CustomORJSONResponse(ibex_service.get_plot_data(plot_data_query))

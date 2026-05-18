@@ -27,10 +27,10 @@ def _get_connected_parameter_possible_values(parameter_name: str) -> list[str]:
                 continue
 
             for possible_value in method_parameter.possible_values:
-                if not possible_value.parameters:
+                if not possible_value.additional_parameters:
                     continue
 
-                for connected_parameter in possible_value.parameters:
+                for connected_parameter in possible_value.additional_parameters:
                     if connected_parameter.name == parameter_name:
                         return connected_parameter.possible_values or []
 
@@ -95,7 +95,7 @@ class PlotDataBasicParameters(BaseModel):
     interpolate_over: Optional[List[str]] = Field(
         default=None, description="List of IMAS URIs to be used in data interpolation"
     )
-    interpolation_method: Optional[str] = (Field(default=None, description="Interpolation method to be used"),)
+    interpolation_method: str | None = Field(default=None, description="Interpolation method to be used")
     downsampling_method: str | None = Field(default=None, description="Downsampling method to be used")
     downsampled_size: int = Field(default=1000, description="Desired size of the data after downsampling")
     smoothing_method: SmoothingAlgorithms | None = Field(default=None, description="Smoothing method to be used")

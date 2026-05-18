@@ -15,7 +15,7 @@ class SmoothingMethod(str, Enum):
     SAVITZKY_GOLAY_FILTER = "savitzky–golay_filter"
 
 
-class ConnectedParameter(BaseModel):
+class AdditionalParameter(BaseModel):
     """
     Parameters for specific data manipulation methods. E.g. sigma -> for Gaussian smoothing
     """
@@ -33,7 +33,7 @@ class PossibleValue(BaseModel):
 
     value: str
     description: str
-    parameters: Optional[list[ConnectedParameter]] = None
+    additional_parameters: Optional[list[AdditionalParameter]] = None
 
 
 class DataManipulationParameter(BaseModel):
@@ -121,8 +121,8 @@ data_smoothing_method_parameter = DataManipulationParameter(
         PossibleValue(
             value=SmoothingMethod.GAUSSIAN_FILTER,
             description="values are present only on data points where they were originally. Rest of the data grid is filled with NaNs",
-            parameters=[
-                ConnectedParameter(
+            additional_parameters=[
+                AdditionalParameter(
                     name="gaussian_smoothing_sigma",
                     human_readable_name="Sigma",
                     description="Standard deviation for Gaussian kernel.",
@@ -132,34 +132,34 @@ data_smoothing_method_parameter = DataManipulationParameter(
         PossibleValue(
             value=SmoothingMethod.SAVITZKY_GOLAY_FILTER,
             description="see scipy.interpolate.RegularGridInterpolator documentation",
-            parameters=[
-                ConnectedParameter(
+            additional_parameters=[
+                AdditionalParameter(
                     name="savgol_smoothing_window_length",
                     human_readable_name="Window length",
                     description="The length of the filter window (i.e., the number of coefficients). If mode is ‘interp’, window_length must be less than or equal to the size of x.",
                 ),
-                ConnectedParameter(
+                AdditionalParameter(
                     name="savgol_smoothing_polyorder",
                     human_readable_name="Polyorder",
                     description="The order of the polynomial used to fit the samples. polyorder must be less than window_length.",
                 ),
-                ConnectedParameter(
+                AdditionalParameter(
                     name="savgol_smoothing_deriv",
                     human_readable_name="Deriv",
                     description="The order of the derivative to compute. This must be a nonnegative integer. The default is 0, which means to filter the data without differentiating.",
                 ),
-                ConnectedParameter(
+                AdditionalParameter(
                     name="savgol_smoothing_delta",
                     human_readable_name="Window delta",
                     description="The spacing of the samples to which the filter will be applied. This is only used if deriv > 0. Default is 1.0.",
                 ),
-                ConnectedParameter(
+                AdditionalParameter(
                     name="savgol_smoothing_mode",
                     human_readable_name="Mode",
                     description="This determines the type of extension to use for the padded signal to which the filter is applied.",
                     possible_values=["mirror", "constant", "nearest", "wrap", "interp"],
                 ),
-                ConnectedParameter(
+                AdditionalParameter(
                     name="savgol_smoothing_cval",
                     human_readable_name="C-Val",
                     description="Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.",

@@ -5,6 +5,7 @@ from typing import Optional, Sequence, List
 import imas  # type: ignore
 import numpy as np  # type: ignore
 import re  # type: ignore
+from copy import copy  # type: ignore
 from idstools.database import DBMaster  # type: ignore
 from imas.ids_metadata import IDSMetadata  # type: ignore
 from imas.ids_primitive import (
@@ -47,6 +48,7 @@ from ibex.data_source.imas_python_source_utils import (
     expand,
     calculate_coordinate_shapes,
 )
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -592,30 +594,20 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
-    def get_plot_data(
-        self,
-        uri: str,
-        ids: str,
-        node_path: str,
-        occurrence: int = 0,
-        interpolate_over: List[str] | None = None,
-        interpolation_method: str | None = None,
-        downsampling_method: str | None = None,
-        downsampled_size: int = 1000,
-    ) -> dict:
+    def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 
-        :param uri: imas URI
-        :param ids: name of ids e.g. core_profiles
-        :param node_path: path to ids node e.g. ids_properties/version_put
-        :param occurrence: ids occurrence number
-        :param interpolate_over: list of uris used in interpolation
-        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
-        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-        :param downsampled_size: target size of downsampled data
+        :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+        :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
         :return: Dictionary containing data values, metadata and coordinates.
         """
+
+        uri_obj = IMAS_URI(plot_data_query.uri)
+        uri = uri_obj.uri_entry_identifiers
+        ids = uri_obj.ids_name
+        node_path = uri_obj.node_path
+        occurrence = uri_obj.occurrence
 
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
@@ -800,7 +792,7 @@ class IMASPythonSource(DataSourceInterface):
                 else:
                     return data
 
-            if interpolate_over:
+            if plot_data_query.interpolate_over:
                 # =================== GATHER ALL COORDINATES ===================
                 original_coord_values = []
                 new_common_coords = coordinates_to_be_returned
@@ -809,7 +801,7 @@ class IMASPythonSource(DataSourceInterface):
                     original_coord_values.append(sorted(set(flatten(c["value"]))))
                 original_coord_values.reverse()
 
-                for _uri in interpolate_over:
+                for _uri in plot_data_query.interpolate_over:
                     _uri_obj = IMAS_URI(_uri)
 
                     if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
@@ -817,14 +809,10 @@ class IMASPythonSource(DataSourceInterface):
                             "IDS name and node path should be the same for source and target URI when interpolating data"
                         )
 
-                    interpolate_to_coordinates = self.get_plot_data(
-                        uri=_uri_obj.uri_entry_identifiers,
-                        ids=_uri_obj.ids_name,
-                        node_path=_uri_obj.node_path,
-                        occurrence=_uri_obj.occurrence,
-                        downsampling_method=downsampling_method,
-                        downsampled_size=downsampled_size,
-                    )["data"]["coordinates"]
+                    new_plot_data_query = copy(plot_data_query)
+                    new_plot_data_query.uri = _uri
+                    new_plot_data_query.interpolate_over = None
+                    interpolate_to_coordinates = self.get_plot_data(new_plot_data_query)["data"]["coordinates"]
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
                         message = "Interpolation error. Source and target nodes have different number of coordinates."
@@ -846,7 +834,7 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
                 # === run interpolation ===
-                if interpolation_method == "exact_value" or not interpolation_method:
+                if plot_data_query.interpolation_method == "exact_value" or not plot_data_query.interpolation_method:
                     data_to_be_returned = resample_data_without_interpolation(
                         tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                     )
@@ -855,7 +843,7 @@ class IMASPythonSource(DataSourceInterface):
                         tuple(original_coord_values),
                         data_to_be_returned,
                         tuple(common_coords_values),
-                        interpolation_method=interpolation_method,
+                        interpolation_method=plot_data_query.interpolation_method,
                     )
 
                 new_coordinate_shapes = calculate_coordinate_shapes(
@@ -881,15 +869,17 @@ class IMASPythonSource(DataSourceInterface):
                     # If coordinate targets node -> downsample coordinate as well
                     coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
                         data_to_be_returned,
-                        target_size=downsampled_size,
-                        method=downsampling_method,
+                        target_size=plot_data_query.downsampled_size,
+                        method=plot_data_query.downsampling_method,
                         x=coordinates_to_be_returned[0]["value"],
                         single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
                     )
 
                 else:
                     _, data_to_be_returned = downsample_data(
-                        data_to_be_returned, target_size=downsampled_size, method=downsampling_method
+                        data_to_be_returned,
+                        target_size=plot_data_query.downsampled_size,
+                        method=plot_data_query.downsampling_method,
                     )
             # serialize coordinates and update shapes (they could be changed by downsampling)
             for c in coordinates_to_be_returned:

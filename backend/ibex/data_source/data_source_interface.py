@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Sequence, Optional, List
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
 class DataSourceInterface(ABC):
@@ -123,28 +124,12 @@ class DataSourceInterface(ABC):
         """
         ...
 
-    def get_plot_data(
-        self,
-        uri: str,
-        ids: str,
-        node_path: str,
-        occurrence: int = 0,
-        interpolate_over: List[str] | None = None,
-        interpolation_method: str | None = None,
-        downsampling_method: str | None = None,
-        downsampled_size: int = 1000,
-    ) -> dict:
+    def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 
-        :param uri: imas URI
-        :param ids: name of ids e.g. core_profiles
-        :param node_path: path to ids node e.g. ids_properties/version_put
-        :param occurrence: ids occurrence number
-        :param interpolate_over: list of uris used in interpolation
-        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
-        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-        :param downsampled_size: target size of downsampled data
+        :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+        :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
         :return: Dictionary containing data values, metadata and coordinates.
         """
         ...
