@@ -69,6 +69,33 @@ def test_plot_data(entry_path):
     assert time_coordinate["description"] == "Generic time"
 
 
+def test_plot_data_with_gaussian_smoothing(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([1.42, 2.06, 3.0, 3.93, 4.57], 0.1)
+
+
+def test_plot_data_with_savgol_smoothing(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
+        "smoothing_method": "savitzky–golay_filter",
+        "savgol_smoothing_window_length": 5,
+        "savgol_smoothing_polyorder": 2,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([0.99, 2.0, 3.0, 4.0, 5.0], 0.1)
+
+
 def test_plot_data_2d(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[:]/ion[:]/temperature",
@@ -122,3 +149,32 @@ def test_plot_data_1_N_coord(entry_path):
     assert numeric_coordinate["ndim"] == 1
     assert numeric_coordinate["path"] == ""
     assert numeric_coordinate["description"] == "1...N"
+
+
+def test_plot_data_requires_gaussian_sigma(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
+        "smoothing_method": "gaussian_filter",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+
+    assert response.status_code == 422
+    assert "gaussian_smoothing_sigma is required" in response.text
+
+
+def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
+    base_parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
+        "smoothing_method": "savitzky–golay_filter",
+    }
+
+    response = pytest.test_client.get("/data/plot_data", params=base_parameters)
+    assert response.status_code == 422
+    assert "savgol_smoothing_window_length is required" in response.text
+
+    response = pytest.test_client.get(
+        "/data/plot_data",
+        params={**base_parameters, "savgol_smoothing_window_length": 5},
+    )
+    assert response.status_code == 422
+    assert "savgol_smoothing_polyorder is required" in response.text

@@ -1,7 +1,7 @@
 """Endpoints extracting data from data source"""
 
 import orjson
-from typing import List, Any, Annotated
+from typing import Any, Annotated
 
 from fastapi import APIRouter, Query  # type: ignore
 from fastapi.responses import ORJSONResponse  # type: ignore

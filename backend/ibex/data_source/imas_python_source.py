@@ -47,7 +47,10 @@ from ibex.data_source.imas_python_source_utils import (
     flatten,
     expand,
     calculate_coordinate_shapes,
+    apply_savgol_filter,
+    apply_gaussian_filter,
 )
+from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
@@ -782,6 +785,27 @@ class IMASPythonSource(DataSourceInterface):
                 # FE expects data's first dimension to be connected with second dimension, thus this transformation
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
 
+            # ============= BEGIN data smoothing ============
+
+            if plot_data_query.smoothing_method is not None:
+                if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+                    data_to_be_returned = apply_savgol_filter(
+                        data_to_be_returned,
+                        window_length=plot_data_query.savgol_smoothing_window_length,
+                        polyorder=plot_data_query.savgol_smoothing_polyorder,
+                        deriv=plot_data_query.savgol_smoothing_deriv,
+                        delta=plot_data_query.savgol_smoothing_delta,
+                        mode=plot_data_query.savgol_smoothing_mode,
+                        cval=plot_data_query.savgol_smoothing_cval,
+                    )
+
+                elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
+                    data_to_be_returned = apply_gaussian_filter(
+                        data_to_be_returned, sigma=plot_data_query.gaussian_smoothing_sigma
+                    )
+
+            # ============= END data smoothing =============
+
             # ============= BEGIN resample data onto new time vector =============
 
             def convert_to_lists(data):
@@ -834,7 +858,10 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
                 # === run interpolation ===
-                if plot_data_query.interpolation_method == "exact_value" or not plot_data_query.interpolation_method:
+                if (
+                    plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE
+                    or not plot_data_query.interpolation_method
+                ):
                     data_to_be_returned = resample_data_without_interpolation(
                         tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                     )

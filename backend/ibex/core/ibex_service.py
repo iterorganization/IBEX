@@ -3,7 +3,7 @@
 import time
 from pathlib import Path
 from functools import wraps  # for measure_execution_time()
-from typing import Any, Callable, Optional, Sequence, List
+from typing import Any, Callable, Optional, Sequence
 
 from ibex.data_source.imas_python_source import IMASPythonSource
 from ibex.data_source.exception import CannotGenerateUriException

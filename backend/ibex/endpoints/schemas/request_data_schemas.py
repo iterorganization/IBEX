@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
-from ibex.core.data_manipulation_methods import available_methods
+from ibex.core.data_manipulation_methods import available_methods, SmoothingMethod
 from enum import Enum
 
 
@@ -43,13 +43,6 @@ SavgolSmoothingMode = Enum(
     {value.upper(): value for value in _get_connected_parameter_possible_values("savgol_smoothing_mode")},
     type=str,
 )
-
-SmoothingAlgorithms = Enum(
-    "SmoothingAlgorithm",
-    {value.upper(): value for value in _get_parameter_possible_values("smoothing_method")},
-    type=str,
-)
-
 
 # ========== PLOT DATA ==========
 
@@ -98,7 +91,24 @@ class PlotDataBasicParameters(BaseModel):
     interpolation_method: str | None = Field(default=None, description="Interpolation method to be used")
     downsampling_method: str | None = Field(default=None, description="Downsampling method to be used")
     downsampled_size: int = Field(default=1000, description="Desired size of the data after downsampling")
-    smoothing_method: SmoothingAlgorithms | None = Field(default=None, description="Smoothing method to be used")
+    smoothing_method: SmoothingMethod | None = Field(default=None, description="Smoothing method to be used")
 
 
-class PlotDataRequestModel(PlotDataBasicParameters, SavgolSmoothingParameters, GaussianSmoothingParameters): ...
+class PlotDataRequestModel(PlotDataBasicParameters, SavgolSmoothingParameters, GaussianSmoothingParameters):
+    @model_validator(mode="after")
+    def validate_gaussian_smoothing_parameters(self) -> "PlotDataRequestModel":
+        if self.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER and self.gaussian_smoothing_sigma is None:
+            raise ValueError("gaussian_smoothing_sigma is required when smoothing_method is 'gaussian_filter'")
+
+        if self.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+            if self.savgol_smoothing_window_length is None:
+                raise ValueError(
+                    "savgol_smoothing_window_length is required when smoothing_method is 'savitzky_golay_filter'"
+                )
+
+            if self.savgol_smoothing_polyorder is None:
+                raise ValueError(
+                    "savgol_smoothing_polyorder is required when smoothing_method is 'savitzky_golay_filter'"
+                )
+
+        return self

@@ -1,7 +1,6 @@
-from dataclasses import dataclass
 from typing import Optional
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class InterpolationMethod(str, Enum):

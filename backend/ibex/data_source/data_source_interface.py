@@ -1,7 +1,7 @@
 """Interface for all data sources"""
 
 from abc import ABC, abstractmethod
-from typing import Sequence, Optional, List
+from typing import Sequence, Optional
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
