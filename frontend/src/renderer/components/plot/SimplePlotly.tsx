@@ -1,6 +1,6 @@
 import { Center, Grid, Group, Select, Text } from '@mantine/core';
 import { Layout, AxisType } from 'plotly.js';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Configuration, Coordinates, DataGridPlot } from 'src/renderer/types';
 import { VerticalSlider } from '../verticalSlider';
@@ -8,6 +8,8 @@ import { useIbexStore } from '../../stores';
 import {
   compareByAxeIndex,
   getArrayValueFromDependance,
+  getErrorsAreaToPlot,
+  initPlotColors,
   isMatrixPlottable,
   removeSuffix,
   swapAxis,
@@ -36,6 +38,12 @@ export const SimplePlotly = ({
   is3DView,
   handleUpdateCoordinate,
 }: SimplePlotlyProps) => {
+  const dataToPlotWithErrorBands = useMemo(() => {
+    return getErrorsAreaToPlot(
+      structuredClone(itemDataGrid.plot),
+      structuredClone(itemDataGrid.coordinates),
+    );
+  }, [itemDataGrid.plot, itemDataGrid.coordinates]);
   const coordsUsedInAxes: 1 | 2 = 1;
   const { active, updatedConfiguration } = useIbexStore();
   const SELECT_AXIS_HEIGHT = 40; // Height of the select axis component
@@ -91,6 +99,7 @@ export const SimplePlotly = ({
       x: 1.1,
       y: 1,
       orientation: 'v',
+      traceorder: 'normal',
     },
     plot_bgcolor: '#c7c7c7',
     dragmode: 'zoom',
@@ -106,6 +115,7 @@ export const SimplePlotly = ({
   const layoutPlotWidth = showSliders
     ? width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1)
     : width;
+  const customContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Check data entries to update axes titles when needed
@@ -308,8 +318,20 @@ export const SimplePlotly = ({
     setTitle(itemDataGrid.title);
   }, [itemDataGrid.title]);
 
+  const handleInitPlotColor = async (
+    customContainerRef: React.MutableRefObject<HTMLDivElement>,
+    itemDataGrid: DataGridPlot,
+  ) => {
+    await initPlotColors(itemDataGrid, customContainerRef);
+  };
+
+  useEffect(() => {
+    handleInitPlotColor(customContainerRef, itemDataGrid);
+  }, [customContainerRef.current, itemDataGrid.plot.length]);
+
   return (
     <Grid
+      ref={customContainerRef}
       styles={{
         inner: {
           margin: 0,
@@ -435,7 +457,7 @@ export const SimplePlotly = ({
           <div ref={plotDivRef}>
             <Plot
               className={classes.simplePlot}
-              data={itemDataGrid.plot}
+              data={dataToPlotWithErrorBands}
               config={{
                 autosizable: false,
                 staticPlot: !itemDataGrid.static,

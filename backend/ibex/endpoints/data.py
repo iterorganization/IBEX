@@ -41,7 +41,6 @@ def field_value(
     uri: str,
     downsampling_method: str | None = Query(None),
     downsampled_size: int = 1000,
-    range: List[int] = Query(None),
 ) -> Any:
     """
     IBEX endpoint. Returns value extracted from pulsefile's leaf node.
@@ -58,7 +57,7 @@ def field_value(
     :return: JSON response
 
     """
-    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size, range))
+    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size))
 
 
 @router.get(
@@ -77,6 +76,7 @@ def field_value(
 def plot_data(
     uri: str,
     interpolate_over: Optional[List[str]] = Query(None),
+    interpolation_method: Optional[str] = Query(None),
     downsampling_method: str | None = Query(None),
     downsampled_size: int = 1000,
 ) -> Any:
@@ -115,11 +115,18 @@ def plot_data(
 
     :param uri: IMAS URI with the path to leaf node
     :param interpolate_over: list of IMAS URIs used in interpolation. E.g. imas:hdf5?path=/home/ITER/wasikj/Desktop/work/IBEX/testdb2#equilibrium/time_slice[:]/profiles_2d[:]/psi
+    :param interpolation_method: method of interpolation; one of the possible parameters provided from /info/data_manipulation_methods
     :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
     :param downsampled_size: target size of downsampled data
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
     """
     return CustomORJSONResponse(
-        ibex_service.get_plot_data(uri.strip(), interpolate_over, downsampling_method, downsampled_size)
+        ibex_service.get_plot_data(
+            uri=uri.strip(),
+            interpolate_over=interpolate_over,
+            interpolation_method=interpolation_method,
+            downsampling_method=downsampling_method,
+            downsampled_size=downsampled_size,
+        )
     )
