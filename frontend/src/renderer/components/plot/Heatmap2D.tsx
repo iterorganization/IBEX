@@ -415,7 +415,15 @@ export const Heatmap2D = ({
             ref={plotRef}
             data={[
               {
-                type: 'heatmap',
+                type:
+                  itemDataGrid.selectedPlotMode === 'Heatmap'
+                    ? 'heatmap'
+                    : itemDataGrid.selectedPlotMode === 'Geometry'
+                      ? 'contour'
+                      : plotRef.current.props.data[0].type,
+                contours: {
+                  coloring: 'lines',
+                },
                 colorscale:
                   itemDataGrid.plot[parseInt(plotIndex)]?.customPreferences
                     ?.colorscale || 'Viridis',

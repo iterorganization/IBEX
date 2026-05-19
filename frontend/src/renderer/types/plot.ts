@@ -103,7 +103,7 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   coordinates?: Coordinates[];
   downsampled_method?: string;
   downsampled_size?: number;
-  selectedPlotMode?: 'Heatmap' | '1D';
+  selectedPlotMode?: PlotType;
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
@@ -116,3 +116,5 @@ export type synchronizedList = {
   color: string;
   list: string[];
 };
+
+export type PlotType = '1D' | 'Heatmap' | 'Geometry';

@@ -1,5 +1,5 @@
 import classes from './HoverButtons.module.css';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Group,
   Tooltip,
@@ -8,21 +8,19 @@ import {
   Tabs,
   Switch,
   ScrollArea,
+  Menu,
 } from '@mantine/core';
 import {
   IconBrandDatabricks,
   IconCheck,
   IconEdit,
+  IconGeometry,
   IconPalette,
   IconTrash,
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
-import { Configuration, DataGridPlot } from '../../types';
-import {
-  applyRange,
-  containsFloat,
-  fetchErrorBandsInConfig,
-} from '../../utils';
+import { Configuration, DataGridPlot, PlotType } from '../../types';
+import { applyRange, fetchErrorBandsInConfig } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
@@ -54,9 +52,16 @@ export const HoverButtons = React.memo(
     const previousValueDisplayErrorBands = useRef<boolean | undefined>(
       undefined,
     );
+    const [plotMode, setPlotMode] = useState<PlotType>(
+      active.dataPlot.find((dataPlot) => dataPlot.i === data.i)
+        ?.selectedPlotMode,
+    );
+    const [plotTypeMenuOpened, setPlotTypeMenuOpened] = useState(false);
+    const [forcePlotTypeMenuOpened, setForcePlotTypeMenuOpened] =
+      useState(false);
 
     const heatmapLogo = (
-      <svg width="50" height="50" viewBox="0 0 50 50">
+      <svg width="20" height="20" viewBox="0 0 50 50">
         <rect x="0" y="0" width="15" height="15" fill="#440154" />
         <rect x="17" y="0" width="15" height="15" fill="#31688e" />
         <rect x="34" y="0" width="15" height="15" fill="#35b779" />
@@ -70,6 +75,15 @@ export const HoverButtons = React.memo(
         <rect x="34" y="34" width="15" height="15" fill="#440154" />
       </svg>
     );
+
+    const modes: {
+      value: PlotType;
+      icon?: React.ReactNode;
+    }[] = [
+      { value: '1D' },
+      { value: 'Heatmap', icon: heatmapLogo },
+      { value: 'Geometry', icon: <IconGeometry width={20} /> },
+    ];
 
     const updateDisplayErrorBands = useCallback(
       (newValue: boolean) => {
@@ -161,7 +175,7 @@ export const HoverButtons = React.memo(
     }, [data.displayErrorBand]);
 
     const updateSelectedPlotMode = (
-      is3DView: boolean,
+      plotTypeWanted: PlotType,
       active: Configuration,
     ) => {
       const updatedDataPlot: DataGridPlot[] = JSON.parse(
@@ -170,23 +184,22 @@ export const HoverButtons = React.memo(
       const selectedDataPlot = updatedDataPlot.find(
         (dataPlot) => dataPlot.i === data.i,
       );
-      if (selectedDataPlot?.selectedPlotMode) {
-        selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
-      } else {
-        selectedDataPlot.selectedPlotMode =
-          data.coordinates.length >= 2 &&
-          containsFloat(
-            data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
-          )
-            ? 'Heatmap'
-            : '1D';
-      }
+
+      // Update plot type
+      selectedDataPlot.selectedPlotMode = plotTypeWanted;
 
       const updatedActive: Configuration = {
         ...active,
         dataPlot: updatedDataPlot,
       };
       updatedConfiguration(updatedActive);
+    };
+
+    const updateTypeOfPlot = (wantedType: PlotType) => {
+      setPlotMode(wantedType);
+      updateSelectedPlotMode(wantedType, active);
+      setPlotTypeMenuOpened(false);
+      setForcePlotTypeMenuOpened(false);
     };
 
     return (
@@ -228,7 +241,10 @@ export const HoverButtons = React.memo(
             <div></div>
           )}
 
-          {hovered || data.isEditing ? (
+          {hovered ||
+          data.isEditing ||
+          plotTypeMenuOpened ||
+          forcePlotTypeMenuOpened ? (
             <Group pos="absolute" right={'1rem'} top={5}>
               {!is3DView && data.isEditing && !shouldDisplayMetadata && (
                 <Switch
@@ -241,21 +257,47 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length >= 2 && !shouldDisplayMetadata && (
-                <Tooltip label="Toggle 1D/Heatmap view">
-                  <ActionIcon
-                    variant="filled"
-                    aria-label="Toggle 1D/Heatmap view"
-                    onClick={() =>
-                      updateSelectedPlotMode(
-                        !(data.selectedPlotMode === 'Heatmap'),
-                        active,
-                      )
-                    }
-                    className={classes.actionButton}
-                  >
-                    {is3DView ? <Text fw="bold">1D</Text> : heatmapLogo}
-                  </ActionIcon>
-                </Tooltip>
+                <Menu
+                  opened={plotTypeMenuOpened || forcePlotTypeMenuOpened}
+                  onChange={setPlotTypeMenuOpened}
+                  shadow="md"
+                  width={180}
+                  trigger="click-hover"
+                >
+                  <Menu.Target>
+                    <Tooltip label="Select plot mode">
+                      <ActionIcon
+                        onClick={() => setForcePlotTypeMenuOpened((o) => !o)}
+                        variant="filled"
+                        aria-label="Select plot mode"
+                        className={classes.actionButton}
+                      >
+                        {modes.find((m) => m.value === plotMode)?.icon || (
+                          <Text fw="bold">{plotMode}</Text>
+                        )}
+                      </ActionIcon>
+                    </Tooltip>
+                  </Menu.Target>
+
+                  <Menu.Dropdown>
+                    {modes.map((mode) => (
+                      <Menu.Item
+                        key={mode.value}
+                        onClick={() => {
+                          updateTypeOfPlot(mode.value);
+                        }}
+                        leftSection={mode.icon}
+                        rightSection={
+                          plotMode === mode.value ? (
+                            <IconCheck size={14} />
+                          ) : null
+                        }
+                      >
+                        {mode.value}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (

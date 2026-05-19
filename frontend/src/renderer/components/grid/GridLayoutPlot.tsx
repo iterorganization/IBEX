@@ -34,7 +34,10 @@ export const GridLayoutPlot = ({
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
   const [is3DView, setIs3DView] = useState<boolean>(
-    data?.selectedPlotMode === 'Heatmap' ? true : false,
+    data?.selectedPlotMode === 'Heatmap' ||
+      data?.selectedPlotMode === 'Geometry'
+      ? true
+      : false,
   );
   const [active3DTab, setActive3DTab] = useState<string>('0');
   const [metadataTabsValue, setMetadataTabsValue] = useState<string>(
@@ -214,7 +217,12 @@ export const GridLayoutPlot = ({
   }, [data.plot]);
 
   useEffect(() => {
-    setIs3DView(data?.selectedPlotMode === 'Heatmap' ? true : false);
+    setIs3DView(
+      data?.selectedPlotMode === 'Heatmap' ||
+        data?.selectedPlotMode === 'Geometry'
+        ? true
+        : false,
+    );
   }, [data.selectedPlotMode]);
 
   /**
