@@ -119,7 +119,7 @@ data_smoothing_method_parameter = DataManipulationParameter(
     possible_values=[
         PossibleValue(
             value=SmoothingMethod.GAUSSIAN_FILTER,
-            description="values are present only on data points where they were originally. Rest of the data grid is filled with NaNs",
+            description="see scipy.ndimage.gaussian_filter documentation",
             additional_parameters=[
                 AdditionalParameter(
                     name="gaussian_smoothing_sigma",
@@ -130,7 +130,7 @@ data_smoothing_method_parameter = DataManipulationParameter(
         ),
         PossibleValue(
             value=SmoothingMethod.SAVITZKY_GOLAY_FILTER,
-            description="see scipy.interpolate.RegularGridInterpolator documentation",
+            description="see scipy.signal.savgol_filter documentation",
             additional_parameters=[
                 AdditionalParameter(
                     name="savgol_smoothing_window_length",
