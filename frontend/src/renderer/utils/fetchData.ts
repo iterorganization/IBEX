@@ -146,7 +146,7 @@ export const fetchNodeInfos = async (
   const nodeInfos = await fetchFromApi<NodeInfoResponse>(
     `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
-  nodeInfos.children = nodeInfos.children.filter((c) => c.has_data);
+  nodeInfos.children = nodeInfos.children.filter((c) => c.has_data !== false);
   return nodeInfos;
 };
 
