@@ -38,8 +38,8 @@ export const CustomizeDownsampling = ({
   const getDownSampledData = async () => {
     try {
       open();
-      const updatedDataPlot = JSON.parse(
-        JSON.stringify(customizedDataGrid),
+      const updatedDataPlot = structuredClone(
+        customizedDataGrid,
       ) as DataGridPlot;
 
       let plotIndex = 0;

@@ -59,6 +59,7 @@ export type DataPlotly = BaseDataPlotly &
     description?: string;
     hovertemplate?: string;
     customdata?: Datum[] | Datum[][];
+    connectgaps?: boolean;
   };
 
 type Datum = string | number | Date;

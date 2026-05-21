@@ -484,7 +484,7 @@ export const handleExistingPlot = async (
 
     const coordinatesExistAndMatch =
       interpolatedDataPlot.coordinates.length === coordsResponse.length &&
-      JSON.parse(JSON.stringify(interpolatedDataPlot.coordinates))
+      structuredClone(interpolatedDataPlot.coordinates)
         .sort(compareByAxeIndex)
         .every((coord: Coordinates, index: number) => {
           const responseCoord = coordsResponse[index];
@@ -989,6 +989,9 @@ export function getErrorsAreaToPlot(
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
 
   for (const [plotIndex, mainPlot] of mainPlots.entries()) {
+    // Each plot should have connectgaps equals to true to prevent gap in combined data cases
+    mainPlot.connectgaps = true;
+
     // Add main plot
     entirePlotList.push(mainPlot);
 
@@ -1000,6 +1003,7 @@ export function getErrorsAreaToPlot(
         coordinates,
         plotIndex,
       );
+      lowerPlot.connectgaps = true;
       entirePlotList.push(lowerPlot);
       const upperPlot = formatErrorBandLayout(
         'upper',
@@ -1007,6 +1011,7 @@ export function getErrorsAreaToPlot(
         coordinates,
         plotIndex,
       );
+      upperPlot.connectgaps = true;
       entirePlotList.push(upperPlot);
     } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
       // Symmetrical case: use upper for the interval
@@ -1072,7 +1077,7 @@ export const initPlotColors = async (
   });
 
   const updatedPlotColors = setterForCustomization
-    ? (JSON.parse(JSON.stringify(customizedDataGrid)) as DataGridPlot)
+    ? (structuredClone(customizedDataGrid) as DataGridPlot)
     : customizedDataGrid;
 
   if (
@@ -1267,8 +1272,8 @@ export async function plotNodeUriLoaded(
               index,
               responseCoordinates,
             ] of response.data.coordinates.entries()) {
-              const matchingCoord: Coordinates = JSON.parse(
-                JSON.stringify(dataGrid.coordinates),
+              const matchingCoord: Coordinates = structuredClone(
+                dataGrid.coordinates,
               ).find(
                 (c: Coordinates) =>
                   normalizeIndices(c.path) === responseCoordinates.path,
@@ -1369,11 +1374,9 @@ export async function plotNodeUriLoaded(
           ) !==
           JSON.stringify(dataGrid.coordinates.map((coord, index) => index))
         ) {
-          const customizedDataGrid = JSON.parse(
-            JSON.stringify(dataGrid),
-          ) as DataGridPlot;
-          const updatedDataPlot = JSON.parse(
-            JSON.stringify(dataGridUpdated),
+          const customizedDataGrid = structuredClone(dataGrid) as DataGridPlot;
+          const updatedDataPlot = structuredClone(
+            dataGridUpdated,
           ) as DataGridPlot;
           for (const [index, coord] of updatedDataPlot.coordinates.entries()) {
             // Set to original axe indexes in order apply the transposition
@@ -1464,11 +1467,9 @@ export const transposeDataGrid = async (
   keepValueIndex?: boolean,
 ) => {
   let actualAxeIndexOrder = (
-    JSON.parse(JSON.stringify(updatedDataGrid.coordinates)) as Coordinates[]
+    structuredClone(updatedDataGrid.coordinates) as Coordinates[]
   ).map((coord) => coord.axeIndex);
-  let transposedDataGrid = JSON.parse(
-    JSON.stringify(updatedDataGrid),
-  ) as DataGridPlot;
+  let transposedDataGrid = structuredClone(updatedDataGrid) as DataGridPlot;
   if (
     JSON.stringify(wantedAxeIndexOrder) !== JSON.stringify(actualAxeIndexOrder)
   ) {
@@ -1504,7 +1505,7 @@ export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
   const coordinatesLength: number = coordinates.length;
 
   // Extract only matrix indexes
-  const matrixIndexes = JSON.parse(JSON.stringify(coordinates))
+  const matrixIndexes = structuredClone(coordinates)
     .sort(compareByAxeIndex)
     .reverse()
     .filter((coord: Coordinates) => coord.axeIndex !== 0)
@@ -1533,8 +1534,8 @@ export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
 
 export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
   // Get error bands vectors switch coordinates indexes
-  const updated_error_bands: ErrorBandData[] = JSON.parse(
-    JSON.stringify(plot.error_bands),
+  const updated_error_bands: ErrorBandData[] = structuredClone(
+    plot.error_bands,
   );
   for (const updated_error_band of updated_error_bands) {
     updated_error_band.array = getVectorData(
@@ -1618,33 +1619,13 @@ export function isMatrixPlottable(value: AxisData): boolean {
 }
 
 /**
- * Replace recursively all `null` or `undefined` by `NaN`.
- * Works for AxisData of dimension 1D, 2D or 3D.
- *
- * @param arr - Array which could contain nulls or undefined
- * @returns New array with NaN instead of null/undefined
- */
-function replaceNullsWithNaN(arr: AxisData): AxisData {
-  if (Array.isArray(arr)) {
-    /* eslint-disable  @typescript-eslint/no-explicit-any */
-    return arr.map((v: any) => {
-      return Array.isArray(v) ? replaceNullsWithNaN(v as AxisData) : (v ?? NaN);
-    }) as AxisData;
-  }
-
-  // 1D Case
-  return arr ?? NaN;
-}
-
-/**
  * Return a tensorized matrix using tensorflow
  * @param matrix
  * @returns
  */
 export const getTensorizedMatrix = async (matrix: AxisData) => {
-  const matrixWithNaN = replaceNullsWithNaN(matrix);
-  const shape = getMaxShape(matrixWithNaN);
-  const reshapedMatrix = reshapeMatrix(matrixWithNaN, shape);
+  const shape = getMaxShape(matrix);
+  const reshapedMatrix = reshapeMatrix(matrix, shape);
   const dataTensorized = tf.tensor(reshapedMatrix);
   return dataTensorized;
 };
@@ -1676,14 +1657,12 @@ export const swapAxis = async (
   );
 
   const updatedDataPlotList: DataGridPlot[] =
-    active && updatedConfiguration
-      ? JSON.parse(JSON.stringify(active.dataPlot))
-      : null;
+    active && updatedConfiguration ? structuredClone(active.dataPlot) : null;
   const updatedDataPlot = updatedDataPlotList
     ? updatedDataPlotList.find(
         (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
       )
-    : (JSON.parse(JSON.stringify(itemDataGrid)) as DataGridPlot);
+    : (structuredClone(itemDataGrid) as DataGridPlot);
 
   // Swap axis
   updatedDataPlot.coordinates[actualTargetAxisIndex].axeIndex = axeIndexToSwap;
@@ -1881,9 +1860,7 @@ async function transposeAxis(
   for (const plotToTranspose of updatedDataPlot.plot) {
     // DETERMINE WHICH AXIS TO TRANSPOSE
     // Initial position
-    const newPositions: number[] = JSON.parse(
-      JSON.stringify(updatedDataPlot.coordinates),
-    )
+    const newPositions: number[] = structuredClone(updatedDataPlot.coordinates)
       .map((coord: Coordinates) => coord.axeIndex)
       .sort((a: number, b: number) => a - b)
       .reverse(); // Reverse to get axeIndex order
@@ -2010,7 +1987,7 @@ const trimPlotData = async (
   const dataTensorized = await getTensorizedMatrix(updatedPlot.yData);
 
   // Get new shape to apply
-  const reversedCoords = JSON.parse(JSON.stringify(coordinates))
+  const reversedCoords = structuredClone(coordinates)
     .sort(compareByAxeIndex)
     .reverse() as Coordinates[];
   const shapeIndex = reversedCoords.findIndex(
@@ -2125,7 +2102,7 @@ export const getRangeIndex = async (
         newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
     );
     // Get index of last occurence
-    let secondIndex = (JSON.parse(JSON.stringify(coordVector)) as string[])
+    let secondIndex = (structuredClone(coordVector) as string[])
       .reverse()
       .findIndex(
         (val) =>
@@ -2174,8 +2151,8 @@ export const applyRange = async (
 ) => {
   try {
     const updatedDataPlot = customizedDataGrid;
-    const coordinates = JSON.parse(
-      JSON.stringify(updatedDataPlot.coordinates),
+    const coordinates = structuredClone(
+      updatedDataPlot.coordinates,
     ) as Coordinates[];
     const oldRange = coordinates.find(
       (coord) => coord.axeIndex === coordinate.axeIndex,
@@ -2242,7 +2219,7 @@ export async function applyRangeInCoord(
   const updatedCoord = updatedCoords.find(
     (coord) => coord.name === coordNameToUpdate,
   );
-  const coordinate = JSON.parse(JSON.stringify(updatedCoord));
+  const coordinate = structuredClone(updatedCoord);
 
   // Trim coordinate.data
   const trimmed = await trimCoordData(
@@ -2270,9 +2247,7 @@ export async function applyRangeInCoord(
     }
 
     const dependencyIndex = (
-      JSON.parse(
-        JSON.stringify(coordDependencie.coord_dependencies),
-      ) as string[]
+      structuredClone(coordDependencie.coord_dependencies) as string[]
     )
       .reverse() // We reverse dependencies to get dependency index in the order of the matrix
       .findIndex((dep) => dep === coordinate.name);
@@ -2321,7 +2296,7 @@ export async function applyRangeInPlot(
     // Trim plot.yData
     const trimmed = await trimPlotData(
       updatedPlot,
-      JSON.parse(JSON.stringify(coordinates)),
+      structuredClone(coordinates),
       axeIndexToUpdate,
       newRange,
       rangeAlreadyAppliedInPlot === true ? oldRange : null,
@@ -2358,7 +2333,7 @@ export async function applyRangeInPlot(
 
         const trimmed = await trimPlotData(
           error_band,
-          JSON.parse(JSON.stringify(coordinates)),
+          structuredClone(coordinates),
           axeIndexToUpdate,
           newRange,
           rangeAlreadyAppliedInPlot === true ? oldRange : null,

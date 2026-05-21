@@ -198,9 +198,7 @@ export const SimplePlotly = ({
     }
 
     // Update title only if is editing
-    const updatedDataPlot: DataGridPlot[] = JSON.parse(
-      JSON.stringify(active.dataPlot),
-    );
+    const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
     for (const dataPlot of updatedDataPlot) {
       if (dataPlot.i === itemDataGrid.i) {
         dataPlot.title = title;
@@ -397,7 +395,7 @@ export const SimplePlotly = ({
               align="flex-end"
               pos="relative"
             >
-              {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
+              {structuredClone(itemDataGrid.coordinates)
                 .sort(compareByAxeIndex)
                 .map(
                   (item: Coordinates, valueIndex: number) =>

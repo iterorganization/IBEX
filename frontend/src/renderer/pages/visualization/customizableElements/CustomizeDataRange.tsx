@@ -163,8 +163,8 @@ export const CustomizeDataRange = ({
 
     const restoreRange = async () => {
       try {
-        const updatedDataPlot = JSON.parse(
-          JSON.stringify(customizedDataGrid),
+        const updatedDataPlot = structuredClone(
+          customizedDataGrid,
         ) as DataGridPlot;
         // Step 1 => get full original data (coordinates + plots) && applyRange in coordinates having range (not main range since we'll delete it)
         let plotIndex = 0;

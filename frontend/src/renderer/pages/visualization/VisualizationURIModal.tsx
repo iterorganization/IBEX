@@ -387,7 +387,7 @@ export const VisualizationURIModal = ({
         uri.name = getNextAvailableUriName(
           dataDbEntries.map((value) => value.name),
         );
-        setDataDbEntries(JSON.parse(JSON.stringify(dataDbEntries)));
+        setDataDbEntries(structuredClone(dataDbEntries));
       }
       return;
     }

@@ -73,9 +73,7 @@ export const HoverButtons = React.memo(
 
     const updateDisplayErrorBands = useCallback(
       (newValue: boolean) => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         const selectedDataPlot = updatedActive.dataPlot.find(
           (dataPlot) => dataPlot.i === data.i,
         );
@@ -105,9 +103,7 @@ export const HoverButtons = React.memo(
 
     useEffect(() => {
       const updateErrorBands = async () => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         if (data.displayErrorBand) {
           if (
             (previousValueDisplayErrorBands.current === false ||
@@ -164,9 +160,7 @@ export const HoverButtons = React.memo(
       is3DView: boolean,
       active: Configuration,
     ) => {
-      const updatedDataPlot: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
+      const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
       const selectedDataPlot = updatedDataPlot.find(
         (dataPlot) => dataPlot.i === data.i,
       );
