@@ -618,8 +618,16 @@ export const handleExistingPlot = async (
         updatedPlot,
       ];
     }
-
-    await fetchErrorBandsInConfig(updatedActive, defaultUri);
+    const areCombinedCoordinates = urisToInterpolate.length;
+    if (areCombinedCoordinates) {
+      // Update all error bands when we have combined coordinates
+      for (const plot of updatedPlot.plot) {
+        await fetchErrorBands(updatedPlot, plot.nodeUri);
+      }
+    } else {
+      // Only get error bands of added plot when we don't have combined coordinates
+      await fetchErrorBandsInConfig(updatedActive, defaultUri);
+    }
 
     // Apply range to new error bands when adding another plot
     for (const coordinate of updatedPlot.coordinates) {
@@ -690,6 +698,19 @@ const deleteExistingPlot = async (
     deletedPlot.nodeUri,
   );
   findDataPlot = interpolatedDataPlot;
+
+  // Update all error bands when we have combined coordinates
+  const oldUrisToInterpolate = getUrisToInterpolate(
+    findDataPlot.plot[0].nodeUri,
+    [...findDataPlot.plot, deletedPlot],
+  );
+  const areCombinedCoordinates = oldUrisToInterpolate.length;
+  if (areCombinedCoordinates) {
+    // Update all error bands when we had combined coordinates before the deletion
+    for (const plot of findDataPlot.plot) {
+      await fetchErrorBands(findDataPlot, plot.nodeUri);
+    }
+  }
 
   const index = updatedActive.dataPlot.findIndex(
     (dp) => dp.i === interpolatedDataPlot.i,
@@ -873,6 +894,8 @@ export const fetchErrorBands = async (
           error.toString().includes('_error_lower'))
       )
     ) {
+      console.warn('No error bands for : ', plot.nodeUri);
+    } else {
       console.error('Error handling error bands: ', error);
     }
   }
