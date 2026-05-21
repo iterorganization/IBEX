@@ -240,9 +240,13 @@ export const SimplePlotly = ({
    * Update the layout yAxis
    */
   useEffect(() => {
-    const coordsYNames = itemDataGrid.plot
-      .filter((plot) => plot.yaxis !== 'y2')
-      ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri));
+    const coordsYNames = [
+      ...new Set(
+        itemDataGrid.plot
+          .filter((plot) => plot.yaxis !== 'y2')
+          ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri)),
+      ),
+    ];
     const YTitle = itemDataGrid.yAxisData?.name
       ? `${coordsYNames.length > 1 ? coordsYNames[0] + ', ...' : coordsYNames[0]} ${(itemDataGrid.yAxisData?.unit && '[' + itemDataGrid.yAxisData.unit + ']') || ''}`
       : '';
@@ -281,9 +285,13 @@ export const SimplePlotly = ({
    * Update the layout y2Axis
    */
   useEffect(() => {
-    const coordsY2Names = itemDataGrid.plot
-      .filter((plot) => plot.yaxis === 'y2')
-      ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri));
+    const coordsY2Names = [
+      ...new Set(
+        itemDataGrid.plot
+          .filter((plot) => plot.yaxis === 'y2')
+          ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri)),
+      ),
+    ];
     const Y2Title = itemDataGrid.y2AxisData?.name
       ? `${coordsY2Names.length > 1 ? coordsY2Names[0] + ', ...' : coordsY2Names[0]} ${(itemDataGrid.y2AxisData?.unit && '[' + itemDataGrid.y2AxisData.unit + ']') || ''}`
       : '';
