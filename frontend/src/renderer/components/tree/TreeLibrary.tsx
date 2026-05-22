@@ -460,8 +460,11 @@ export const TreeLibrary = ({
   }, [isEditingPlot]);
 
   useEffect(() => {
-    handleDisableTree(active?.metadataGridLayout, active?.customizedGridLayout);
-  }, [active?.metadataGridLayout, active?.customizedGridLayout]);
+    handleDisableTree(
+      active?.metadataGridLayout,
+      active?.customizedGridLayout?.id,
+    );
+  }, [active?.metadataGridLayout, active?.customizedGridLayout?.id]);
 
   return (
     <ScrollArea h={height}>

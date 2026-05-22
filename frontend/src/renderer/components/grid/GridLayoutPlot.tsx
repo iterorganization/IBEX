@@ -3,6 +3,7 @@ import {
   Axis,
   Configuration,
   Coordinates,
+  CustomizedGridType,
   DataGridPlot,
   DataPlotly,
   GridLayoutPlotProps,
@@ -338,10 +339,10 @@ export const GridLayoutPlot = ({
    * Customize plot
    */
   const handleCustomization = useCallback(
-    (id: string) => {
+    (id: string, typeOfEdition: CustomizedGridType) => {
       const updatedActive: Configuration = {
         ...active,
-        customizedGridLayout: id,
+        customizedGridLayout: { id: id, type: typeOfEdition },
       };
       updatedConfiguration(updatedActive);
     },

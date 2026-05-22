@@ -9,6 +9,13 @@ export interface BaseConfiguration {
   lastURIInput?: string;
 }
 
+export type CustomizedGridType = 'data' | 'visual';
+
+export type CustomizedGrid = {
+  id: string;
+  type: CustomizedGridType;
+};
+
 export interface Configuration extends BaseConfiguration {
   checkedNodeURI: URITreeNodeData[];
   customDataTree: CustomTreeData[];
@@ -16,7 +23,7 @@ export interface Configuration extends BaseConfiguration {
   path?: string;
   saved?: boolean;
   metadataGridLayout?: string | null;
-  customizedGridLayout?: string | null;
+  customizedGridLayout?: CustomizedGrid | null;
 }
 
 export interface ConfigurationToSave extends BaseConfiguration {
