@@ -170,6 +170,8 @@ export const MetaDataInfos = ({
             selectedDataPlot?.downsampled_method,
             selectedDataPlot?.downsampled_size,
             selectedDataPlot?.dataType,
+            undefined,
+            selectedDataPlot?.interpolated_method,
           );
 
           setCoordinates(response.data.coordinates);

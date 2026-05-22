@@ -20,6 +20,7 @@ export type PlotDataResponse = {
     value: AxisData;
     downsampled_shape: number[];
     downsampled_method?: string;
+    interpolated_method?: string;
     shape: number[] | 'irregular';
     ndim: number;
     path: string;
@@ -39,6 +40,28 @@ export type DownsamplingMethodsResponse = {
       description: string;
     },
   ];
+};
+
+export type DataManipulationListResponse = {
+  data_manipulation_methods: [
+    {
+      name: string;
+      description: string;
+      method_parameters: DataManipulationParameterResponse[];
+    },
+  ];
+};
+
+type DataManipulationParameterResponse = {
+  human_readable_name: string;
+  name: string;
+  description: string;
+  possible_values: DataManipulationMethodResponse[];
+};
+
+type DataManipulationMethodResponse = {
+  value: string;
+  description: string;
 };
 
 export type ArraySummaryResponse = {

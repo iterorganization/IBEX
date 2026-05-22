@@ -50,6 +50,8 @@ export const CustomizeDownsampling = ({
           downsamplingMethod,
           downsamplingSize,
           updatedDataPlot?.dataType,
+          undefined,
+          updatedDataPlot?.interpolated_method,
         );
 
         if (plot?.error_bands?.length) {

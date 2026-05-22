@@ -20,11 +20,15 @@ import {
   DataPlotly,
   synchronizedList,
 } from '../../types';
-import { CustomizeDownsampling, CustomizeGlobal } from './customizableElements';
-import { CustomizeHeatmap } from './customizableElements/CustomizeHeatmap';
-import { Customize1DPlot } from './customizableElements/Customize1DPlot';
-import { CustomizeDataRange } from './customizableElements/CustomizeDataRange';
-import { CustomizeSynchronization } from './customizableElements/CustomizeSynchronization';
+import {
+  CustomizeDownsampling,
+  CustomizeGlobal,
+  CustomizeHeatmap,
+  Customize1DPlot,
+  CustomizeDataRange,
+  CustomizeSynchronization,
+  CustomizeInterpolation,
+} from './customizableElements';
 import { IconLink } from '@tabler/icons-react';
 import { initPlotColors } from '../../utils';
 
@@ -53,6 +57,7 @@ export const DataplotCustomization = () => {
         ...dataGridLayout,
         title: customizedDataGrid?.title,
         downsampled_method: customizedDataGrid?.downsampled_method,
+        interpolated_method: customizedDataGrid?.interpolated_method,
         plot: customizedDataGrid?.plot,
       } as DataGridPlot;
       setDataGridLayout(updatedDataGridLayout);
@@ -439,6 +444,15 @@ const Customization = ({
       value: 'Downsampling',
       component: (
         <CustomizeDownsampling
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Interpolation',
+      component: (
+        <CustomizeInterpolation
           customizedDataGrid={customizedDataGrid}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />

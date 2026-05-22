@@ -61,6 +61,7 @@ export const plotData = (
   labelUri: string,
   unit: string,
   downsampled_method: string,
+  interpolated_method: string,
   description?: string,
   y2Axis?: boolean,
 ): DataGridPlot => {
@@ -101,6 +102,7 @@ export const plotData = (
           ? `${trace.name}`
           : `${dataPlot.title} / ${trace.name}`,
     downsampled_method: downsampled_method,
+    interpolated_method: interpolated_method,
     plot: [...currentPlot, trace],
   };
 };
@@ -186,6 +188,7 @@ export const handleNewPlot = async (
     nodes[0].name,
     response.data.unit,
     response.data.downsampled_method,
+    response.data.interpolated_method,
     response.data.description,
   );
   updatedPlot.dataType = nodes[0].type;
@@ -248,6 +251,8 @@ export const handleExistingPlot = async (
       findDataPlot?.downsampled_method,
       findDataPlot?.downsampled_size,
       node.type,
+      undefined,
+      findDataPlot?.interpolated_method,
     );
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
@@ -405,6 +410,7 @@ export const handleExistingPlot = async (
         node.name,
         response.data.unit,
         response.data.downsampled_method,
+        response.data.interpolated_method,
         response.data.description,
       );
     } else if (!findDataPlot.y2AxisData) {
@@ -426,6 +432,7 @@ export const handleExistingPlot = async (
         node.name,
         response.data.unit,
         response.data.downsampled_method,
+        response.data.interpolated_method,
         response.data.description,
         true,
       );
@@ -588,6 +595,7 @@ export const fetchErrorBands = async (
   uri: string,
   forcedDownsamplingMethod?: string,
   forcedDownsamplingSize?: number,
+  // forcedInterpolationMethod?: string, // TODO : use it for forcing interpolation method in interpolation customization
 ) => {
   if (!dataPlot.displayErrorBand) {
     // Stop error bands when the dataPlot switch is off
@@ -606,6 +614,11 @@ export const fetchErrorBands = async (
       forcedDownsamplingMethod || dataPlot?.downsampled_method;
     const downsamplingSize: number =
       forcedDownsamplingSize || dataPlot?.downsampled_size;
+
+    /*
+    const interpolationMethod: string =
+      forcedInterpolationMethod || dataPlot?.interpolated_method; // TODO : send interpolationMethod in dataPlot instead of fieldValue if we have to get interpolated data
+    */
 
     // Get error bands
     const upperResponse = await fetchFieldValue(
@@ -1014,6 +1027,8 @@ export async function plotNodeUriLoaded(
               dataGrid?.downsampled_method,
               dataGrid?.downsampled_size,
               dataGrid?.dataType,
+              undefined,
+              dataGrid?.interpolated_method,
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
@@ -1080,6 +1095,10 @@ export async function plotNodeUriLoaded(
 
             if (response.data.downsampled_method) {
               dataGrid.downsampled_method = response.data.downsampled_method;
+            }
+
+            if (response.data.interpolated_method) {
+              dataGrid.interpolated_method = response.data.interpolated_method;
             }
 
             // Save plot unit

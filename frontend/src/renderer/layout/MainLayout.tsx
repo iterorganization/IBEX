@@ -105,6 +105,7 @@ export function MainLayout() {
         synchronizedGrids: dataGrid.synchronizedGrids,
         downsampled_method: dataGrid?.downsampled_method,
         downsampled_size: dataGrid?.downsampled_size,
+        interpolated_method: dataGrid?.interpolated_method,
         xAxisData: dataGrid.xAxisData,
         yAxisData: dataGrid.yAxisData,
         y2AxisData: dataGrid?.y2AxisData,

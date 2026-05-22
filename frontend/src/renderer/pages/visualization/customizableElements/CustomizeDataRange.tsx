@@ -174,6 +174,8 @@ export const CustomizeDataRange = ({
             updatedDataPlot?.downsampled_method,
             updatedDataPlot?.downsampled_size,
             updatedDataPlot?.dataType,
+            undefined,
+            updatedDataPlot?.interpolated_method,
           );
 
           if (plot?.error_bands?.length > 0) {
