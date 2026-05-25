@@ -2,7 +2,7 @@
 
 
 Adding a new data manipulation method
------------------------
+--------------------------------------
 
 Adding a new data manipulation operation requires updates in three places: the request model, the operation description registry, and the backend execution path.
 
