@@ -84,11 +84,14 @@ def test_find_paths(entry_path):
         has_data_true = None  # before AL-Core 5.7 IBEX returns None
     else:
         has_data_true = True
-
+    print(response.json()["paths"])
     assert response.json()["paths"] == [
         {"path": "#core_profiles/ids_properties/version_put/data_dictionary", "has_data": has_data_true},
         {"path": "#core_profiles/ids_properties/version_put/access_layer", "has_data": has_data_true},
         {"path": "#core_profiles/ids_properties/version_put/access_layer_language", "has_data": has_data_true},
+        {"path": "#wall/ids_properties/version_put/data_dictionary", "has_data": has_data_true},
+        {"path": "#wall/ids_properties/version_put/access_layer", "has_data": has_data_true},
+        {"path": "#wall/ids_properties/version_put/access_layer_language", "has_data": has_data_true},
     ]
 
 
@@ -103,6 +106,35 @@ def test_array_summary(entry_path):
     assert response.json()["min"] == 1.0
     assert response.json()["max"] == 5.0
     assert response.json()["mean"] == 3.0
+
+
+@pytest.mark.skipif(True, reason="Still to be finished")
+def test_geometry_overlay_nodes(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#wall",
+    }
+    response = pytest.test_client.get("/ids_info/geometry_overlay_nodes", params=parameters)
+
+    assert response.status_code == 200
+
+    if Version(imas_core.__version__) < Version("5.7"):
+        assert response.json() == {
+            "outline_nodes": [
+                "description_2d/limiter/unit/outline",
+                "description_2d/vessel/unit/annular/outline_inner",
+                "description_2d/vessel/unit/annular/outline_outer",
+                "description_2d/vessel/unit/element/outline",
+            ]
+        }
+    else:
+        assert response.json() == {
+            "outline_nodes": [
+                "description_2d/limiter/unit/outline",
+                "description_2d/vessel/unit/annular/outline_inner",
+                "description_2d/vessel/unit/annular/outline_outer",
+                "description_2d/vessel/unit/element/outline",
+            ]
+        }
 
 
 def test_show_error_bars_option(entry_path):

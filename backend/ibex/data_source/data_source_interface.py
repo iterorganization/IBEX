@@ -113,3 +113,13 @@ class DataSourceInterface(ABC):
         :return: dictionary {'entries': [<uri1>, <uri2>, ...]}
         """
         ...
+
+    @abstractmethod
+    def get_geometry_overlay_nodes(self, uri: str, ids: str, occurrence: int = 0) -> dict:
+        """
+        Returns paths to filled geometry overlay nodes found in the entry metadata.
+
+        :param uri: imas URI
+        :return: dictionary {'outline_nodes': ['#ids/path/to/node1', '#ids/path/to/node2', ...]}
+        """
+        ...

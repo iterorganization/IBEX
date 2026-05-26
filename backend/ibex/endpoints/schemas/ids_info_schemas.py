@@ -56,3 +56,15 @@ class ArraySummaryResponse(BaseModel):
     max: float = Field(description="Maximum value from the array", examples=[1.2, 3.4])
     mean: float = Field(description="Mean value from the array", examples=[1.2, 3.4])
     standard_deviation: float = Field(description="Standard deviation value of the array", examples=[1.2, 3.4])
+
+
+# ========== GEOMETRY OVERLAY NODES ==========
+
+
+class GeometryOverlayNodesResponse(BaseModel):
+    """Response for /ids_info/geometry_overlay_nodes endpoint"""
+
+    outline_nodes: list[str] = Field(
+        description="List of filled geometry overlay node paths",
+        examples=[["description_2d/limiter/unit/outline", "description_2d/vessel/unit/element/outline"]],
+    )

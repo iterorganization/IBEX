@@ -49,6 +49,11 @@ def entry_path(tmp_path_factory):
         i += 10
 
     entry.put(core_profiles)
+
+    wall = entry.factory.wall()
+    wall.ids_properties.homogeneous_time = 1
+    entry.put(wall)
+
     entry.close()
 
     return tmp_path
