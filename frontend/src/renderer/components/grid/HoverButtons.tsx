@@ -208,7 +208,6 @@ export const HoverButtons = React.memo(
         });
         return;
       }
-      setPlotMode(wantedType);
 
       const checkedNodeURI = structuredClone(active.checkedNodeURI);
 
@@ -221,10 +220,20 @@ export const HoverButtons = React.memo(
           selectedDataPlot,
           checkedNodeURI,
         );
+        if (!fetchedGeometrie) {
+          // Prevent from displaying contour plot when no geometry are available
+          showNotification({
+            title: 'No geometry available',
+            message: 'This dataset does not contain any geometry to display.',
+            color: 'yellow',
+          });
+          return;
+        }
         selectedDataPlot.geometrie = fetchedGeometrie.geometrie;
       } else {
         delete selectedDataPlot.geometrie;
       }
+      setPlotMode(wantedType);
 
       const updatedActive: Configuration = {
         ...active,
