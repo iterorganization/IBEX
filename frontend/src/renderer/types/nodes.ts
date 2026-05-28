@@ -5,6 +5,7 @@ export enum NodeInfoTypeEnum {
   FLOAT = 'FLT',
   STRING = 'STR',
   COMPLEX = 'CPX',
+  GEOMETRY = 'GEO', // TODO : use geometry type from BE
 }
 
 export type NodeInfoChildrenResponse = {

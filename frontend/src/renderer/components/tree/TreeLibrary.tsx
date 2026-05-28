@@ -18,6 +18,7 @@ import {
   IconHash,
   IconRipple,
   IconTypography,
+  IconGeometry,
 } from '@tabler/icons-react';
 import classes from './TreeLibrary.module.css';
 import {
@@ -313,6 +314,10 @@ function NodeIcon({
       ),
       [NodeInfoTypeEnum.COMPLEX]: getCheckboxIcon(
         <IconMathFunction {...commonProps} className={classes.forcedWidth} />,
+      ),
+      [NodeInfoTypeEnum.GEOMETRY]: getCheckboxIcon(
+        // TODO : use geometry type from BE
+        <IconGeometry {...commonProps} className={classes.forcedWidth} />,
       ),
     };
 

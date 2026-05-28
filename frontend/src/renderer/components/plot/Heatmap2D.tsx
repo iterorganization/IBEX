@@ -316,9 +316,13 @@ export const Heatmap2D = ({
                             coord.axeIndex === (targetAxis === 'y' ? 1 : 0),
                         ).name
                       }
-                      data={itemDataGrid.coordinates.map(
-                        (coord: Coordinates) => coord.name,
-                      )}
+                      data={(itemDataGrid.geometrie // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
+                        ? itemDataGrid.coordinates.filter(
+                            (coord) =>
+                              coord.axeIndex === 0 || coord.axeIndex === 1,
+                          )
+                        : itemDataGrid.coordinates
+                      ).map((coord: Coordinates) => coord.name)}
                       w={`${width * 0.2}px`}
                       onChange={(value) =>
                         value &&
@@ -439,10 +443,13 @@ export const Heatmap2D = ({
                 },
                 hovertemplate:
                   'x: %{x}<br>' + 'y: %{y}<br>' + 'z: %{z:,.6g}<extra></extra>',
-                x: x,
-                y: y,
-                z: z,
+                x: [...x],
+                y: [...y],
+                z: z.map((row) => [...row]),
               },
+
+              // Add geometries in contour type
+              ...(itemDataGrid?.geometrie ?? []),
             ]}
             config={{
               autosizable: false,

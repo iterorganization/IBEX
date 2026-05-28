@@ -46,6 +46,22 @@ export interface BaseDataPlotly {
   mode?: string;
 }
 
+export type Geometry = {
+  type: 'scatter';
+  mode: 'lines';
+  x: number[];
+  y: number[];
+  line: GeometryLine;
+  nodeUris: string[];
+  fill?: 'toself';
+  name?: string;
+};
+
+type GeometryLine = {
+  color: string;
+  width: number;
+};
+
 export type DataPlotly = BaseDataPlotly &
   Data & {
     x: (string | number)[];
@@ -104,12 +120,14 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   downsampled_method?: string;
   downsampled_size?: number;
   selectedPlotMode?: PlotType;
+  geometrie?: Geometry[];
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
   dataType: NodeInfoTypeEnum;
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
+  geometrie?: Geometry[];
 }
 
 export type synchronizedList = {

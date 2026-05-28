@@ -9,6 +9,7 @@ import {
   DataGridPlot,
   DataPlotly,
   ErrorBandData,
+  Geometry,
   PlotCoordinatesResponse,
   PlotDataResponse,
   PlotLine,
@@ -575,6 +576,104 @@ export const fetchErrorBandsInConfig = async (
   }
 };
 
+function closeContourGeometrie(data: AxisData): AxisData {
+  if (typeof data[0] === 'number') {
+    const vector = data as number[];
+
+    // Add first element in the end of the vector
+    return [...vector, vector[0]] as AxisData;
+  }
+
+  // Go through last depth
+  //eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]).map(closeContourGeometrie) as AxisData;
+}
+
+export const fetchGeometries = async (
+  dataPlot: DataGridPlot,
+  updatedCheckedNodeURI: URITreeNodeData[],
+) => {
+  try {
+    const uri = dataPlot.plot[0].nodeUri.split('#')[0]; // ? Need a rule in the case we have plots from different URIs (at the moment we get geometries from first URI plotted)
+
+    // TODO replace constrained paths by them provided by BE
+    const rPath = '#wall:0/description_2d[:]/limiter/unit[:]/outline/r';
+    const zPath = '#wall:0/description_2d[:]/limiter/unit[:]/outline/z';
+
+    // Get r
+    const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+    rResponse.data.value = closeContourGeometrie(rResponse.data.value);
+    const rFormattedCoordinates = formatCoordinates(
+      rResponse.data.coordinates,
+      normalizeIndices(uri + rPath),
+      0,
+    );
+    const rVector = getVectorData(rFormattedCoordinates, rResponse.data.value);
+
+    // Get z
+    const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+    zResponse.data.value = closeContourGeometrie(zResponse.data.value);
+    const zFormattedCoordinates = formatCoordinates(
+      zResponse.data.coordinates,
+      normalizeIndices(uri + zPath),
+      0,
+    );
+    const zVector = getVectorData(zFormattedCoordinates, zResponse.data.value);
+
+    let x, y: number[];
+    const shouldSwitchAxis =
+      dataPlot.coordinates.findIndex((coord) => coord.axeIndex === 0) === 1;
+
+    if (shouldSwitchAxis) {
+      x = zVector;
+      y = rVector;
+    } else {
+      x = rVector;
+      y = zVector;
+    }
+    // Get geometries // ? (contour case)
+    const contourGeometry: Geometry[] = [
+      {
+        x: [...x],
+        y: [...y],
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: 'black', width: 2 },
+        nodeUris: [uri + rPath, uri + zPath],
+        name: 'contour',
+      },
+    ];
+
+    dataPlot.geometrie = contourGeometry;
+
+    if (dataPlot.isEditing && dataPlot?.geometrie) {
+      // Check geometries in tree
+      for (const geometry of dataPlot.geometrie) {
+        for (const uriOfGeo of geometry.nodeUris) {
+          const newCheckedNode = {
+            name: dataPlot.plot[0].labelUri,
+            uri: normalizeIndices(uriOfGeo),
+            type: 'GEO', // ? geometry type, (contour at the moment)
+          } as URITreeNodeData;
+          const exists = updatedCheckedNodeURI.some(
+            (node) =>
+              node.name === newCheckedNode.name &&
+              node.uri === newCheckedNode.uri,
+          );
+          if (!exists) {
+            updatedCheckedNodeURI.push(newCheckedNode);
+          }
+        }
+      }
+    }
+
+    // Return dataPlot list with the plot which includes error bands
+    return dataPlot;
+  } catch (error) {
+    console.error('Error getting geometries:', error);
+  }
+};
+
 /**
  * Get & return error bands of provided uri & dataPlot id
  * @param dataPlot Datagrid containing the targeted uri
@@ -719,8 +818,8 @@ const formatErrorBandLayout = (
     }
   }
   const errBandPartPlot: Partial<ScatterData> = {
-    x: mainPlot.x,
-    y: yErrBandPart,
+    x: [...mainPlot.x],
+    y: [...yErrBandPart],
     type: 'scatter',
     mode: 'lines',
     line: { width: 0, shape: lineShape },
@@ -1536,6 +1635,15 @@ export const swapAxis = async (
 
   // Limit coordinate sliders to the max of their new shape
   limitSlidersToMaxLength(updatedDataPlot.coordinates);
+
+  if (updatedDataPlot.geometrie) {
+    // Swap geometrie x & y in the case we swap x & y coordinates
+    for (const geo of updatedDataPlot.geometrie) {
+      const tempX = geo.x;
+      geo.x = geo.y;
+      geo.y = tempX;
+    }
+  }
 
   if (active && updatedConfiguration) {
     const updatedActive = {

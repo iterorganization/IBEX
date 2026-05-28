@@ -20,8 +20,13 @@ import {
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
 import { Configuration, DataGridPlot, PlotType } from '../../types';
-import { applyRange, fetchErrorBandsInConfig } from '../../utils';
+import {
+  applyRange,
+  fetchErrorBandsInConfig,
+  fetchGeometries,
+} from '../../utils';
 import { useIbexStore } from '../../stores';
+import { showNotification } from '@mantine/notifications';
 
 interface HoverButtonsProps {
   data: DataGridPlot;
@@ -174,32 +179,59 @@ export const HoverButtons = React.memo(
       updateErrorBands();
     }, [data.displayErrorBand]);
 
-    const updateSelectedPlotMode = (
-      plotTypeWanted: PlotType,
-      active: Configuration,
-    ) => {
-      const updatedDataPlot: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
+    const updateTypeOfPlot = async (wantedType: PlotType) => {
+      setPlotTypeMenuOpened(false);
+      setForcePlotTypeMenuOpened(false);
+      const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
       const selectedDataPlot = updatedDataPlot.find(
         (dataPlot) => dataPlot.i === data.i,
       );
 
+      // Control the coordinates order to prevent from adding geometry when coordinates are incompatible with geometries
+      if (
+        wantedType === 'Geometry' &&
+        !(
+          selectedDataPlot.coordinates.length >= 2 &&
+          (selectedDataPlot.coordinates[0].axeIndex === 0 ||
+            selectedDataPlot.coordinates[0].axeIndex === 1) &&
+          (selectedDataPlot.coordinates[1].axeIndex === 0 ||
+            selectedDataPlot.coordinates[1].axeIndex === 1)
+        )
+      ) {
+        console.warn(
+          'Axis are not matching with geometries: the default axis should be restored to get geometries.',
+        );
+        showNotification({
+          title: 'Axis are not matching with geometries',
+          message: 'The default axis should be restored to get geometries.',
+          color: 'yellow',
+        });
+        return;
+      }
+      setPlotMode(wantedType);
+
+      const checkedNodeURI = structuredClone(active.checkedNodeURI);
+
       // Update plot type
-      selectedDataPlot.selectedPlotMode = plotTypeWanted;
+      selectedDataPlot.selectedPlotMode = wantedType;
+
+      // Handle geometries in contour type
+      if (wantedType === 'Geometry') {
+        const fetchedGeometrie = await fetchGeometries(
+          selectedDataPlot,
+          checkedNodeURI,
+        );
+        selectedDataPlot.geometrie = fetchedGeometrie.geometrie;
+      } else {
+        delete selectedDataPlot.geometrie;
+      }
 
       const updatedActive: Configuration = {
         ...active,
         dataPlot: updatedDataPlot,
+        checkedNodeURI: checkedNodeURI,
       };
       updatedConfiguration(updatedActive);
-    };
-
-    const updateTypeOfPlot = (wantedType: PlotType) => {
-      setPlotMode(wantedType);
-      updateSelectedPlotMode(wantedType, active);
-      setPlotTypeMenuOpened(false);
-      setForcePlotTypeMenuOpened(false);
     };
 
     return (
@@ -283,8 +315,8 @@ export const HoverButtons = React.memo(
                     {modes.map((mode) => (
                       <Menu.Item
                         key={mode.value}
-                        onClick={() => {
-                          updateTypeOfPlot(mode.value);
+                        onClick={async () => {
+                          await updateTypeOfPlot(mode.value);
                         }}
                         leftSection={mode.icon}
                         rightSection={

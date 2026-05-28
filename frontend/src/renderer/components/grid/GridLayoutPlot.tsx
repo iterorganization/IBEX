@@ -148,8 +148,8 @@ export const GridLayoutPlot = ({
 
               return {
                 ...plotItem,
-                x: newXData,
-                y: newYData,
+                x: [...newXData],
+                y: [...newYData],
                 customdata: customdata,
                 error_bands: updated_error_bands,
                 nodeUri: updatedNodeUri,
@@ -158,8 +158,8 @@ export const GridLayoutPlot = ({
             } else {
               return {
                 ...plotItem,
-                x: newXData,
-                y: newYData,
+                x: [...newXData],
+                y: [...newYData],
                 nodeUri: updatedNodeUri,
                 path: updatedPath,
               };
@@ -311,6 +311,27 @@ export const GridLayoutPlot = ({
             if (!exists) {
               // Check from tree selected error bands to plot
               checkedNodeURI.push(newCheckedNode);
+            }
+          }
+        }
+
+        if (findPlot?.geometrie) {
+          // Check geometries in tree
+          for (const geometry of findPlot.geometrie) {
+            for (const uriOfGeo of geometry.nodeUris) {
+              const newCheckedNode = {
+                name: findPlot.plot[0].labelUri,
+                uri: normalizeIndices(uriOfGeo),
+                type: 'GEO',
+              } as URITreeNodeData;
+              const exists = checkedNodeURI.some(
+                (node) =>
+                  node.name === newCheckedNode.name &&
+                  node.uri === newCheckedNode.uri,
+              );
+              if (!exists) {
+                checkedNodeURI.push(newCheckedNode);
+              }
             }
           }
         }
