@@ -85,7 +85,7 @@ def test_plot_data_with_gaussian_smoothing(entry_path):
 def test_plot_data_with_savgol_smoothing(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
-        "smoothing_method": "savitzky–golay_filter",
+        "smoothing_method": "savitzky-golay_filter",
         "savgol_smoothing_window_length": 5,
         "savgol_smoothing_polyorder": 2,
     }
@@ -165,7 +165,7 @@ def test_plot_data_requires_gaussian_sigma(entry_path):
 def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
     base_parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
-        "smoothing_method": "savitzky–golay_filter",
+        "smoothing_method": "savitzky-golay_filter",
     }
 
     response = pytest.test_client.get("/data/plot_data", params=base_parameters)

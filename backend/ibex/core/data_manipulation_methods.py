@@ -11,7 +11,7 @@ class InterpolationMethod(str, Enum):
 
 class SmoothingMethod(str, Enum):
     GAUSSIAN_FILTER = "gaussian_filter"
-    SAVITZKY_GOLAY_FILTER = "savitzky–golay_filter"
+    SAVITZKY_GOLAY_FILTER = "savitzky-golay_filter"
 
 
 class AdditionalParameter(BaseModel):
