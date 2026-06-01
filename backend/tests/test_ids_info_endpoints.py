@@ -85,6 +85,7 @@ def test_find_paths(entry_path):
     else:
         has_data_true = True
 
+    print(f"=== IMAS-Core version: {Version(imas_core.__version__)} ===")
     assert response.json()["paths"] == [
         {"path": "#core_profiles/ids_properties/version_put/data_dictionary", "has_data": has_data_true},
         {"path": "#core_profiles/ids_properties/version_put/access_layer", "has_data": has_data_true},
