@@ -120,7 +120,7 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   downsampled_method?: string;
   downsampled_size?: number;
   selectedPlotMode?: PlotType;
-  geometrie?: Geometry[];
+  geometrie: Geometry[];
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {

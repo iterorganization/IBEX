@@ -216,6 +216,7 @@ export const HoverButtons = React.memo(
 
       // Handle geometries in contour type
       if (wantedType === 'Geometry') {
+        // Get geometries
         const fetchedGeometrie = await fetchGeometries(
           selectedDataPlot,
           checkedNodeURI,
@@ -231,7 +232,7 @@ export const HoverButtons = React.memo(
         }
         selectedDataPlot.geometrie = fetchedGeometrie.geometrie;
       } else {
-        delete selectedDataPlot.geometrie;
+        selectedDataPlot.geometrie = [];
       }
       setPlotMode(wantedType);
 

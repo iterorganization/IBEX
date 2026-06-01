@@ -589,6 +589,140 @@ function closeContourGeometrie(data: AxisData): AxisData {
   return (data as any[]).map(closeContourGeometrie) as AxisData;
 }
 
+const fetchGeometryOutline = async (
+  uri: string,
+  path: string,
+  shouldSwitchAxis: boolean,
+) => {
+  // TODO replace constrained paths by them provided by BE
+  const rPath = path + '/r';
+  const zPath = path + '/z';
+
+  // Get r
+  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  rResponse.data.value = closeContourGeometrie(rResponse.data.value);
+  const rFormattedCoordinates = formatCoordinates(
+    rResponse.data.coordinates,
+    normalizeIndices(uri + rPath),
+    0,
+  );
+  const rVector = getVectorData(rFormattedCoordinates, rResponse.data.value);
+
+  // Get z
+  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+  zResponse.data.value = closeContourGeometrie(zResponse.data.value);
+  const zFormattedCoordinates = formatCoordinates(
+    zResponse.data.coordinates,
+    normalizeIndices(uri + zPath),
+    0,
+  );
+  const zVector = getVectorData(zFormattedCoordinates, zResponse.data.value);
+
+  let x, y: number[];
+
+  if (shouldSwitchAxis) {
+    x = zVector;
+    y = rVector;
+  } else {
+    x = rVector;
+    y = zVector;
+  }
+  // Get outline
+  const outlineGeometry: Geometry = {
+    x: [...x],
+    y: [...y],
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: 'black', width: 2 },
+    nodeUris: [uri + rPath, uri + zPath],
+    name: 'outline',
+  };
+  return outlineGeometry;
+};
+
+const fetchGeometryRectangle = async (
+  uri: string,
+  path: string,
+  shouldSwitchAxis: boolean,
+) => {
+  // TODO replace constrained paths by them provided by BE
+  const rPath = path + '/r';
+  const zPath = path + '/z';
+  const widthPath = path + '/width';
+  const heightPath = path + '/height';
+
+  // Get r
+  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  const rVector = rResponse.data.value as number[][];
+
+  // Get z
+  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+  const zVector = zResponse.data.value as number[][];
+
+  // Get width
+  const widthResponse = await fetchDataPlot(normalizeIndices(uri + widthPath));
+  const widthVector = widthResponse.data.value as number[][];
+
+  // Get height
+  const heightResponse = await fetchDataPlot(
+    normalizeIndices(uri + heightPath),
+  );
+  const heightVector = heightResponse.data.value as number[][];
+
+  const rectangleGeometry: Geometry[] = [];
+  const lastCoord =
+    zResponse.data.coordinates[zResponse.data.coordinates.length - 1];
+  for (const [coordIndex, coordValue] of lastCoord.value.entries()) {
+    if (
+      rVector[coordIndex][0] === -9e40 ||
+      zVector[coordIndex][0] === -9e40 ||
+      widthVector[coordIndex][0] === -9e40 ||
+      heightVector[coordIndex][0] === -9e40
+    ) {
+      // Data equals to -9e+40 are unexpected
+      continue;
+    }
+
+    // Format (x,y) points with rectangle rule
+    let x, y: number[];
+    x = [
+      rVector[coordIndex][0] - widthVector[coordIndex][0] / 2,
+      rVector[coordIndex][0] + widthVector[coordIndex][0] / 2,
+      rVector[coordIndex][0] + widthVector[coordIndex][0] / 2,
+      rVector[coordIndex][0] - widthVector[coordIndex][0] / 2,
+    ];
+    y = [
+      zVector[coordIndex][0] - heightVector[coordIndex][0] / 2,
+      zVector[coordIndex][0] - heightVector[coordIndex][0] / 2,
+      zVector[coordIndex][0] + heightVector[coordIndex][0] / 2,
+      zVector[coordIndex][0] + heightVector[coordIndex][0] / 2,
+    ];
+
+    // Close x & y vectors
+    x.push(x[0]);
+    y.push(y[0]);
+
+    if (shouldSwitchAxis) {
+      const tempX = x;
+      x = y;
+      y = tempX;
+    }
+    // Add a rectangle
+    rectangleGeometry.push({
+      x: [...x],
+      y: [...y],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'orange', width: 2 },
+      nodeUris: [uri + rPath, uri + zPath],
+      name: coordValue,
+      fill: 'toself',
+    } as Geometry);
+  }
+  // Return rectangle list
+  return rectangleGeometry;
+};
+
 export const fetchGeometries = async (
   dataPlot: DataGridPlot,
   updatedCheckedNodeURI: URITreeNodeData[],
@@ -596,55 +730,38 @@ export const fetchGeometries = async (
   try {
     const uri = dataPlot.plot[0].nodeUri.split('#')[0]; // ? Need a rule in the case we have plots from different URIs (at the moment we get geometries from first URI plotted)
 
-    // TODO replace constrained paths by them provided by BE
-    const rPath = '#wall:0/description_2d[:]/limiter/unit[:]/outline/r';
-    const zPath = '#wall:0/description_2d[:]/limiter/unit[:]/outline/z';
+    // TODO : get from BE all geometries to display
+    const paths: string[] = [
+      '#wall:0/description_2d[:]/limiter/unit[:]/outline',
+      '#pf_active/coil[0]/element[0]/geometry/rectangle',
+    ];
 
-    // Get r
-    const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
-    rResponse.data.value = closeContourGeometrie(rResponse.data.value);
-    const rFormattedCoordinates = formatCoordinates(
-      rResponse.data.coordinates,
-      normalizeIndices(uri + rPath),
-      0,
-    );
-    const rVector = getVectorData(rFormattedCoordinates, rResponse.data.value);
-
-    // Get z
-    const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
-    zResponse.data.value = closeContourGeometrie(zResponse.data.value);
-    const zFormattedCoordinates = formatCoordinates(
-      zResponse.data.coordinates,
-      normalizeIndices(uri + zPath),
-      0,
-    );
-    const zVector = getVectorData(zFormattedCoordinates, zResponse.data.value);
-
-    let x, y: number[];
     const shouldSwitchAxis =
       dataPlot.coordinates.findIndex((coord) => coord.axeIndex === 0) === 1;
 
-    if (shouldSwitchAxis) {
-      x = zVector;
-      y = rVector;
-    } else {
-      x = rVector;
-      y = zVector;
-    }
-    // Get geometries // ? (contour case)
-    const contourGeometry: Geometry[] = [
-      {
-        x: [...x],
-        y: [...y],
-        type: 'scatter',
-        mode: 'lines',
-        line: { color: 'black', width: 2 },
-        nodeUris: [uri + rPath, uri + zPath],
-        name: 'contour',
-      },
-    ];
+    for (const path of paths) {
+      const pathSplitted = path.split('/');
+      const typeOfGeometry = pathSplitted[pathSplitted.length - 1];
+      if (typeOfGeometry === 'outline') {
+        // Get outline
+        const contourGeometry = await fetchGeometryOutline(
+          uri,
+          path,
+          shouldSwitchAxis,
+        );
+        dataPlot.geometrie.push(contourGeometry);
+      }
 
-    dataPlot.geometrie = contourGeometry;
+      if (typeOfGeometry === 'rectangle') {
+        // Get rectangle
+        const rectangleGeometry = await fetchGeometryRectangle(
+          uri,
+          path,
+          shouldSwitchAxis,
+        );
+        dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
+      }
+    }
 
     if (dataPlot.isEditing && dataPlot?.geometrie) {
       // Check geometries in tree
@@ -1020,6 +1137,7 @@ export function formatConfigBeforeLoadingURIs(
           unit: '',
         } as DataPlotly;
       }),
+      geometrie: [],
       synchronizedGrids: data?.synchronizedGrids
         ? data.synchronizedGrids
         : { color: '', list: [] },
