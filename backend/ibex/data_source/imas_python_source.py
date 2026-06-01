@@ -836,6 +836,7 @@ class IMASPythonSource(DataSourceInterface):
                     new_plot_data_query = copy(plot_data_query)
                     new_plot_data_query.uri = _uri
                     new_plot_data_query.interpolate_over = None
+                    new_plot_data_query.smoothing_method = None
                     interpolate_to_coordinates = self.get_plot_data(new_plot_data_query)["data"]["coordinates"]
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
