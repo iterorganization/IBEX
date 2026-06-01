@@ -9,6 +9,48 @@ pytest.test_client = TestClient(app)
 
 
 @pytest.fixture(scope="session")
+def interpolation_entry_path_directory(tmp_path_factory):
+    tmp_path = tmp_path_factory.mktemp("interpolation_testdb")
+
+    with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_1", mode="w") as entry:
+        eq = entry.factory.equilibrium()
+
+        eq.ids_properties.homogeneous_time = 1
+        eq.time = np.asarray([1, 2, 3, 4], dtype=float)
+        eq.time_slice.resize(4)
+        for ts in eq.time_slice:
+            ts.profiles_1d.psi = np.asarray([1.0, 1.2, 1.3, 1.4, 1.5, 1.6])
+            ts.profiles_1d.psi_error_upper = np.asarray([2.0, 2.0, 2.0, 2.0, 2.0, 2.0])
+            ts.profiles_1d.psi_error_lower = np.asarray([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+
+            ts.profiles_2d.resize(2)
+            for p2d in ts.profiles_2d:
+                p2d.psi = np.asarray(np.random.rand(3, 3))
+                p2d.grid.dim1 = np.asarray([1.0, 2.0, 3.0])
+                p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0])
+        entry.put(eq)
+
+    with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_2", mode="w") as entry:
+        eq = entry.factory.equilibrium()
+
+        eq.ids_properties.homogeneous_time = 1
+        eq.time = np.asarray([1, 2, 3], dtype=float)
+        eq.time_slice.resize(3)
+        for ts in eq.time_slice:
+            ts.profiles_1d.psi = np.asarray([1.8, 1.9, 2.0, 2.1])
+            ts.profiles_1d.psi_error_upper = np.asarray([2.5, 2.5, 2.5, 2.5])
+            # ts.profiles_1d.psi_error_lower = np.asarray([1.5,1.5,1.5,1.5])
+
+            ts.profiles_2d.resize(4)
+            for p2d in ts.profiles_2d:
+                p2d.psi = np.asarray(np.random.rand(9, 3))
+                p2d.grid.dim1 = np.asarray([0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7])
+                p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0])
+        entry.put(eq)
+    return tmp_path
+
+
+@pytest.fixture(scope="session")
 def entry_path(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("testdb")
 

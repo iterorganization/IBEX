@@ -9,11 +9,15 @@ import {
   DataGridPlot,
   DataPlotly,
   ErrorBandData,
+  FieldValueResponse,
+  NodeInfoTypeEnum,
   PlotCoordinatesResponse,
   PlotDataResponse,
+  PlotLine,
   URIData,
   URITreeNodeData,
 } from '../types';
+import { ScatterData } from 'plotly.js';
 import { fetchDataPlot, fetchFieldValue } from './fetchData';
 import { generateNewGridPlot } from './grid';
 import {
@@ -27,8 +31,16 @@ import {
   getFirstArrayValueFromShape,
 } from './matrix';
 import * as tf from '@tensorflow/tfjs';
-import { ErrorBar } from 'plotly.js';
-import { containsFloat, removeSuffix } from './functions';
+import { containsFloat, rgbToRgba } from './functions';
+
+const defaultColorsRGB = [
+  'rgb(31, 119, 180)',
+  'rgb(255, 127, 14)',
+  'rgb(44, 160, 44)',
+  'rgb(214, 39, 40)',
+  'rgb(148, 103, 189)',
+  'rgb(140, 86, 75)',
+];
 
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
@@ -59,6 +71,7 @@ export const plotData = (
     y: yValue,
     yData: yData,
     name: name ? `${name}_${labelUri}` : '',
+    line: {},
     mode: 'lines',
     nodeUri: nodeUri,
     description: description,
@@ -129,11 +142,7 @@ export const handleNewPlot = async (
     };
 
     //Get coordinates data
-    formattedCoordinates = formatCoordinates(
-      response.data.coordinates,
-      defaultUri,
-      0,
-    );
+    formattedCoordinates = formatCoordinates(response.data.coordinates, 0);
   }
 
   // Set the yAxis properties
@@ -191,6 +200,148 @@ export const handleNewPlot = async (
 };
 
 /**
+ * Update DataGridPlot provided by including interpolation with the newest plot. In delete case, interpolate without the deleted one.
+ * @param findDataPlot
+ * @param mainUri
+ * @param nodeType Optional parameter used in add case to get data from BE
+ */
+const updateInterpolatedPlots = async (
+  findDataPlot: DataGridPlot,
+  mainUri: string,
+  nodeType?: NodeInfoTypeEnum,
+) => {
+  let interpolatedDataPlot = structuredClone(findDataPlot);
+  const isInDeleteCase = !nodeType;
+  let formattedCoordinates: Coordinates[];
+  const urisToInterpolate = getUrisToInterpolate(
+    mainUri,
+    interpolatedDataPlot.plot,
+  );
+
+  if (!isInDeleteCase) {
+    // In add case we add main uri in list of dependencies because we update plots interpolable with it
+    urisToInterpolate.push(mainUri);
+  }
+  let plotsUpdated = 0;
+  for (const plot of interpolatedDataPlot.plot) {
+    if (!urisToInterpolate.includes(normalizeIndices(plot.nodeUri))) {
+      continue;
+    }
+    plotsUpdated++;
+
+    // Update all plots with the interpolation parameter
+    const plotInterpolated = await fetchDataPlot(
+      normalizeIndices(plot.nodeUri),
+      interpolatedDataPlot?.downsampled_method,
+      interpolatedDataPlot?.downsampled_size,
+      nodeType,
+      urisToInterpolate.filter((uri) => uri !== normalizeIndices(plot.nodeUri)),
+    );
+
+    if (plotsUpdated === 1 && isInDeleteCase) {
+      // In delete case the updated data without interpolation is in this function, so we need to update valueIndex here
+      formattedCoordinates = formatCoordinates(
+        plotInterpolated.data.coordinates,
+        0,
+      );
+
+      formattedCoordinates = updateCoordsAfterInterpolation(
+        interpolatedDataPlot.coordinates,
+        formattedCoordinates,
+      );
+
+      // Update common coordinates to the new interpolation in delete case
+      for (const [index, coord] of interpolatedDataPlot.coordinates.entries()) {
+        if (coord?.rangeValues)
+          formattedCoordinates[index].rangeValues = coord.rangeValues;
+      }
+      interpolatedDataPlot.coordinates = formattedCoordinates;
+    }
+
+    const wantedX = getArrayValueFromDependance(
+      interpolatedDataPlot.coordinates,
+      0,
+    );
+    const wantedY = getVectorData(
+      interpolatedDataPlot.coordinates,
+      plotInterpolated.data.value,
+    );
+
+    // Update x, y & yData
+    plot.x = wantedX;
+    plot.y = wantedY;
+    plot.yData = plotInterpolated.data.value;
+    plot.shape = plotInterpolated.data.downsampled_shape;
+
+    if (isInDeleteCase) {
+      // Apply range in delete case
+      for (const coordinate of interpolatedDataPlot.coordinates) {
+        if (coordinate?.rangeValues) {
+          interpolatedDataPlot = await applyRange(
+            coordinate,
+            coordinate.rangeValues,
+            interpolatedDataPlot,
+            [plot.nodeUri],
+          );
+        }
+      }
+    }
+  }
+  return interpolatedDataPlot;
+};
+
+/**
+ * Get uri list to base interpolation on in order to get interpolate_over param when calling fetchDataPlot with interpolation
+ * @param uriToAdd
+ * @param plots
+ */
+export const getUrisToInterpolate = (uriToAdd: string, plots: DataPlotly[]) => {
+  const getPath = (uri: string) => normalizeIndices(uri).split('#')[1] ?? '';
+
+  const normalizedUriToAdd = normalizeIndices(uriToAdd);
+  const targetPath = getPath(normalizeIndices(uriToAdd));
+
+  const urisToInterpolate = [
+    ...new Set(
+      plots
+        .map((plot) => normalizeIndices(plot.nodeUri))
+        .filter(
+          (uri) =>
+            getPath(uri) === targetPath &&
+            normalizeIndices(uri) !== normalizedUriToAdd,
+        ),
+    ),
+  ];
+
+  return urisToInterpolate;
+};
+
+const updateCoordsAfterInterpolation = (
+  oldCoords: Coordinates[],
+  newCoords: Coordinates[],
+) => {
+  const interpolatedCoords = structuredClone(newCoords);
+  for (const [index, newCoord] of interpolatedCoords.entries()) {
+    const oldCoord = oldCoords[index];
+    const wantedValue = getArrayValueFromDependance(
+      oldCoords,
+      oldCoord.axeIndex,
+    )[oldCoord.valueIndex];
+
+    // Replace valueIndex with the new coordinates
+    const newIndex = getArrayValueFromDependance(
+      interpolatedCoords,
+      newCoord.axeIndex,
+    ).findIndex((nc) => nc === wantedValue);
+    newCoord.valueIndex = newIndex === -1 ? 0 : newIndex;
+
+    // Update axeIndex to preserve the transposition
+    newCoord.axeIndex = oldCoord.axeIndex;
+  }
+  return interpolatedCoords;
+};
+
+/**
  * @description Handles existing plots by checking if the nodes match the plot's nodes.
  * If they do, it updates the plot; otherwise, it fetches new data for the nodes.
  * @param nodes The nodes to update plots for.
@@ -216,20 +367,16 @@ export const handleExistingPlot = async (
   );
 
   if (dataToPlot.length === 0) {
-    return updateExistingPlot(nodes, findDataPlot, updatedActive);
+    // Delete a plot
+    return await deleteExistingPlot(nodes, findDataPlot, updatedActive);
   }
 
   for (const node of dataToPlot) {
     let defaultUri = node.uri;
-    if (defaultUri.split('#')[0] !== nodes[0].uri.split('#')[0]) {
-      showNotification({
-        title: 'Plot',
-        message: 'Unable to plot data from different URIs',
-        color: 'yellow',
-      });
-      updatedActive.checkedNodeURI = nodes.filter((n) => n !== node);
-      continue;
-    }
+    const urisToInterpolate = getUrisToInterpolate(
+      defaultUri,
+      findDataPlot.plot,
+    );
 
     // For each dataPlot call fetchDataPlot to get data from BE
     const response = await fetchDataPlot(
@@ -237,21 +384,51 @@ export const handleExistingPlot = async (
       findDataPlot?.downsampled_method,
       findDataPlot?.downsampled_size,
       node.type,
+      urisToInterpolate,
+    );
+
+    // Update the common coordinates from interpolation
+    const formattedCoordinates = formatCoordinates(
+      response.data.coordinates,
+      0,
+    );
+    for (const [index, coord] of findDataPlot.coordinates.entries()) {
+      if (coord?.rangeValues)
+        formattedCoordinates[index].rangeValues = coord.rangeValues;
+      if (coord?.valueIndex)
+        formattedCoordinates[index].valueIndex = coord.valueIndex;
+    }
+
+    // Get the common coordinates after interpolation
+    const interpolatedCoordinates = updateCoordsAfterInterpolation(
+      findDataPlot.coordinates,
+      formattedCoordinates,
+    );
+    const partiallyInterpolatedDataPlot: DataGridPlot = {
+      ...structuredClone(findDataPlot),
+      coordinates: interpolatedCoordinates,
+    };
+
+    // Interpolate all plots
+    const interpolatedDataPlot = await updateInterpolatedPlots(
+      partiallyInterpolatedDataPlot,
+      defaultUri,
+      node.type,
     );
 
     defaultUri = getDefaultUri(defaultUri); //Set defaultUri [0] by default
-
     const unit = response.data.unit;
     const unitExists =
-      findDataPlot.yAxisData.unit === unit ||
-      (findDataPlot.y2AxisData && findDataPlot.y2AxisData.unit === unit);
+      interpolatedDataPlot.yAxisData.unit === unit ||
+      (interpolatedDataPlot.y2AxisData &&
+        interpolatedDataPlot.y2AxisData.unit === unit);
 
-    const xAxis = findDataPlot.xAxisData;
+    const xAxis = interpolatedDataPlot.xAxisData;
     const coordsResponse = response.data.coordinates;
 
     const sliderExist =
-      findDataPlot.coordinates &&
-      findDataPlot.coordinates.length > 0 &&
+      interpolatedDataPlot.coordinates &&
+      interpolatedDataPlot.coordinates.length > 0 &&
       coordsResponse.length > 1;
 
     let xAxisResponsePath = '';
@@ -268,7 +445,7 @@ export const handleExistingPlot = async (
       const coordResponses = coordsResponse.slice(1);
 
       coordResponses.forEach((coordRes) => {
-        const matchingCoord = findDataPlot.coordinates.find(
+        const matchingCoord = interpolatedDataPlot.coordinates.find(
           (c) => c.name === coordRes.name,
         );
 
@@ -306,8 +483,8 @@ export const handleExistingPlot = async (
     }
 
     const coordinatesExistAndMatch =
-      findDataPlot.coordinates.length === coordsResponse.length &&
-      JSON.parse(JSON.stringify(findDataPlot.coordinates))
+      interpolatedDataPlot.coordinates.length === coordsResponse.length &&
+      structuredClone(interpolatedDataPlot.coordinates)
         .sort(compareByAxeIndex)
         .every((coord: Coordinates, index: number) => {
           const responseCoord = coordsResponse[index];
@@ -345,7 +522,8 @@ export const handleExistingPlot = async (
       (!xAxis && coordsResponse.length > 0) ||
       (xAxis && coordsResponse.length === 0) ||
       (xAxis &&
-        coordsResponse.slice(1).length == findDataPlot.coordinates.length &&
+        coordsResponse.slice(1).length ==
+          interpolatedDataPlot.coordinates.length &&
         // Check if the xAxisData matches the first coordinate
         (xAxis.name !== coordsResponse[0].name ||
           xAxis.unit !== coordsResponse[0].unit ||
@@ -360,6 +538,10 @@ export const handleExistingPlot = async (
       updatedActive.checkedNodeURI = nodes.filter((n) => n !== node);
       continue;
     }
+
+    // Update coordinates to have a common one with interpolation (once we have checked that we can display the new plot)
+    findDataPlot.coordinates = interpolatedDataPlot.coordinates;
+    findDataPlot.plot = interpolatedDataPlot.plot;
 
     const yAxis: Axis = {
       name: response.data.name,
@@ -436,12 +618,20 @@ export const handleExistingPlot = async (
         updatedPlot,
       ];
     }
-
-    await fetchErrorBandsInConfig(updatedActive, defaultUri);
+    const areCombinedCoordinates = urisToInterpolate.length;
+    if (areCombinedCoordinates) {
+      // Update all error bands when we have combined coordinates
+      for (const plot of updatedPlot.plot) {
+        await fetchErrorBands(updatedPlot, plot.nodeUri);
+      }
+    } else {
+      // Only get error bands of added plot when we don't have combined coordinates
+      await fetchErrorBandsInConfig(updatedActive, defaultUri);
+    }
 
     // Apply range to new error bands when adding another plot
     for (const coordinate of updatedPlot.coordinates) {
-      if (coordinate?.range) {
+      if (coordinate?.rangeValues) {
         updatedPlot = await applyRange(
           coordinate,
           coordinate.rangeValues,
@@ -462,17 +652,26 @@ export const handleExistingPlot = async (
  * @param updatedActive The updated active configuration.
  * @returns The updated active configuration.
  */
-const updateExistingPlot = (
+const deleteExistingPlot = async (
   nodes: URITreeNodeData[],
   findDataPlot: DataGridPlot,
   updatedActive: Configuration,
-): Configuration => {
+): Promise<Configuration> => {
   const plots = findDataPlot?.plot.filter((plot: DataPlotly) =>
     nodes.some(
       (node: URITreeNodeData) =>
         node.uri === normalizeIndices(plot.nodeUri) &&
         node.name === plot.labelUri,
     ),
+  );
+
+  const deletedPlot = findDataPlot?.plot.find(
+    (plot: DataPlotly) =>
+      !nodes.some(
+        (node: URITreeNodeData) =>
+          node.uri == normalizeIndices(plot.nodeUri) &&
+          node.name === plot.labelUri,
+      ),
   );
 
   /**
@@ -492,9 +691,34 @@ const updateExistingPlot = (
   findDataPlot.title = findDataPlot.isTitleOverwritten
     ? findDataPlot.title
     : plots.map((plot) => plot.name).join('/');
-  updatedActive.dataPlot = [
-    ...updatedActive.dataPlot.filter((plot) => plot.i !== findDataPlot.i),
+
+  // Update all plots with interpolation here (in delete case)
+  const interpolatedDataPlot = await updateInterpolatedPlots(
     findDataPlot,
+    deletedPlot.nodeUri,
+  );
+  findDataPlot = interpolatedDataPlot;
+
+  // Update all error bands when we have combined coordinates
+  const oldUrisToInterpolate = getUrisToInterpolate(
+    findDataPlot.plot[0].nodeUri,
+    [...findDataPlot.plot, deletedPlot],
+  );
+  const areCombinedCoordinates = oldUrisToInterpolate.length;
+  if (areCombinedCoordinates) {
+    // Update all error bands when we had combined coordinates before the deletion
+    for (const plot of findDataPlot.plot) {
+      await fetchErrorBands(findDataPlot, plot.nodeUri);
+    }
+  }
+
+  const index = updatedActive.dataPlot.findIndex(
+    (dp) => dp.i === interpolatedDataPlot.i,
+  );
+  updatedActive.dataPlot = [
+    ...updatedActive.dataPlot.slice(0, index),
+    interpolatedDataPlot,
+    ...updatedActive.dataPlot.slice(index + 1),
   ];
   return updatedActive;
 };
@@ -508,35 +732,33 @@ export const fetchErrorBandsInConfig = async (
   active: Configuration,
   uri: string,
 ) => {
-  let dataPlotWithErrBands: DataGridPlot[];
-  const data = active.dataPlot.find((d) => d.isEditing);
-  if (!data) {
+  const selectedDataPlot = active.dataPlot.find((d) => d.isEditing);
+  if (!selectedDataPlot) {
     // Don't get error bands when no editing dataPlot
     return;
   }
 
-  const selectedDataPlot = active.dataPlot.find(
-    (dataPlot) => dataPlot.i === data.i,
-  );
   if (!selectedDataPlot.displayErrorBand) {
-    // Stop error bands when the dataPlot switch is off
+    // Stop error bands when the dataPlot error_bands switch is off
     return;
   }
 
   try {
-    dataPlotWithErrBands = active.dataPlot;
-    const updatedDataPlot = dataPlotWithErrBands.find((d) => d.i === data.i);
+    const updatedPlot = selectedDataPlot.plot.find(
+      (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
+    );
+
+    if (updatedPlot?.error_bands) {
+      // Stop fetch of error bands when the dataPlot error_bands switch is on but already have error_bands (case occuring after saving customization in editing mode)
+      return;
+    }
+
+    const updatedDataPlot = selectedDataPlot;
     const errBandsResponse = await fetchErrorBands(updatedDataPlot, uri);
 
     if (errBandsResponse) {
-      const plot = selectedDataPlot.plot.find(
-        (p) => normalizeIndices(p.nodeUri) === normalizeIndices(uri),
-      );
-      const updatedPlot = dataPlotWithErrBands
-        .find((dataPlot) => dataPlot.i === data.i)
-        .plot.find((plotToUpdate) => plotToUpdate.nodeUri === plot.nodeUri);
       const updatedCheckedNodeURI = active.checkedNodeURI;
-      if (data.isEditing && updatedPlot?.error_bands) {
+      if (selectedDataPlot.isEditing && updatedPlot?.error_bands) {
         // Check error bands in tree
         for (const error_band of updatedPlot.error_bands) {
           const newCheckedNode = {
@@ -597,14 +819,49 @@ export const fetchErrorBands = async (
       forcedDownsamplingMethod || dataPlot?.downsampled_method;
     const downsamplingSize: number =
       forcedDownsamplingSize || dataPlot?.downsampled_size;
+    const urisToInterpolate = getUrisToInterpolate(plot.nodeUri, dataPlot.plot);
+
+    let upperResponse, lowerResponse: FieldValueResponse;
 
     // Get error bands
-    const upperResponse = await fetchFieldValue(
-      normalizeIndices(plot.nodeUri) + '_error_upper',
-      downsamplingMethod,
-      downsamplingSize,
-      dataPlot?.dataType,
-    );
+    if (urisToInterpolate.length) {
+      const interpolatedUpper = await fetchDataPlot(
+        normalizeIndices(plot.nodeUri) + '_error_upper',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+        urisToInterpolate,
+      );
+      upperResponse = {
+        value: interpolatedUpper.data.value,
+      } as FieldValueResponse;
+
+      const interpolatedLower = await fetchDataPlot(
+        normalizeIndices(plot.nodeUri) + '_error_lower',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+        urisToInterpolate,
+      );
+      lowerResponse = {
+        value: interpolatedLower.data.value,
+      } as FieldValueResponse;
+    } else {
+      upperResponse = await fetchFieldValue(
+        normalizeIndices(plot.nodeUri) + '_error_upper',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+      );
+
+      lowerResponse = await fetchFieldValue(
+        normalizeIndices(plot.nodeUri) + '_error_lower',
+        downsamplingMethod,
+        downsamplingSize,
+        dataPlot?.dataType,
+      );
+    }
+
     const defaultUpperYValue = getVectorData(
       dataPlot.coordinates,
       upperResponse.value,
@@ -616,12 +873,6 @@ export const fetchErrorBands = async (
       plot.nodeUri + '_error_upper',
     );
 
-    const lowerResponse = await fetchFieldValue(
-      normalizeIndices(plot.nodeUri) + '_error_lower',
-      downsamplingMethod,
-      downsamplingSize,
-      dataPlot?.dataType,
-    );
     const defaultLowerYValue = getVectorData(
       dataPlot.coordinates,
       lowerResponse.value,
@@ -643,6 +894,8 @@ export const fetchErrorBands = async (
           error.toString().includes('_error_lower'))
       )
     ) {
+      console.warn('No error bands for : ', plot.nodeUri);
+    } else {
       console.error('Error handling error bands: ', error);
     }
   }
@@ -665,55 +918,9 @@ const formatErrorBands = (
     return;
   }
 
-  // Change the plot format to show error bands
-  let error_suffix = '';
-  if (nodeUri.endsWith('_error_lower')) {
-    error_suffix = '_error_lower';
-  } else if (nodeUri.endsWith('_error_upper')) {
-    error_suffix = '_error_upper';
-  }
-  const mainNodeUri = removeSuffix(nodeUri, error_suffix);
-
   if (foundedPlot && !foundedPlot?.error_bands) {
     // Init error_bands
     foundedPlot.error_bands = [];
-  }
-
-  if (!foundedPlot?.error_y) {
-    // Init error_y
-    foundedPlot.error_y = {
-      type: 'data',
-      symmetric: true,
-      array: yValue,
-    };
-  }
-
-  if (foundedPlot?.error_bands?.length) {
-    // We are not in symectric case when there is more than one selected error band
-    foundedPlot.error_y.symmetric = false;
-  }
-
-  if (
-    error_suffix === '_error_lower' &&
-    foundedPlot?.error_bands.find(
-      (error_band) =>
-        error_band.path === normalizeIndices(mainNodeUri) + '_error_upper',
-    ) &&
-    foundedPlot?.error_y?.type === 'data'
-  ) {
-    // Set to arrayminus when lower & other error_band
-    foundedPlot.error_y.arrayminus = yValue;
-  } else if (
-    error_suffix === '_error_upper' &&
-    foundedPlot?.error_bands.find(
-      (error_band) =>
-        error_band.path === normalizeIndices(mainNodeUri) + '_error_lower',
-    ) &&
-    foundedPlot?.error_y?.type === 'data'
-  ) {
-    // Set lower as arrayminus when select upper & having lower
-    foundedPlot.error_y.arrayminus = foundedPlot.error_y.array;
-    foundedPlot.error_y.array = yValue;
   }
 
   foundedPlot.error_bands = foundedPlot.error_bands.filter(
@@ -723,7 +930,201 @@ const formatErrorBands = (
   foundedPlot.error_bands.push({
     path: normalizeIndices(nodeUri),
     yData: yData,
+    array: yValue,
   });
+};
+
+const formatErrorBandLayout = (
+  error_band_type: 'upper' | 'lower',
+  mainPlot: DataPlotly,
+  coordinates: Coordinates[],
+  plotIndex: number,
+  symmetricalCase?: boolean,
+) => {
+  const mainY = mainPlot.y as number[];
+  const lineShape = (mainPlot.line?.shape ?? 'linear') as 'linear' | 'hv';
+
+  const errBandTypePosition = symmetricalCase
+    ? 0
+    : error_band_type === 'lower'
+      ? 1
+      : 0;
+  const yDiff = getVectorData(
+    coordinates,
+    mainPlot.error_bands[errBandTypePosition].yData,
+  );
+  const length = Math.min(mainPlot.y.length, yDiff.length);
+  const yErrBandPart = new Array<number>(length);
+  for (let i = 0; i < length; i++) {
+    if (error_band_type === 'lower') {
+      yErrBandPart[i] = mainY[i] - yDiff[i];
+    } else {
+      yErrBandPart[i] = mainY[i] + yDiff[i];
+    }
+  }
+  const errBandPartPlot: Partial<ScatterData> = {
+    x: mainPlot.x,
+    y: yErrBandPart,
+    type: 'scatter',
+    mode: 'lines',
+    line: { width: 0, shape: lineShape },
+    hoverinfo: 'skip',
+  };
+  if (error_band_type === 'lower') {
+    errBandPartPlot.showlegend = false;
+  } else {
+    errBandPartPlot.name = 'error bands';
+    errBandPartPlot.fill = 'tonexty';
+    errBandPartPlot.fillcolor = mainPlot.line?.color
+      ? rgbToRgba(mainPlot.line?.color, 0.2)
+      : rgbToRgba(defaultColorsRGB[plotIndex], 0.2);
+  }
+  return errBandPartPlot;
+};
+
+export function getErrorsAreaToPlot(
+  mainPlots: DataPlotly[],
+  coordinates: Coordinates[],
+) {
+  const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
+
+  for (const [plotIndex, mainPlot] of mainPlots.entries()) {
+    // Each plot should have connectgaps equals to true to prevent gap in combined data cases
+    mainPlot.connectgaps = true;
+
+    // Add main plot
+    entirePlotList.push(mainPlot);
+
+    if (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) {
+      // Add lower and upper
+      const lowerPlot = formatErrorBandLayout(
+        'lower',
+        mainPlot,
+        coordinates,
+        plotIndex,
+      );
+      lowerPlot.connectgaps = true;
+      entirePlotList.push(lowerPlot);
+      const upperPlot = formatErrorBandLayout(
+        'upper',
+        mainPlot,
+        coordinates,
+        plotIndex,
+      );
+      upperPlot.connectgaps = true;
+      entirePlotList.push(upperPlot);
+    } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
+      // Symmetrical case: use upper for the interval
+      const lowerPlot = formatErrorBandLayout(
+        'lower',
+        mainPlot,
+        coordinates,
+        plotIndex,
+        true,
+      );
+      entirePlotList.push(lowerPlot);
+      const upperPlot = formatErrorBandLayout(
+        'upper',
+        mainPlot,
+        coordinates,
+        plotIndex,
+        true,
+      );
+      entirePlotList.push(upperPlot);
+    }
+
+    if (mainPlot?.error_bands) {
+      // Add main plot
+      if (mainPlot.error_bands.length === 2) {
+        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
+          mainPlot.error_bands[0].array[i],
+          mainPlot.error_bands[1].array[i],
+        ]);
+      } else {
+        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
+          mainPlot.error_bands[0].array[i],
+        ]);
+      }
+      mainPlot.hovertemplate = 'x: %{x}<br>' + 'y: %{y}<br>';
+      if (mainPlot?.error_bands?.length) {
+        mainPlot.hovertemplate +=
+          mainPlot.error_bands.length === 2
+            ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
+            : 'y error bands: ±%{customdata[0]}<br>';
+      }
+      mainPlot.hovertemplate += '<extra></extra>';
+    }
+  }
+  return entirePlotList;
+}
+
+/**
+ * Init plots color by adding color in plot.line for each plot
+ */
+export const initPlotColors = async (
+  customizedDataGrid: DataGridPlot,
+  customContainerRef: React.MutableRefObject<HTMLDivElement>,
+  setterForCustomization?: React.Dispatch<React.SetStateAction<DataGridPlot>>,
+) => {
+  // Get plot colors when select 1D plots accordion
+  const customContainer = customContainerRef.current;
+  if (!customContainer) return;
+  // Get child elements from the legend
+  const legends = Array.from(
+    customContainer.querySelectorAll<SVGGElement>('g.layers'),
+  ).filter((g) => {
+    return g.previousSibling.textContent?.trim() !== 'error bands';
+  });
+
+  const updatedPlotColors = setterForCustomization
+    ? (structuredClone(customizedDataGrid) as DataGridPlot)
+    : customizedDataGrid;
+
+  if (
+    updatedPlotColors.plot.length &&
+    legends.length === updatedPlotColors.plot.length
+  ) {
+    // When we have a color legend (so several plots)
+    let plotIndex = 0;
+    let shouldUpdateColors = false;
+    for (const plot of updatedPlotColors.plot) {
+      // Get from DOM & set color in plot.line for each plots
+      if (!plot?.line?.color) {
+        shouldUpdateColors = true;
+      }
+
+      const line = legends[plotIndex].querySelector<SVGGElement>(
+        'g.legendlines > path',
+      );
+      // We get color from point when plot.mode === "markers"
+      const point = legends[plotIndex].querySelector<SVGGElement>(
+        'g.legendpoints > path',
+      );
+      const colorFromDOM = line?.style?.stroke || point?.style?.fill;
+
+      if (!plot?.line) {
+        plot.line = { color: colorFromDOM } as PlotLine;
+      } else {
+        plot.line.color = colorFromDOM;
+      }
+      plotIndex++;
+    }
+    if (!shouldUpdateColors) {
+      return;
+    }
+  } else if (updatedPlotColors.plot.length) {
+    // When we have only one plot, there is no legend so we set manualy to his default plotly color
+    for (const [index, plot] of updatedPlotColors.plot.entries()) {
+      if (!plot?.line?.color) {
+        plot.line = { ...plot.line, color: defaultColorsRGB[index] };
+      }
+    }
+  }
+  if (setterForCustomization) {
+    setterForCustomization(updatedPlotColors);
+  } else {
+    return updatedPlotColors;
+  }
 };
 
 /**
@@ -786,7 +1187,6 @@ export function formatConfigBeforeLoadingURIs(
  */
 function formatCoordinates(
   receivedCoords: PlotCoordinatesResponse[],
-  uri: string,
   valueIndex: number,
 ) {
   const formattedCoordinates: Coordinates[] = receivedCoords.map(
@@ -807,7 +1207,6 @@ function formatCoordinates(
           valueIndex === 0
             ? getDefaultUri(coordinate.target)
             : updateIndexFieldName(coordinate.target, lastField, valueIndex),
-        nodeUri: uri,
         axeIndex: index,
         unit: coordinate.unit || '',
       };
@@ -844,24 +1243,17 @@ export async function plotNodeUriLoaded(
 
           try {
             const defaultUri = normalizeIndices(plot.nodeUri); // Normalize the URI to ensure it matches the expected format
-
-            if (
-              defaultUri.split('#')[0] !==
-              dataGrid.plot[0].nodeUri.split('#')[0]
-            ) {
-              showNotification({
-                title: 'Plot',
-                message: 'Unable to plot data from different URIs',
-                color: 'yellow',
-              });
-              continue;
-            }
+            const urisToInterpolate = getUrisToInterpolate(
+              plot.nodeUri,
+              dataGrid.plot,
+            );
 
             const response = await fetchDataPlot(
               defaultUri,
               dataGrid?.downsampled_method,
               dataGrid?.downsampled_size,
               dataGrid?.dataType,
+              urisToInterpolate,
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
@@ -880,8 +1272,8 @@ export async function plotNodeUriLoaded(
               index,
               responseCoordinates,
             ] of response.data.coordinates.entries()) {
-              const matchingCoord: Coordinates = JSON.parse(
-                JSON.stringify(dataGrid.coordinates),
+              const matchingCoord: Coordinates = structuredClone(
+                dataGrid.coordinates,
               ).find(
                 (c: Coordinates) =>
                   normalizeIndices(c.path) === responseCoordinates.path,
@@ -896,7 +1288,8 @@ export async function plotNodeUriLoaded(
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
               matchingCoord.shape = responseCoordinates.downsampled_shape;
-              matchingCoord.coord_dependencies = responseCoordinates.coordinates;
+              matchingCoord.coord_dependencies =
+                responseCoordinates.coordinates;
 
               //* Update the target - yPath - axis data with the index
               matchingCoord.target = updateIndexFieldName(
@@ -981,11 +1374,9 @@ export async function plotNodeUriLoaded(
           ) !==
           JSON.stringify(dataGrid.coordinates.map((coord, index) => index))
         ) {
-          const customizedDataGrid = JSON.parse(
-            JSON.stringify(dataGrid),
-          ) as DataGridPlot;
-          const updatedDataPlot = JSON.parse(
-            JSON.stringify(dataGridUpdated),
+          const customizedDataGrid = structuredClone(dataGrid) as DataGridPlot;
+          const updatedDataPlot = structuredClone(
+            dataGridUpdated,
           ) as DataGridPlot;
           for (const [index, coord] of updatedDataPlot.coordinates.entries()) {
             // Set to original axe indexes in order apply the transposition
@@ -1076,11 +1467,9 @@ export const transposeDataGrid = async (
   keepValueIndex?: boolean,
 ) => {
   let actualAxeIndexOrder = (
-    JSON.parse(JSON.stringify(updatedDataGrid.coordinates)) as Coordinates[]
+    structuredClone(updatedDataGrid.coordinates) as Coordinates[]
   ).map((coord) => coord.axeIndex);
-  let transposedDataGrid = JSON.parse(
-    JSON.stringify(updatedDataGrid),
-  ) as DataGridPlot;
+  let transposedDataGrid = structuredClone(updatedDataGrid) as DataGridPlot;
   if (
     JSON.stringify(wantedAxeIndexOrder) !== JSON.stringify(actualAxeIndexOrder)
   ) {
@@ -1116,7 +1505,7 @@ export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
   const coordinatesLength: number = coordinates.length;
 
   // Extract only matrix indexes
-  const matrixIndexes = JSON.parse(JSON.stringify(coordinates))
+  const matrixIndexes = structuredClone(coordinates)
     .sort(compareByAxeIndex)
     .reverse()
     .filter((coord: Coordinates) => coord.axeIndex !== 0)
@@ -1145,25 +1534,16 @@ export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
 
 export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
   // Get error bands vectors switch coordinates indexes
-  const updated_error_y: ErrorBar = JSON.parse(JSON.stringify(plot.error_y));
-
-  if (updated_error_y?.type === 'data') {
-    if (updated_error_y?.arrayminus) {
-      updated_error_y.arrayminus = getVectorData(
-        coordinates,
-        plot.error_bands.find((err_b) => err_b.path.endsWith('_error_lower'))
-          .yData,
-      );
-    }
-    const error_array_yData =
-      plot.error_bands.find((err_b) => err_b.path.endsWith('_error_upper'))
-        ?.yData ||
-      plot.error_bands.find((err_b) => err_b.path.endsWith('_error_lower'))
-        ?.yData;
-
-    updated_error_y.array = getVectorData(coordinates, error_array_yData);
+  const updated_error_bands: ErrorBandData[] = structuredClone(
+    plot.error_bands,
+  );
+  for (const updated_error_band of updated_error_bands) {
+    updated_error_band.array = getVectorData(
+      coordinates,
+      updated_error_band.yData,
+    );
   }
-  return updated_error_y;
+  return updated_error_bands;
 }
 
 /**
@@ -1239,33 +1619,13 @@ export function isMatrixPlottable(value: AxisData): boolean {
 }
 
 /**
- * Replace recursively all `null` or `undefined` by `NaN`.
- * Works for AxisData of dimension 1D, 2D or 3D.
- *
- * @param arr - Array which could contain nulls or undefined
- * @returns New array with NaN instead of null/undefined
- */
-function replaceNullsWithNaN(arr: AxisData): AxisData {
-  if (Array.isArray(arr)) {
-    /* eslint-disable  @typescript-eslint/no-explicit-any */
-    return arr.map((v: any) => {
-      return Array.isArray(v) ? replaceNullsWithNaN(v as AxisData) : (v ?? NaN);
-    }) as AxisData;
-  }
-
-  // 1D Case
-  return arr ?? NaN;
-}
-
-/**
  * Return a tensorized matrix using tensorflow
  * @param matrix
  * @returns
  */
 export const getTensorizedMatrix = async (matrix: AxisData) => {
-  const matrixWithNaN = replaceNullsWithNaN(matrix);
-  const shape = getMaxShape(matrixWithNaN);
-  const reshapedMatrix = reshapeMatrix(matrixWithNaN, shape);
+  const shape = getMaxShape(matrix);
+  const reshapedMatrix = reshapeMatrix(matrix, shape);
   const dataTensorized = tf.tensor(reshapedMatrix);
   return dataTensorized;
 };
@@ -1297,14 +1657,12 @@ export const swapAxis = async (
   );
 
   const updatedDataPlotList: DataGridPlot[] =
-    active && updatedConfiguration
-      ? JSON.parse(JSON.stringify(active.dataPlot))
-      : null;
+    active && updatedConfiguration ? structuredClone(active.dataPlot) : null;
   const updatedDataPlot = updatedDataPlotList
     ? updatedDataPlotList.find(
         (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
       )
-    : (JSON.parse(JSON.stringify(itemDataGrid)) as DataGridPlot);
+    : (structuredClone(itemDataGrid) as DataGridPlot);
 
   // Swap axis
   updatedDataPlot.coordinates[actualTargetAxisIndex].axeIndex = axeIndexToSwap;
@@ -1381,12 +1739,12 @@ export const swapAxis = async (
     plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
 
     if (plot?.error_bands?.length) {
-      // Update error_y vectors after transpositions
-      const swapped_error_y = getErrorYVectors(
+      // Update error_bands vectors after transpositions
+      const swapped_error_bands = getErrorYVectors(
         plot,
         updatedDataPlot.coordinates,
       );
-      plot.error_y = swapped_error_y;
+      plot.error_bands = swapped_error_bands;
     }
   }
 
@@ -1502,9 +1860,7 @@ async function transposeAxis(
   for (const plotToTranspose of updatedDataPlot.plot) {
     // DETERMINE WHICH AXIS TO TRANSPOSE
     // Initial position
-    const newPositions: number[] = JSON.parse(
-      JSON.stringify(updatedDataPlot.coordinates),
-    )
+    const newPositions: number[] = structuredClone(updatedDataPlot.coordinates)
       .map((coord: Coordinates) => coord.axeIndex)
       .sort((a: number, b: number) => a - b)
       .reverse(); // Reverse to get axeIndex order
@@ -1524,11 +1880,7 @@ async function transposeAxis(
     plotToTranspose.yData = transposedDataY;
     plotToTranspose.shape = tensorizedDataY.shape;
 
-    if (
-      plotToTranspose?.error_bands &&
-      plotToTranspose?.error_y &&
-      plotToTranspose.error_y.type === 'data'
-    ) {
+    if (plotToTranspose?.error_bands) {
       for (const error_band of plotToTranspose.error_bands) {
         if (!isMatrixPlottable(error_band.yData)) {
           // Control to prevent from transposing error y axis when unplottable data
@@ -1635,7 +1987,7 @@ const trimPlotData = async (
   const dataTensorized = await getTensorizedMatrix(updatedPlot.yData);
 
   // Get new shape to apply
-  const reversedCoords = JSON.parse(JSON.stringify(coordinates))
+  const reversedCoords = structuredClone(coordinates)
     .sort(compareByAxeIndex)
     .reverse() as Coordinates[];
   const shapeIndex = reversedCoords.findIndex(
@@ -1750,7 +2102,7 @@ export const getRangeIndex = async (
         newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
     );
     // Get index of last occurence
-    let secondIndex = (JSON.parse(JSON.stringify(coordVector)) as string[])
+    let secondIndex = (structuredClone(coordVector) as string[])
       .reverse()
       .findIndex(
         (val) =>
@@ -1799,8 +2151,8 @@ export const applyRange = async (
 ) => {
   try {
     const updatedDataPlot = customizedDataGrid;
-    const coordinates = JSON.parse(
-      JSON.stringify(updatedDataPlot.coordinates),
+    const coordinates = structuredClone(
+      updatedDataPlot.coordinates,
     ) as Coordinates[];
     const oldRange = coordinates.find(
       (coord) => coord.axeIndex === coordinate.axeIndex,
@@ -1837,8 +2189,8 @@ export const applyRange = async (
 
     return {
       ...customizedDataGrid,
-      coordinates: updatedDataPlot.coordinates,
-      plot: updatedDataPlot.plot,
+      coordinates: [...updatedDataPlot.coordinates],
+      plot: [...updatedDataPlot.plot],
     } as DataGridPlot;
   } catch (error) {
     console.error('Error applying the range: ', error);
@@ -1867,7 +2219,7 @@ export async function applyRangeInCoord(
   const updatedCoord = updatedCoords.find(
     (coord) => coord.name === coordNameToUpdate,
   );
-  const coordinate = JSON.parse(JSON.stringify(updatedCoord));
+  const coordinate = structuredClone(updatedCoord);
 
   // Trim coordinate.data
   const trimmed = await trimCoordData(
@@ -1895,7 +2247,7 @@ export async function applyRangeInCoord(
     }
 
     const dependencyIndex = (
-      JSON.parse(JSON.stringify(coordDependencie.coord_dependencies)) as string[]
+      structuredClone(coordDependencie.coord_dependencies) as string[]
     )
       .reverse() // We reverse dependencies to get dependency index in the order of the matrix
       .findIndex((dep) => dep === coordinate.name);
@@ -1944,7 +2296,7 @@ export async function applyRangeInPlot(
     // Trim plot.yData
     const trimmed = await trimPlotData(
       updatedPlot,
-      JSON.parse(JSON.stringify(coordinates)),
+      structuredClone(coordinates),
       axeIndexToUpdate,
       newRange,
       rangeAlreadyAppliedInPlot === true ? oldRange : null,
@@ -1961,11 +2313,10 @@ export async function applyRangeInPlot(
     if (updatedPlot?.error_bands) {
       for (const error_band of updatedPlot.error_bands) {
         if (
-          updatedPlot.error_y.type === 'data' &&
-          ((error_band.path.endsWith('_error_upper') &&
-            updatedPlot.error_y.array.length === 0) ||
-            (error_band.path.endsWith('_error_lower') &&
-              updatedPlot.error_y.arrayminus.length === 0))
+          (error_band.path.endsWith('_error_upper') &&
+            error_band.array.length === 0) ||
+          (error_band.path.endsWith('_error_lower') &&
+            error_band.array.length === 0)
         ) {
           continue;
         }
@@ -1982,7 +2333,7 @@ export async function applyRangeInPlot(
 
         const trimmed = await trimPlotData(
           error_band,
-          JSON.parse(JSON.stringify(coordinates)),
+          structuredClone(coordinates),
           axeIndexToUpdate,
           newRange,
           rangeAlreadyAppliedInPlot === true ? oldRange : null,
@@ -1990,8 +2341,8 @@ export async function applyRangeInPlot(
         const newYData = (await trimmed.array()) as AxisData;
         error_band.yData = newYData;
       }
-      const swapped_error_y = getErrorYVectors(updatedPlot, coordinates);
-      updatedPlot.error_y = swapped_error_y;
+      const swapped_error_bands = getErrorYVectors(updatedPlot, coordinates);
+      updatedPlot.error_bands = swapped_error_bands;
     }
   }
 }

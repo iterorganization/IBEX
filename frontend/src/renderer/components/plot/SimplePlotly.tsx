@@ -1,6 +1,6 @@
 import { Center, Grid, Group, Select, Text } from '@mantine/core';
 import { Layout, AxisType } from 'plotly.js';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Configuration, Coordinates, DataGridPlot } from 'src/renderer/types';
 import { VerticalSlider } from '../verticalSlider';
@@ -8,6 +8,8 @@ import { useIbexStore } from '../../stores';
 import {
   compareByAxeIndex,
   getArrayValueFromDependance,
+  getErrorsAreaToPlot,
+  initPlotColors,
   isMatrixPlottable,
   removeSuffix,
   swapAxis,
@@ -36,6 +38,12 @@ export const SimplePlotly = ({
   is3DView,
   handleUpdateCoordinate,
 }: SimplePlotlyProps) => {
+  const dataToPlotWithErrorBands = useMemo(() => {
+    return getErrorsAreaToPlot(
+      structuredClone(itemDataGrid.plot),
+      structuredClone(itemDataGrid.coordinates),
+    );
+  }, [itemDataGrid.plot, itemDataGrid.coordinates]);
   const coordsUsedInAxes: 1 | 2 = 1;
   const { active, updatedConfiguration } = useIbexStore();
   const SELECT_AXIS_HEIGHT = 40; // Height of the select axis component
@@ -91,6 +99,7 @@ export const SimplePlotly = ({
       x: 1.1,
       y: 1,
       orientation: 'v',
+      traceorder: 'normal',
     },
     plot_bgcolor: '#c7c7c7',
     dragmode: 'zoom',
@@ -106,6 +115,7 @@ export const SimplePlotly = ({
   const layoutPlotWidth = showSliders
     ? width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1)
     : width;
+  const customContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Check data entries to update axes titles when needed
@@ -188,9 +198,7 @@ export const SimplePlotly = ({
     }
 
     // Update title only if is editing
-    const updatedDataPlot: DataGridPlot[] = JSON.parse(
-      JSON.stringify(active.dataPlot),
-    );
+    const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
     for (const dataPlot of updatedDataPlot) {
       if (dataPlot.i === itemDataGrid.i) {
         dataPlot.title = title;
@@ -230,9 +238,13 @@ export const SimplePlotly = ({
    * Update the layout yAxis
    */
   useEffect(() => {
-    const coordsYNames = itemDataGrid.plot
-      .filter((plot) => plot.yaxis !== 'y2')
-      ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri));
+    const coordsYNames = [
+      ...new Set(
+        itemDataGrid.plot
+          .filter((plot) => plot.yaxis !== 'y2')
+          ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri)),
+      ),
+    ];
     const YTitle = itemDataGrid.yAxisData?.name
       ? `${coordsYNames.length > 1 ? coordsYNames[0] + ', ...' : coordsYNames[0]} ${(itemDataGrid.yAxisData?.unit && '[' + itemDataGrid.yAxisData.unit + ']') || ''}`
       : '';
@@ -271,9 +283,13 @@ export const SimplePlotly = ({
    * Update the layout y2Axis
    */
   useEffect(() => {
-    const coordsY2Names = itemDataGrid.plot
-      .filter((plot) => plot.yaxis === 'y2')
-      ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri));
+    const coordsY2Names = [
+      ...new Set(
+        itemDataGrid.plot
+          .filter((plot) => plot.yaxis === 'y2')
+          ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri)),
+      ),
+    ];
     const Y2Title = itemDataGrid.y2AxisData?.name
       ? `${coordsY2Names.length > 1 ? coordsY2Names[0] + ', ...' : coordsY2Names[0]} ${(itemDataGrid.y2AxisData?.unit && '[' + itemDataGrid.y2AxisData.unit + ']') || ''}`
       : '';
@@ -308,8 +324,20 @@ export const SimplePlotly = ({
     setTitle(itemDataGrid.title);
   }, [itemDataGrid.title]);
 
+  const handleInitPlotColor = async (
+    customContainerRef: React.MutableRefObject<HTMLDivElement>,
+    itemDataGrid: DataGridPlot,
+  ) => {
+    await initPlotColors(itemDataGrid, customContainerRef);
+  };
+
+  useEffect(() => {
+    handleInitPlotColor(customContainerRef, itemDataGrid);
+  }, [customContainerRef.current, itemDataGrid.plot.length]);
+
   return (
     <Grid
+      ref={customContainerRef}
       styles={{
         inner: {
           margin: 0,
@@ -367,7 +395,7 @@ export const SimplePlotly = ({
               align="flex-end"
               pos="relative"
             >
-              {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
+              {structuredClone(itemDataGrid.coordinates)
                 .sort(compareByAxeIndex)
                 .map(
                   (item: Coordinates, valueIndex: number) =>
@@ -418,7 +446,7 @@ export const SimplePlotly = ({
           </Grid.Col>
         )}
 
-      {itemDataGrid.plot.every((plot) =>
+      {itemDataGrid.plot.some((plot) =>
         [plot.x, plot.y].every(isMatrixPlottable),
       ) ? (
         <Grid.Col
@@ -435,7 +463,7 @@ export const SimplePlotly = ({
           <div ref={plotDivRef}>
             <Plot
               className={classes.simplePlot}
-              data={itemDataGrid.plot}
+              data={dataToPlotWithErrorBands}
               config={{
                 autosizable: false,
                 staticPlot: !itemDataGrid.static,

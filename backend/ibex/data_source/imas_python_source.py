@@ -37,7 +37,17 @@ from ibex.data_source.exception import (
     InvalidParametersException,
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
-from ibex.data_source.imas_python_source_utils import path_in_filled_paths
+from ibex.core.utils import IMAS_URI
+from ibex.data_source.imas_python_source_utils import (
+    path_in_filled_paths,
+    convert_ids_data_into_numpy_array,
+    resample_data_with_interpolation,
+    resample_data_without_interpolation,
+    pad_to_rectangular,
+    flatten,
+    expand,
+    calculate_coordinate_shapes,
+)
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -405,7 +415,6 @@ class IMASPythonSource(DataSourceInterface):
         occurrence: int = 0,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
-        range: List[int] | None = None,
     ) -> dict:
         """
         Returns data extracted from IDS, converted into dictionary
@@ -414,7 +423,8 @@ class IMASPythonSource(DataSourceInterface):
         :param ids: name of ids e.g. core_profiles
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
-        :param range:
+        :param downsampling_method: method to be used during downsampling process
+        :param downsampled_size: target size for downsampling
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
         with self._open_entry(uri) as entry:
@@ -624,9 +634,11 @@ class IMASPythonSource(DataSourceInterface):
         ids: str,
         node_path: str,
         occurrence: int = 0,
+        interpolate_over: List[str] | None = None,
+        interpolation_method: str | None = None,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
-    ):
+    ) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 
@@ -634,6 +646,10 @@ class IMASPythonSource(DataSourceInterface):
         :param ids: name of ids e.g. core_profiles
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
+        :param interpolate_over: list of uris used in interpolation
+        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
+        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
+        :param downsampled_size: target size of downsampled data
         :return: Dictionary containing data values, metadata and coordinates.
         """
 
@@ -646,7 +662,7 @@ class IMASPythonSource(DataSourceInterface):
             self._check_data_is_leaf_node(ids_data)
 
             if self._is_empty(ids_data):
-                raise NoDataException(f"No data for {node_path}")
+                raise NoDataException(f"No data for {uri}#{ids}/{node_path}")
             coordinates_to_be_returned = []
 
             # =================================
@@ -664,7 +680,7 @@ class IMASPythonSource(DataSourceInterface):
                     # iterate over path elements. X stands target node path element, while Y stands for coordinate path elements
                     # we do this in order to fill dummy indexes with indexes extracted from target node path
                     for x, y in zip_longest(_node_path.items(), IDSPath(_coordinate_path).items()):
-                        # x[0] is node name in path eg. profiles_1d
+                        # x[0] is node name in path e.g. profiles_1d
                         # x[1] is indices or single index. For instance x=profiles_1d[123] -> x[0]=profiles_1d & x[1]=123
                         # the same applies to y
 
@@ -802,13 +818,99 @@ class IMASPythonSource(DataSourceInterface):
                         }
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
-            data_to_be_returned = ids_data
+            data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
             if first_value.metadata.ndim == 2:
                 # Transform 2D arrays.
                 # By default first dimension of 2D has coordinate that is second on the list
                 # FE expects data's first dimension to be connected with second dimension, thus this transformation
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
+
+            # ============= BEGIN resample data onto new time vector =============
+
+            def convert_to_lists(data):
+                if isinstance(data, list):
+                    return [convert_to_lists(d) for d in data]
+                elif isinstance(data, (np.ndarray, IDSNumericArray)):
+                    return data.tolist()
+                else:
+                    return data
+
+            if interpolate_over:
+                # =================== GATHER ALL COORDINATES ===================
+                original_coord_values = []
+                new_common_coords = coordinates_to_be_returned
+                for c in new_common_coords:
+                    c["value"] = convert_to_lists(c["value"])
+                    original_coord_values.append(sorted(set(flatten(c["value"]))))
+                original_coord_values.reverse()
+
+                for _uri in interpolate_over:
+                    _uri_obj = IMAS_URI(_uri)
+
+                    if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
+                        if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
+                            # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
+                            ...
+                        else:
+                            raise InvalidParametersException(
+                                "IDS name and node path should be the same for source and target URI when interpolating data"
+                            )
+
+                    interpolate_to_coordinates = self.get_plot_data(
+                        uri=_uri_obj.uri_entry_identifiers,
+                        ids=_uri_obj.ids_name,
+                        node_path=_uri_obj.node_path,
+                        occurrence=_uri_obj.occurrence,
+                        downsampling_method=downsampling_method,
+                        downsampled_size=downsampled_size,
+                    )["data"]["coordinates"]
+
+                    if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
+                        message = "Interpolation error. Source and target nodes have different number of coordinates."
+                        raise InvalidParametersException(message)
+
+                    for x, y in zip(coordinates_to_be_returned, interpolate_to_coordinates):
+                        if x["name"] != y["name"]:
+                            # coordinates between quantities doesn't match
+                            message = f"Interpolation error. Coordinates names does not match between target and source nodes ({x['name']} vs. {y['name']})."
+                            raise InvalidParametersException(message)
+
+                        x["value"] = sorted(set(flatten(x["value"]) + flatten(convert_to_lists(y["value"]))))
+
+                # reverse coordinates list so it matches data dimensions
+                common_coords_values = [c["value"] for c in reversed(new_common_coords)]
+                # =================== INTERPOLATE ===================
+
+                # === make data vector rectangular ===
+                data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+                # === run interpolation ===
+                if interpolation_method == "exact_value" or not interpolation_method:
+                    data_to_be_returned = resample_data_without_interpolation(
+                        tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
+                    )
+                else:
+                    data_to_be_returned = resample_data_with_interpolation(
+                        tuple(original_coord_values),
+                        data_to_be_returned,
+                        tuple(common_coords_values),
+                        interpolation_method=interpolation_method,
+                    )
+
+                new_coordinate_shapes = calculate_coordinate_shapes(
+                    list(np.asarray(data_to_be_returned).shape),
+                    first_value.metadata.ndim,
+                    len(coordinates_to_be_returned),
+                )
+
+                # expand flattened coordinates
+                for i, c in enumerate(coordinates_to_be_returned):
+                    c["shape"] = list(new_coordinate_shapes[i])
+                    c["value"] = expand(c["value"], c["shape"][:-1])
+
+            # ============= END resample data onto new time vector =============
+
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape
             except ValueError:

@@ -5,7 +5,11 @@ from fastapi import APIRouter  # type: ignore
 from ibex.core import ibex_service
 from ibex.core.utils import DownsamplingMethods
 from ibex import __version__
-from ibex.endpoints.schemas.info_schemas import VersionResponse, DownsamplingMethodsResponse
+from ibex.endpoints.schemas.info_schemas import (
+    VersionResponse,
+    DownsamplingMethodsResponse,
+    DataManipulationMethodsResponse,
+)
 
 router = APIRouter()
 
@@ -69,4 +73,75 @@ def downsampling_methods() -> dict:
 
     methods = [{"name": val.value["name"], "description": val.value["description"]} for val in DownsamplingMethods]
     res = {"downsampling_methods": methods}
+    return res
+
+
+@router.get(
+    "/info/data_manipulation_methods",
+    status_code=200,
+    response_model=DataManipulationMethodsResponse,
+    responses={
+        200: {"description": "Data manipulation methods returned successfully"},
+    },
+    description="Returns list of available data manipulation methods provided by the server",
+)
+@ibex_service.measure_execution_time
+def data_manipulation_methods() -> dict:
+    """
+    IBEX endpoint. Returns list of available data manipulation methods to be passed to /data/plot_data endpoint as query argument.
+
+    :rtype: dict (automatically converted to JSON by FastAPI)
+    :return: JSON response
+
+    """
+    res = {
+        "data_manipulation_methods": [
+            {
+                "name": "Data interpolation",
+                "description": "Operation performed in order to represent dataset over different set of coordinates",
+                "method_parameters": [
+                    {
+                        "human_readable_name": "Interpolate over",
+                        "name": "interpolate_over",
+                        "description": "List of URIs to gather coordinates from, for interpolation",
+                    },
+                    {
+                        "human_readable_name": "Data interpolation method",
+                        "name": "interpolation_method",
+                        "description": "Method used during data interpolation. All possible for scipy.interpolate.RegularGridInterpolator 'method' parameter or 'exact'",
+                        "possible_values": [
+                            {
+                                "value": "exact_value",
+                                "description": "values are present only on data points where they were originally. Rest of the data grid is filled with NaNs",
+                            },
+                            {
+                                "value": "linear",
+                                "description": "see scipy.interpolate.RegularGridInterpolator documentation",
+                            },
+                            {
+                                "value": "nearest",
+                                "description": "see scipy.interpolate.RegularGridInterpolator documentation",
+                            },
+                            {
+                                "value": "slinear",
+                                "description": "see scipy.interpolate.RegularGridInterpolator documentation",
+                            },
+                            {
+                                "value": "cubic",
+                                "description": "see scipy.interpolate.RegularGridInterpolator documentation",
+                            },
+                            {
+                                "value": "quintic",
+                                "description": "see scipy.interpolate.RegularGridInterpolator documentation",
+                            },
+                            {
+                                "value": "pchip",
+                                "description": "see scipy.interpolate.RegularGridInterpolator documentation",
+                            },
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
     return res
