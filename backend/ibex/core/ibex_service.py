@@ -185,8 +185,15 @@ def get_plot_data(uri: str, downsampling_method: str | None, downsampled_size: i
     )
 
 
-def get_geometry_overlay_nodes(uri: str, show_structures: bool) -> dict:
+def get_geometry_overlay_nodes(
+    uri: str, show_empty_nodes: bool = False, show_error_bars: bool = False, show_structures: bool = False
+) -> dict:
     uri_obj = IMAS_URI(uri)
     return data_source.get_geometry_overlay_nodes(
-        uri=uri_obj.uri_entry_identifiers, ids=uri_obj.ids_name, occurrence=uri_obj.occurrence, show_structures=show_structures
+        uri=uri_obj.uri_entry_identifiers,
+        ids=uri_obj.ids_name,
+        occurrence=uri_obj.occurrence,
+        show_empty_nodes=show_empty_nodes,
+        show_error_bars=show_error_bars,
+        show_structures=show_structures,
     )

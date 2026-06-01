@@ -108,33 +108,59 @@ def test_array_summary(entry_path):
     assert response.json()["mean"] == 3.0
 
 
-@pytest.mark.skipif(True, reason="Still to be finished")
 def test_geometry_overlay_nodes(entry_path):
+
+    structure_nodes = [
+        "description_2d/limiter/unit/outline",
+        "description_2d/vessel/unit/annular/outline_inner",
+        "description_2d/vessel/unit/annular/outline_outer",
+        "description_2d/vessel/unit/element/outline",
+    ]
+
+    leaf_nodes = [
+        "description_2d/limiter/unit/outline/r",
+        "description_2d/limiter/unit/outline/z",
+        "description_2d/vessel/unit/annular/outline_inner/r",
+        "description_2d/vessel/unit/annular/outline_inner/z",
+        "description_2d/vessel/unit/annular/outline_outer/r",
+        "description_2d/vessel/unit/annular/outline_outer/z",
+        "description_2d/vessel/unit/element/outline/r",
+        "description_2d/vessel/unit/element/outline/z",
+    ]
+
+    error_bars = [f"{x}_error_upper" for x in leaf_nodes] + [f"{x}_error_lower" for x in leaf_nodes]
+
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#wall",
+        "show_empty_nodes": True,
+        "show_error_bars": False,
+        "show_structures": False,
     }
+
     response = pytest.test_client.get("/ids_info/geometry_overlay_nodes", params=parameters)
-
     assert response.status_code == 200
+    assert sorted(response.json()["outline_nodes"]) == sorted(leaf_nodes)
 
-    if Version(imas_core.__version__) < Version("5.7"):
-        assert response.json() == {
-            "outline_nodes": [
-                "description_2d/limiter/unit/outline",
-                "description_2d/vessel/unit/annular/outline_inner",
-                "description_2d/vessel/unit/annular/outline_outer",
-                "description_2d/vessel/unit/element/outline",
-            ]
-        }
-    else:
-        assert response.json() == {
-            "outline_nodes": [
-                "description_2d/limiter/unit/outline",
-                "description_2d/vessel/unit/annular/outline_inner",
-                "description_2d/vessel/unit/annular/outline_outer",
-                "description_2d/vessel/unit/element/outline",
-            ]
-        }
+    parameters["show_structures"] = True
+    response = pytest.test_client.get("/ids_info/geometry_overlay_nodes", params=parameters)
+    assert response.status_code == 200
+    assert sorted(response.json()["outline_nodes"]) == sorted(leaf_nodes + structure_nodes)
+
+    parameters["show_error_bars"] = True
+    response = pytest.test_client.get("/ids_info/geometry_overlay_nodes", params=parameters)
+    assert response.status_code == 200
+    assert sorted(response.json()["outline_nodes"]) == sorted(leaf_nodes + structure_nodes + error_bars)
+
+    if Version(imas_core.__version__) >= Version("5.7"):
+        parameters["show_error_bars"] = False
+        parameters["show_empty_nodes"] = False
+        parameters["show_structures"] = False
+        response = pytest.test_client.get("/ids_info/geometry_overlay_nodes", params=parameters)
+        assert response.status_code == 200
+        assert sorted(response.json()["outline_nodes"]) == [
+            "description_2d/limiter/unit/outline/r",
+            "description_2d/limiter/unit/outline/z",
+        ]
 
 
 def test_show_error_bars_option(entry_path):

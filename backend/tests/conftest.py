@@ -50,8 +50,13 @@ def entry_path(tmp_path_factory):
 
     entry.put(core_profiles)
 
+    # ===== for geometry overlay =====
     wall = entry.factory.wall()
     wall.ids_properties.homogeneous_time = 1
+    wall.description_2d.resize(1)
+    wall.description_2d[0].limiter.unit.resize(1)
+    wall.description_2d[0].limiter.unit[0].outline.r = [1.0]
+    wall.description_2d[0].limiter.unit[0].outline.z = [1.0]
     entry.put(wall)
 
     entry.close()

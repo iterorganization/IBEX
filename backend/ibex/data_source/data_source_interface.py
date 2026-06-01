@@ -115,11 +115,23 @@ class DataSourceInterface(ABC):
         ...
 
     @abstractmethod
-    def get_geometry_overlay_nodes(self, uri: str, ids: str, occurrence: int = 0, show_structures : bool = False) -> dict:
+    def get_geometry_overlay_nodes(
+        self,
+        uri: str,
+        ids: str,
+        occurrence: int = 0,
+        show_error_nodes: bool = False,
+        show_structures: bool = False,
+    ) -> dict:
         """
         Returns paths to filled geometry overlay nodes found in the entry metadata.
 
         :param uri: imas URI
-        :return: dictionary {'outline_nodes': ['#ids/path/to/node1', '#ids/path/to/node2', ...]}
+        :param ids: name of ids e.g. core_profiles
+        :param occurrence: ids occurrence number
+        :param show_empty_nodes: whether empty nodes should be returned, or not
+        :param show_error_nodes: whether error nodes should be returned, or not
+        :param show_structures: whether structure nodes should be returned, or not
+        :return: dictionary {'outline_nodes': ['path/to/node1', 'path/to/node2', ...]}
         """
         ...

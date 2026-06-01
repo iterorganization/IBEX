@@ -125,7 +125,9 @@ def array_summary(uri: str) -> dict:
     description="Returns geometry overlay nodes metadata",
 )
 @ibex_service.measure_execution_time
-def geometry_overlay_nodes(uri: str, show_structures: bool = False) -> dict:
+def geometry_overlay_nodes(
+    uri: str, show_empty_nodes: bool = False, show_error_bars: bool = False, show_structures: bool = False
+) -> dict:
     """
     IBEX endpoint. Returns paths to geometry overlay nodes.
 
@@ -135,8 +137,16 @@ def geometry_overlay_nodes(uri: str, show_structures: bool = False) -> dict:
     | }
 
     :param uri: IMAS URI
+    :param show_empty_nodes: switch used to hide empty nodes
+    :param show_error_bars: switch used to hide _error* nodes
+    :param show_structures: switch used to include structure nodes
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
 
     """
-    return ibex_service.get_geometry_overlay_nodes(uri.strip(), show_structures=show_structures)
+    return ibex_service.get_geometry_overlay_nodes(
+        uri.strip(),
+        show_empty_nodes=show_empty_nodes,
+        show_error_bars=show_error_bars,
+        show_structures=show_structures,
+    )
