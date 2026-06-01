@@ -143,9 +143,11 @@ export const fetchNodeInfos = async (
   nodeUri: string,
   showErrorBars: boolean,
 ) => {
-  return fetchFromApi<NodeInfoResponse>(
+  const nodeInfos = await fetchFromApi<NodeInfoResponse>(
     `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
+  nodeInfos.children = nodeInfos.children.filter((c) => c.has_data !== false);
+  return nodeInfos;
 };
 
 /**
