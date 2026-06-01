@@ -45,7 +45,8 @@ def test_node_info_empty_path(entry_path):
 
 
 @pytest.mark.skipif(
-    Version(imas_core.__version__) < Version("5.7") or Version(imas.__version__) < Version("2.2.2"), reason="List filled paths functionality requires IMAS-Core >= 5.7 and IMAS-Python >= 2.2.2"
+    Version(imas_core.__version__) < Version("5.7") or Version(imas.__version__) < Version("2.2.2"),
+    reason="List filled paths functionality requires IMAS-Core >= 5.7 and IMAS-Python >= 2.2.2",
 )
 def test_node_info_filled_paths(entry_path):
     parameters = {
