@@ -1,5 +1,6 @@
 import pytest
 import imas_core
+import imas
 from packaging.version import Version
 
 
@@ -44,7 +45,7 @@ def test_node_info_empty_path(entry_path):
 
 
 @pytest.mark.skipif(
-    Version(imas_core.__version__) < Version("5.7"), reason="List filled paths functionality requires IMAS-Core >= 5.7"
+    Version(imas_core.__version__) < Version("5.7") or Version(imas.__version__) < Version("2.2.2"), reason="List filled paths functionality requires IMAS-Core >= 5.7 and IMAS-Python >= 2.2.2"
 )
 def test_node_info_filled_paths(entry_path):
     parameters = {
@@ -80,12 +81,11 @@ def test_find_paths(entry_path):
     response = pytest.test_client.get("/ids_info/find_paths", params=parameters)
 
     assert response.status_code == 200
-    if Version(imas_core.__version__) < Version("5.7"):
+    if Version(imas_core.__version__) < Version("5.7") or Version(imas.__version__) < Version("2.2.2"):
         has_data_true = None  # before AL-Core 5.7 IBEX returns None
     else:
         has_data_true = True
 
-    print(f"=== IMAS-Core version: {Version(imas_core.__version__)} ===")
     assert response.json()["paths"] == [
         {"path": "#core_profiles/ids_properties/version_put/data_dictionary", "has_data": has_data_true},
         {"path": "#core_profiles/ids_properties/version_put/access_layer", "has_data": has_data_true},
