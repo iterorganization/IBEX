@@ -7,7 +7,6 @@ from scipy.interpolate import RegularGridInterpolator
 from ibex.data_source.exception import InvalidParametersException
 
 
-
 def path_in_filled_paths(node_path: str, filled_paths: List[str]):
     """
     Returns true if node path is in filled paths.
