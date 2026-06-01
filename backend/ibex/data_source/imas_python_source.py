@@ -618,7 +618,7 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
-    def get_geometry_overlay_nodes(self, uri: str, ids: str, occurrence: int = 0) -> dict:
+    def get_geometry_overlay_nodes(self, uri: str, ids: str, occurrence: int = 0, show_structures : bool = False) -> dict:
         """
         Returns paths to metadata nodes that describe geometry overlays.
 

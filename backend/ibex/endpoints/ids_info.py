@@ -125,7 +125,7 @@ def array_summary(uri: str) -> dict:
     description="Returns geometry overlay nodes metadata",
 )
 @ibex_service.measure_execution_time
-def geometry_overlay_nodes(uri: str) -> dict:
+def geometry_overlay_nodes(uri: str, show_structures: bool = False) -> dict:
     """
     IBEX endpoint. Returns paths to geometry overlay nodes.
 
@@ -139,4 +139,4 @@ def geometry_overlay_nodes(uri: str) -> dict:
     :return: JSON response
 
     """
-    return ibex_service.get_geometry_overlay_nodes(uri.strip())
+    return ibex_service.get_geometry_overlay_nodes(uri.strip(), show_structures=show_structures)

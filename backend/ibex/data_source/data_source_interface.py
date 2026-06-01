@@ -115,7 +115,7 @@ class DataSourceInterface(ABC):
         ...
 
     @abstractmethod
-    def get_geometry_overlay_nodes(self, uri: str, ids: str, occurrence: int = 0) -> dict:
+    def get_geometry_overlay_nodes(self, uri: str, ids: str, occurrence: int = 0, show_structures : bool = False) -> dict:
         """
         Returns paths to filled geometry overlay nodes found in the entry metadata.
 
