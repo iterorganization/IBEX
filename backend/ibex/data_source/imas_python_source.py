@@ -788,6 +788,13 @@ class IMASPythonSource(DataSourceInterface):
             # ============= BEGIN data smoothing ============
 
             if plot_data_query.smoothing_method is not None:
+                if first_value.metadata.ndim != 1:
+                    raise InvalidParametersException("Data smoothing is only supported for 1D data")
+                if not coordinates_to_be_returned or coordinates_to_be_returned[0]["name"] != "time":
+                    raise InvalidParametersException(
+                        "Data smoothing is only supported when the first coordinate is time"
+                    )
+
                 if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
                     data_to_be_returned = apply_savgol_filter(
                         data_to_be_returned,

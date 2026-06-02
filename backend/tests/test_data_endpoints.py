@@ -71,7 +71,7 @@ def test_plot_data(entry_path):
 
 def test_plot_data_with_gaussian_smoothing(entry_path):
     parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip",
         "smoothing_method": "gaussian_filter",
         "gaussian_smoothing_sigma": 1,
     }
@@ -84,7 +84,7 @@ def test_plot_data_with_gaussian_smoothing(entry_path):
 
 def test_plot_data_with_savgol_smoothing(entry_path):
     parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip",
         "smoothing_method": "savitzky-golay_filter",
         "savgol_smoothing_window_length": 5,
         "savgol_smoothing_polyorder": 2,
@@ -94,6 +94,16 @@ def test_plot_data_with_savgol_smoothing(entry_path):
 
     response_body = response.json()
     assert response_body["data"]["value"] == pytest.approx([0.99, 2.0, 3.0, 4.0, 5.0], 0.1)
+
+
+def test_plot_data_smoothing_with_wrong_target_node(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targetet quantity must be time-based
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 466
 
 
 def test_plot_data_2d(entry_path):

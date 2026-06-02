@@ -70,6 +70,7 @@ def field_value(
         200: {"description": "Plot data returned successfully"},
         404: {"description": "Data node not found"},
         464: {"description": "Given data node is empty"},
+        466: {"description": "Invalid parameters for requested data manipulation"},
     },
     description="Returns single (or tensorized) data node value with detailed parameters used to plot the data",
 )

@@ -20,6 +20,8 @@ Configuration
 ~~~~~~~~~~~~~~
 
 Data smoothing is configured through the ``smoothing_method`` parameter of the ``/data/plot_data/`` endpoint.
+It is only accepted for nodes whose first coordinate is ``time``.
+If a different first coordinate is used, the backend rejects the request with an invalid-parameters error.
 
 At the moment, the backend supports the following smoothing methods:
 
