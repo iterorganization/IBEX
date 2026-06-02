@@ -153,7 +153,7 @@ def test_geometry_overlay_nodes(entry_path):
     assert response.status_code == 200
     assert sorted(response.json()["outline_nodes"]) == sorted(leaf_nodes + structure_nodes + error_bars)
 
-    if Version(imas_core.__version__) >= Version("5.7"):
+    if Version(imas_core.__version__) >= Version("5.7") and Version(imas.__version__) >= Version("2.2.2"):
         parameters["show_error_bars"] = False
         parameters["show_empty_nodes"] = False
         parameters["show_structures"] = False
