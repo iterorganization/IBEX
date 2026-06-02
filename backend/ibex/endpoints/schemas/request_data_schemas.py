@@ -81,6 +81,29 @@ class GaussianSmoothingParameters(BaseModel):
     )
 
 
+class SimpleOperationsParameters(BaseModel):
+    addition_addend: float | None = Field(
+        default=None,
+        description="Scalar value added to every data point.",
+    )
+    multiplication_factor: float | None = Field(
+        default=None,
+        description="Scalar value used to multiply every data point.",
+    )
+    division_divisor: float | None = Field(
+        default=None,
+        description="Scalar value used as the divisor for every data point.",
+    )
+    exponentiation_exponent: float | None = Field(
+        default=None,
+        description="Scalar exponent used to raise the input data to a power.",
+    )
+    root_degree: float | None = Field(
+        default=None,
+        description="Scalar degree used to compute the nth root of the input data.",
+    )
+
+
 class PlotDataBasicParameters(BaseModel):
     """..."""
 
@@ -94,7 +117,12 @@ class PlotDataBasicParameters(BaseModel):
     smoothing_method: SmoothingMethod | None = Field(default=None, description="Smoothing method to be used")
 
 
-class PlotDataRequestModel(PlotDataBasicParameters, SavgolSmoothingParameters, GaussianSmoothingParameters):
+class PlotDataRequestModel(
+    PlotDataBasicParameters,
+    SavgolSmoothingParameters,
+    GaussianSmoothingParameters,
+    SimpleOperationsParameters,
+):
     @model_validator(mode="after")
     def validate_gaussian_smoothing_parameters(self) -> "PlotDataRequestModel":
         if self.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER and self.gaussian_smoothing_sigma is None:
@@ -110,5 +138,12 @@ class PlotDataRequestModel(PlotDataBasicParameters, SavgolSmoothingParameters, G
                 raise ValueError(
                     "savgol_smoothing_polyorder is required when smoothing_method is 'savitzky_golay_filter'"
                 )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_arithmetic_parameters(self) -> "PlotDataRequestModel":
+        if self.division_divisor == 0:
+            raise ValueError("division_divisor cannot be 0")
 
         return self

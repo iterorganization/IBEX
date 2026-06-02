@@ -170,3 +170,49 @@ data_smoothing_method_parameter = DataManipulationParameter(
 
 data_smoothing_description.method_parameters.append(data_smoothing_method_parameter)
 available_methods.data_manipulation_methods.append(data_smoothing_description)
+
+# ====================== SIMPLE DATA OPERATIONS ======================
+
+simple_data_operations_description = DataManipulationOperation(
+    name="Simple Data Operations",
+    description="Sequence of scalar operations applied to the dataset in this order: addition, multiplication, division, exponentiation, and root.",
+    method_parameters=[],
+)
+
+data_addition_scalar_parameter = DataManipulationParameter(
+    human_readable_name="Addition",
+    name="addition_addend",
+    description="Scalar value added to every data point. Executed first.",
+)
+
+data_multiplication_scalar_parameter = DataManipulationParameter(
+    human_readable_name="Multiplication",
+    name="multiplication_factor",
+    description="Scalar value used to multiply every data point. Executed after addition.",
+)
+
+data_division_scalar_parameter = DataManipulationParameter(
+    human_readable_name="Division",
+    name="division_divisor",
+    description="Scalar value used as the divisor for every data point. Executed after multiplication.",
+)
+
+data_exponentiation_exponent_parameter = DataManipulationParameter(
+    human_readable_name="Exponentiation",
+    name="exponentiation_exponent",
+    description="Scalar exponent used to raise the input data to a power. Executed after division.",
+)
+
+data_root_degree_parameter = DataManipulationParameter(
+    human_readable_name="Root",
+    name="root_degree",
+    description="Scalar degree used to compute the nth root of the input data. Executed last.",
+)
+
+simple_data_operations_description.method_parameters.append(data_addition_scalar_parameter)
+simple_data_operations_description.method_parameters.append(data_multiplication_scalar_parameter)
+simple_data_operations_description.method_parameters.append(data_division_scalar_parameter)
+simple_data_operations_description.method_parameters.append(data_exponentiation_exponent_parameter)
+simple_data_operations_description.method_parameters.append(data_root_degree_parameter)
+
+available_methods.data_manipulation_methods.append(simple_data_operations_description)

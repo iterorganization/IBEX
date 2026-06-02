@@ -1,9 +1,13 @@
 import numpy as np
 import pytest
+from types import SimpleNamespace
+from ibex.data_source.exception import InvalidParametersException
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_savgol_filter,
+    apply_simple_operations,
 )
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
 def test_apply_gaussian_smoothing():
@@ -47,3 +51,42 @@ def test_apply_savitzky_golay_smoothing():
         ),
         0.1,
     )
+
+
+@pytest.mark.parametrize(
+    ("request_kwargs", "data", "expected"),
+    [
+        ({"addition_addend": 2}, np.array([1.0, 2.0, 3.0]), np.array([3.0, 4.0, 5.0])),
+        ({"multiplication_factor": 3}, np.array([1.0, 2.0, 3.0]), np.array([3.0, 6.0, 9.0])),
+        ({"division_divisor": 2}, np.array([2.0, 4.0, 6.0]), np.array([1.0, 2.0, 3.0])),
+        ({"exponentiation_exponent": 2}, np.array([2.0, 3.0, 4.0]), np.array([4.0, 9.0, 16.0])),
+        ({"root_degree": 2}, np.array([1.0, 4.0, 9.0]), np.array([1.0, 2.0, 3.0])),
+    ],
+)
+def test_apply_simple_operations(request_kwargs, data, expected):
+    request = PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", **request_kwargs)
+
+    assert np.asarray(expected) == pytest.approx(apply_simple_operations(data, request))
+
+
+def test_apply_simple_operations_recurses_over_lists():
+    request = PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", addition_addend=1)
+    data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
+
+    result = apply_simple_operations(data, request)
+
+    assert np.asarray(result[0]) == pytest.approx([2.0, 3.0])
+    assert np.asarray(result[1]) == pytest.approx([4.0, 5.0])
+
+
+def test_apply_simple_operations_rejects_division_by_zero():
+    request = SimpleNamespace(
+        division_divisor=0,
+        addition_addend=None,
+        multiplication_factor=None,
+        exponentiation_exponent=None,
+        root_degree=None,
+    )
+
+    with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
+        apply_simple_operations(np.array([1.0, 2.0]), request)

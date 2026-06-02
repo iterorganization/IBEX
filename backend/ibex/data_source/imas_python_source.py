@@ -49,6 +49,7 @@ from ibex.data_source.imas_python_source_utils import (
     calculate_coordinate_shapes,
     apply_savgol_filter,
     apply_gaussian_filter,
+    apply_simple_operations,
 )
 from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
@@ -784,6 +785,12 @@ class IMASPythonSource(DataSourceInterface):
                 # By default first dimension of 2D has coordinate that is second on the list
                 # FE expects data's first dimension to be connected with second dimension, thus this transformation
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
+
+            # ============= BEGIN simple operations ============
+
+            data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query)
+
+            # ============= END simple operations =============
 
             # ============= BEGIN data smoothing ============
 

@@ -9,6 +9,14 @@ Introduction
 
 The IBEX backend provides a range of data manipulation techniques that directly affect the shape and appearance of the resulting plots.
 These operations are applied as part of the ``/data/plot_data/`` request flow and allow the backend to transform datasets before they are returned to the frontend.
+The backend applies the manipulation stages in this order:
+
+1. simple data operations
+2. data smoothing
+3. data interpolation
+4. downsampling
+
+This means later stages operate on the output of earlier ones when the corresponding request parameters are enabled.
 
 Data smoothing
 ---------------
@@ -84,4 +92,49 @@ Savitzky-Golay smoothing:
 
    curl -X 'GET' \
      '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&smoothing_method=savitzky_golay_filter&savgol_smoothing_window_length=5&savgol_smoothing_polyorder=2' \
+     -H 'accept: application/json'
+
+
+Simple scalar operations
+------------------------
+
+IBEX also supports a sequence of scalar operations that can be applied to the returned dataset:
+
+* addition
+* multiplication
+* division
+* exponentiation
+* root
+
+These operations are executed in that order. In practice, the backend applies them sequentially to the numerical data before any smoothing or resampling step.
+
+The corresponding request parameters are:
+
+* ``addition_addend``
+* ``multiplication_factor``
+* ``division_divisor``
+* ``exponentiation_exponent``
+* ``root_degree``
+
+Division by zero is rejected by the backend.
+
+Example usage
+~~~~~~~~~~~~~~
+
+The following examples demonstrate how simple data operations can be enabled for testing purposes.
+
+Single operation:
+
+.. code-block:: bash
+
+   curl -X 'GET' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&addition_addend=2' \
+     -H 'accept: application/json'
+
+Two operations:
+
+.. code-block:: bash
+
+   curl -X 'GET' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&addition_addend=2&multiplication_factor=3' \
      -H 'accept: application/json'

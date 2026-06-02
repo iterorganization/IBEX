@@ -96,6 +96,35 @@ def test_plot_data_with_savgol_smoothing(entry_path):
     assert response_body["data"]["value"] == pytest.approx([0.99, 2.0, 3.0, 4.0, 5.0], 0.1)
 
 
+def test_plot_data_with_simple_operations(entry_path):
+    cases = [
+        (
+            {"addition_addend": 2, "multiplication_factor": 3},
+            [9.0, 12.0, 15.0, 18.0, 21.0],
+        ),
+        (
+            {"division_divisor": 2},
+            [0.5, 1.0, 1.5, 2.0, 2.5],
+        ),
+        (
+            {"exponentiation_exponent": 2},
+            [1.0, 4.0, 9.0, 16.0, 25.0],
+        ),
+        (
+            {"root_degree": 2},
+            [1.0, 1.41421356237, 1.73205080757, 2.0, 2.2360679775],
+        ),
+    ]
+
+    for params, expected in cases:
+        parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", **params}
+        response = pytest.test_client.get("/data/plot_data", params=parameters)
+        assert response.status_code == 200
+
+        response_body = response.json()
+        assert response_body["data"]["value"] == pytest.approx(expected)
+
+
 def test_plot_data_smoothing_with_wrong_target_node(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targetet quantity must be time-based
