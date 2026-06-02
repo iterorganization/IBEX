@@ -1,4 +1,5 @@
 import pytest
+import os
 
 
 def test_entry_exists(entry_path):
@@ -17,12 +18,10 @@ def test_entry_list_idses(entry_path):
     assert core_profiles_dict["occurrences"] == [0]
 
 
-@pytest.mark.skip(reason="IMAS_HOME variable is missing and IDStools throws an error")
+@pytest.mark.skipif("IMAS_HOME" not in os.environ, reason="IMAS_HOME is not set")
 def test_entry_available_entries(entry_path):
-    assert True
     parameters = {"uri": f"imas:hdf5?path={entry_path}"}
     response = pytest.test_client.get("/data_entry/available_entries", params=parameters)
 
-    # TODO: fix missing os.environ["IMAS_HOME"] used by IDStools
     assert response.status_code == 200
     # TODO: test when functionality will be ready

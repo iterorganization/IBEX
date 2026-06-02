@@ -32,13 +32,15 @@ echo "1. Loading required modules..."
 module load IMAS-Python IDStools nodejs
 
 echo "2. Setting up Python virtual environment..."
-cd ~
+mkdir -p ~/.config/ibex
+cd ~/.config/ibex
 python -m venv ibex_venv
 source ibex_venv/bin/activate
 
 echo "3. Installing backend in editable mode..."
 # install requirements: to be modified later for central installation
 cd "$SCRIPT_DIR/backend"
+pip uninstall ibex -y
 pip install -e .
 
 echo "4. Launch backend server..."
@@ -66,7 +68,6 @@ echo "Setting WEBPACK_RENDERER PORT = ${found_ports[1]}"
 echo "Setting WEBPACK_LOGGER PORT = ${found_ports[2]}"
 
 echo "CREATING CONFIG FILE IN ~/.config/ibex/config.json"
-mkdir -p ~/.config/ibex
 rm -f ~/.config/ibex/config.json
 touch ~/.config/ibex/config.json
 echo "DONE CREATING CONFIG FILE"

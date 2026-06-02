@@ -79,7 +79,7 @@ describe('UI Tests for plotted data', function () {
     ///
     /// Add the URI of iter_scenario_53298_seq1_DD3.nc to the configuration and navigate in the accordion node tree
     ///
-    const dataPath: string = await (
+    const dataPath1: string = await (
       await getDriver()
     ).executeScript(async () => {
       const path =
@@ -90,10 +90,26 @@ describe('UI Tests for plotted data', function () {
     await ensureCssElementIsDisplayed('config-uri-selection-modal');
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
-      dataPath,
+      dataPath1,
     );
     const buttonSavingUris = await ensureCssElementIsDisplayed(
       'config-uri-selection-modal-add-uri-button',
+    );
+    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
+    await waitForElementToDisappear(buttonSavingUris);
+    /// Add the URI 2 of iter_disruption_113112_1.nc to test interpolation later
+    const dataPath2: string = await (
+      await getDriver()
+    ).executeScript(async () => {
+      const path =
+        (await window.api.fs.getZenodoDataPath()) +
+        '/iter_disruption_113112_1.nc';
+      return path;
+    });
+    await writeTextInCssElement(
+      'config-uri-selection-modal-uri-text-input',
+      dataPath2,
+      true,
     );
     await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
     await waitForElementToDisappear(buttonSavingUris);
@@ -103,19 +119,19 @@ describe('UI Tests for plotted data', function () {
       100,
       300,
     );
-    await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
+    await findCssElementAndClickIt(`uriAccordion-${dataPath1}`, 200, 100);
     await findCssElementAndClickIt(
-      `folder-${dataPath}#core_profiles:0/`,
+      `folder-${dataPath1}#equilibrium:0/`,
       200,
       100,
     );
     await findCssElementAndClickIt(
-      `folder-${dataPath}#core_profiles:0/profiles_1d[:]/`,
+      `folder-${dataPath1}#equilibrium:0/time_slice[:]/`,
       200,
       100,
     );
     await findCssElementAndClickIt(
-      `folder-${dataPath}#core_profiles:0/profiles_1d[:]/ion[:]/`,
+      `folder-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/`,
       200,
       100,
     );
@@ -128,9 +144,9 @@ describe('UI Tests for plotted data', function () {
       async () => (await getTestState()).active.dataPlot.length,
       0,
     );
-    // Click on temperature checkbox to start a new plot
+    // Click on phi checkbox to start a new plot
     await findCssElementAndClickIt(
-      `checkbox-${dataPath}#core_profiles:0/profiles_1d[:]/ion[:]/temperature`,
+      `checkbox-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/phi`,
     );
     // Check that there is one dataplot created
     await waitForValue(
@@ -152,9 +168,9 @@ describe('UI Tests for plotted data', function () {
       undefined,
       (actual, expected) => actual == expected,
     );
-    // Click on density checkbox to plot a second axis
+    // Click on pressure checkbox to plot a second axis
     await findCssElementAndClickIt(
-      `checkbox-${dataPath}#core_profiles:0/profiles_1d[:]/ion[:]/density`,
+      `checkbox-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/pressure`,
     );
     // Check that the Y plot is defined
     await waitForValue(
@@ -169,6 +185,75 @@ describe('UI Tests for plotted data', function () {
       async () => (await getTestState()).active.dataPlot[0].y2AxisData,
       undefined,
       (actual, expected) => actual != expected,
+    );
+
+    ///
+    /// Add the URI iter_disruption_113112_1.nc to ensure the interpolation works
+    ///
+    // Click on phi checkbox to remove the plot
+    await findCssElementAndClickIt(
+      `checkbox-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/phi`,
+    );
+    await getDriver().sleep(2000);
+
+    // Click on pressure checkbox to remove the plot
+    await findCssElementAndClickIt(
+      `checkbox-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/pressure`,
+    );
+    await getDriver().sleep(2000);
+
+    // Check that there is no dataplot
+    await waitForValue(
+      'DataPlot configuration length',
+      async () => (await getTestState()).active.dataPlot.length,
+      0,
+    );
+    await getDriver().sleep(2000);
+
+    // Click on psi checkbox to display a new plot
+    await findCssElementAndClickIt(
+      `checkbox-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/psi`,
+    );
+    await waitForValue(
+      'Shape of psi plot',
+      async () =>
+        (await getTestState()).active.dataPlot[0]?.coordinates[0]?.shape,
+      [1, 298],
+      (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected),
+    );
+    // Navigate to URI 2 psi to plot
+    await findCssElementAndClickIt(`uriAccordion-${dataPath1}`, 200, 100);
+    await getDriver().sleep(2000);
+    await ensureCssElementIsDisplayed(`uriAccordion-${dataPath2}`, 200, 100);
+    await findCssElementAndClickIt(`uriAccordion-${dataPath2}`, 200, 100);
+    await getDriver().sleep(2000);
+    await findCssElementAndClickIt(
+      `folder-${dataPath2}#equilibrium:0/`,
+      200,
+      100,
+    );
+    await findCssElementAndClickIt(
+      `folder-${dataPath2}#equilibrium:0/time_slice[:]/`,
+      200,
+      100,
+    );
+    await findCssElementAndClickIt(
+      `folder-${dataPath2}#equilibrium:0/time_slice[:]/profiles_1d/`,
+      200,
+      100,
+    );
+    // Click on psi checkbox to display a new plot
+    await findCssElementAndClickIt(
+      `checkbox-${dataPath2}#equilibrium:0/time_slice[:]/profiles_1d/psi`,
+    );
+    await waitForValue(
+      'Shape of interpolated psi/pressure plot',
+      async () => {
+        const active = (await getTestState()).active;
+        return active.dataPlot[0]?.coordinates[0]?.shape;
+      },
+      [4, 298],
+      (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected),
     );
   });
 

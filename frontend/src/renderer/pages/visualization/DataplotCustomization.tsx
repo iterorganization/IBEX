@@ -17,7 +17,6 @@ import {
   Configuration,
   DataGridPlot,
   DataPlotly,
-  PlotLine,
   synchronizedList,
 } from '../../types';
 import { CustomizeDownsampling, CustomizeGlobal } from './customizableElements';
@@ -26,25 +25,26 @@ import { Customize1DPlot } from './customizableElements/Customize1DPlot';
 import { CustomizeDataRange } from './customizableElements/CustomizeDataRange';
 import { CustomizeSynchronization } from './customizableElements/CustomizeSynchronization';
 import { IconLink } from '@tabler/icons-react';
+import { initPlotColors } from '../../utils';
 interface CustomizationProps {
   customizedDataGrid: DataGridPlot;
   selectedAccordion: string | null;
   selectedPlot: DataPlotly | null;
   applyToAllHeatmap: boolean;
+  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
   setSelectedAccordion: React.Dispatch<React.SetStateAction<string | null>>;
   setApplyToAllHeatmap: React.Dispatch<React.SetStateAction<boolean>>;
-  initPlotColors: () => void;
 }
 const Customization = ({
   customizedDataGrid,
   selectedAccordion,
   selectedPlot,
   applyToAllHeatmap,
+  customContainerRef,
   setCustomizedDataGrid,
   setSelectedAccordion,
   setApplyToAllHeatmap,
-  initPlotColors,
 }: CustomizationProps) => {
   type accordionItemsType = {
     value: string;
@@ -69,8 +69,8 @@ const Customization = ({
         <Customize1DPlot
           customizedDataGrid={customizedDataGrid}
           selectedPlot={selectedPlot}
+          customContainerRef={customContainerRef}
           setCustomizedDataGrid={setCustomizedDataGrid}
-          initPlotColors={initPlotColors}
         />
       ),
       icon: (
@@ -235,11 +235,9 @@ export const DataplotCustomization = () => {
    */
   useEffect(() => {
     if (active?.customizedGridLayout) {
-      const data = JSON.parse(
-        JSON.stringify(
-          active.dataPlot.find(
-            (item: DataGridPlot) => item.i === active.customizedGridLayout,
-          ),
+      const data = structuredClone(
+        active.dataPlot.find(
+          (item: DataGridPlot) => item.i === active.customizedGridLayout,
         ),
       );
       if (data) {
@@ -250,59 +248,12 @@ export const DataplotCustomization = () => {
     }
   }, []);
 
-  /**
-   * Init plots color by adding color in plot.line for each plot
-   */
-  const initPlotColors = () => {
-    // Get plot colors when select 1D plots accordion
-    const customContainer = customContainerRef.current;
-    if (!customContainer) return;
-    // Get child elements from the legend
-    const legends = customContainer.querySelectorAll<SVGGElement>('g.layers');
-
-    const updatedPlotColors = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
-    if (legends?.length) {
-      // When we have a color legend (so several plots)
-      let plotIndex = 0;
-      let shouldUpdateColors = false;
-      for (const plot of updatedPlotColors.plot) {
-        // Get from DOM & set color in plot.line for each plots
-        if (!plot?.line?.color) {
-          shouldUpdateColors = true;
-        }
-
-        const line = legends[plotIndex].querySelector<SVGGElement>(
-          'g.legendlines > path',
-        );
-        // We get color from point when plot.mode === "markers"
-        const point = legends[plotIndex].querySelector<SVGGElement>(
-          'g.legendpoints > path',
-        );
-        const colorFromDOM = line?.style?.stroke || point?.style?.fill;
-
-        if (!plot?.line) {
-          plot.line = { color: colorFromDOM } as PlotLine;
-        } else {
-          plot.line.color = colorFromDOM;
-        }
-        plotIndex++;
-      }
-      if (!shouldUpdateColors) {
-        return;
-      }
-    } else if (updatedPlotColors.plot.length === 1) {
-      // When we have only one plot, thee is no legend so we set manualy to the first plotly color
-      updatedPlotColors.plot[0].line = {
-        color: 'rgb(31, 119, 180)',
-      } as PlotLine;
-    }
-    setCustomizedDataGrid(updatedPlotColors);
-  };
-
   useEffect(() => {
-    initPlotColors();
+    initPlotColors(
+      customizedDataGrid,
+      customContainerRef,
+      setCustomizedDataGrid,
+    );
   }, [customContainerRef.current]);
 
   /**
@@ -325,8 +276,8 @@ export const DataplotCustomization = () => {
    * Handle close of customization
    */
   const closeWithoutSaving = useCallback(() => {
-    const updatedActive: Configuration = JSON.parse(
-      JSON.stringify(active),
+    const updatedActive: Configuration = structuredClone(
+      active,
     ) as Configuration;
     updatedActive.customizedGridLayout = null;
     updatedConfiguration(updatedActive);
@@ -353,10 +304,8 @@ export const DataplotCustomization = () => {
 
     // Update synchronized grids dependencies
     if (
-      JSON.parse(JSON.stringify(oldDataGrid.synchronizedGrids.list))
-        .sort()
-        .toString() !==
-      JSON.parse(JSON.stringify(customizedDataGrid.synchronizedGrids.list))
+      structuredClone(oldDataGrid.synchronizedGrids.list).sort().toString() !==
+      structuredClone(customizedDataGrid.synchronizedGrids.list)
         .sort()
         .toString()
     ) {
@@ -474,7 +423,7 @@ export const DataplotCustomization = () => {
         {dataGridLayout &&
           dataGridLayout.plot.map((item: DataPlotly, index) => {
             // force to have only one axis in metadata plot
-            const itemWithoutY2axis = JSON.parse(JSON.stringify(item));
+            const itemWithoutY2axis = structuredClone(item);
             if (item.yaxis != '') {
               delete itemWithoutY2axis.yaxis;
             }
@@ -510,10 +459,10 @@ export const DataplotCustomization = () => {
                           selectedAccordion={selectedAccordion}
                           selectedPlot={selectedPlot}
                           applyToAllHeatmap={applyToAllHeatmap}
+                          customContainerRef={customContainerRef}
                           setCustomizedDataGrid={setCustomizedDataGrid}
                           setSelectedAccordion={setSelectedAccordion}
                           setApplyToAllHeatmap={setApplyToAllHeatmap}
-                          initPlotColors={initPlotColors}
                         />
                       </Grid.Col>
                     </Grid>

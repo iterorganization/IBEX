@@ -12,7 +12,6 @@ import { Center, Container, Text } from '@mantine/core';
 import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import {
-  containsFloat,
   getArrayValueFromDependance,
   getErrorYVectors,
   getLastIndexedField,
@@ -128,15 +127,28 @@ export const GridLayoutPlot = ({
             );
 
             if (plotItem?.error_bands?.length) {
-              const updated_error_y = getErrorYVectors(
+              const updated_error_bands = getErrorYVectors(
                 plotItem,
                 updatedCoordinatesValue,
               );
+              let customdata;
+              if (plotItem.error_bands.length === 2) {
+                customdata = plotItem.error_bands[0].array.map((v, i) => [
+                  plotItem.error_bands[0].array[i],
+                  plotItem.error_bands[1].array[i],
+                ]);
+              } else {
+                customdata = plotItem.error_bands[0].array.map((v, i) => [
+                  plotItem.error_bands[0].array[i],
+                ]);
+              }
+
               return {
                 ...plotItem,
                 x: newXData,
                 y: newYData,
-                error_y: updated_error_y,
+                customdata: customdata,
+                error_bands: updated_error_bands,
                 nodeUri: updatedNodeUri,
                 path: updatedPath,
               };
@@ -201,40 +213,9 @@ export const GridLayoutPlot = ({
     }
   }, [data.plot]);
 
-  const updateSelectedPlotMode = (is3DView: boolean, active: Configuration) => {
-    const updatedDataPlot: DataGridPlot[] = JSON.parse(
-      JSON.stringify(active.dataPlot),
-    );
-    const selectedDataPlot = updatedDataPlot.find(
-      (dataPlot) => dataPlot.i === data.i,
-    );
-    if (selectedDataPlot?.selectedPlotMode) {
-      selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
-    } else {
-      selectedDataPlot.selectedPlotMode =
-        data.coordinates.length >= 2 &&
-        containsFloat(
-          data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
-        )
-          ? 'Heatmap'
-          : '1D';
-    }
-
-    const updatedActive: Configuration = {
-      ...active,
-      dataPlot: updatedDataPlot,
-    };
-    updatedConfiguration(updatedActive);
-  };
-
   useEffect(() => {
-    if ((data.selectedPlotMode === 'Heatmap') === is3DView) {
-      // Prevent from triggering updateSelectedPlotMode when initialize is3DView
-      return;
-    }
-
-    updateSelectedPlotMode(is3DView, active);
-  }, [is3DView]);
+    setIs3DView(data?.selectedPlotMode === 'Heatmap' ? true : false);
+  }, [data.selectedPlotMode]);
 
   /**
    * Handle the delete grid event
@@ -378,7 +359,6 @@ export const GridLayoutPlot = ({
           handleCustomization={handleCustomization}
           handleDeleteGrid={handleDeleteGrid}
           is3DView={is3DView}
-          setIs3DView={setIs3DView}
           active3DTab={active3DTab}
           setActive3DTab={setActive3DTab}
         />

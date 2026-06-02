@@ -16,6 +16,7 @@ import {
   URIFromPathResponse,
 } from '../types';
 import { getTensorizedMatrix, transformComplexData } from './plot';
+import { replaceNullsWithNaN } from './functions';
 
 /**
  * Retrieves the API configuration.
@@ -143,9 +144,11 @@ export const fetchNodeInfos = async (
   nodeUri: string,
   showErrorBars: boolean,
 ) => {
-  return fetchFromApi<NodeInfoResponse>(
+  const nodeInfos = await fetchFromApi<NodeInfoResponse>(
     `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
+  nodeInfos.children = nodeInfos.children.filter((c) => c.has_data !== false);
+  return nodeInfos;
 };
 
 /**
@@ -169,21 +172,30 @@ export const fetchDataPlot = async (
   downsamplingMethod?: string,
   downsamplingSize?: number,
   type?: NodeInfoTypeEnum,
+  interpolateOver?: string[],
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
   let firstMethod: string;
 
+  // Provide interpolate_over param if needed
+  let encodedInterpolateOver: string = '';
+  if (interpolateOver) {
+    for (const uriToInterpolate of interpolateOver) {
+      encodedInterpolateOver += `&interpolate_over=${encodeURIComponent(uriToInterpolate)}`;
+    }
+  }
+
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}`,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}`,
         5000,
       );
     } catch (error) {
@@ -195,7 +207,7 @@ export const fetchDataPlot = async (
           methods?.downsampling_methods.find((meth) => meth.name === 'M4')
             ?.name || methods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
         );
       }
     }
@@ -247,6 +259,8 @@ export const fetchDataPlot = async (
     const updatedData = transformComplexData(response.data.value) as AxisData;
     response.data.value = updatedData;
   }
+
+  response.data.value = replaceNullsWithNaN(response.data.value);
   return response;
 };
 
@@ -285,6 +299,7 @@ export const fetchFieldValue = async (
     const updatedData = transformComplexData(response.value) as AxisData;
     response.value = updatedData;
   }
+  response.value = replaceNullsWithNaN(response.value);
   return response;
 };
 

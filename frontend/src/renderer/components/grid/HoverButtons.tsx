@@ -18,7 +18,11 @@ import {
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
 import { Configuration, DataGridPlot } from '../../types';
-import { applyRange, fetchErrorBandsInConfig } from '../../utils';
+import {
+  applyRange,
+  containsFloat,
+  fetchErrorBandsInConfig,
+} from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
@@ -29,7 +33,6 @@ interface HoverButtonsProps {
   handleCustomization: (id: string) => void;
   handleDeleteGrid: (id: string) => void;
   is3DView: boolean;
-  setIs3DView: React.Dispatch<React.SetStateAction<boolean>>;
   active3DTab: string;
   setActive3DTab: React.Dispatch<React.SetStateAction<string>>;
 }
@@ -43,7 +46,6 @@ export const HoverButtons = React.memo(
     handleCustomization,
     handleDeleteGrid,
     is3DView,
-    setIs3DView,
     active3DTab,
     setActive3DTab,
   }: HoverButtonsProps) => {
@@ -71,9 +73,7 @@ export const HoverButtons = React.memo(
 
     const updateDisplayErrorBands = useCallback(
       (newValue: boolean) => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         const selectedDataPlot = updatedActive.dataPlot.find(
           (dataPlot) => dataPlot.i === data.i,
         );
@@ -96,7 +96,6 @@ export const HoverButtons = React.memo(
                 ?.includes(checkedNode.uri),
           );
           delete plot?.error_bands;
-          delete plot?.error_y;
         }
       },
       [active],
@@ -104,9 +103,7 @@ export const HoverButtons = React.memo(
 
     useEffect(() => {
       const updateErrorBands = async () => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         if (data.displayErrorBand) {
           if (
             (previousValueDisplayErrorBands.current === false ||
@@ -158,6 +155,33 @@ export const HoverButtons = React.memo(
       // Triggerred when update "Error bands" switch
       updateErrorBands();
     }, [data.displayErrorBand]);
+
+    const updateSelectedPlotMode = (
+      is3DView: boolean,
+      active: Configuration,
+    ) => {
+      const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
+      const selectedDataPlot = updatedDataPlot.find(
+        (dataPlot) => dataPlot.i === data.i,
+      );
+      if (selectedDataPlot?.selectedPlotMode) {
+        selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
+      } else {
+        selectedDataPlot.selectedPlotMode =
+          data.coordinates.length >= 2 &&
+          containsFloat(
+            data.coordinates.find((coord) => coord.axeIndex === 1)?.data,
+          )
+            ? 'Heatmap'
+            : '1D';
+      }
+
+      const updatedActive: Configuration = {
+        ...active,
+        dataPlot: updatedDataPlot,
+      };
+      updatedConfiguration(updatedActive);
+    };
 
     return (
       <div ref={hoverRef} className={classes.containerButton}>
@@ -213,9 +237,15 @@ export const HoverButtons = React.memo(
               {data.coordinates.length >= 2 && !shouldDisplayMetadata && (
                 <Tooltip label="Toggle 1D/Heatmap view">
                   <ActionIcon
+                    data-testid="toggle-plot-mode-button"
                     variant="filled"
                     aria-label="Toggle 1D/Heatmap view"
-                    onClick={() => setIs3DView((prev) => !prev)}
+                    onClick={() =>
+                      updateSelectedPlotMode(
+                        !(data.selectedPlotMode === 'Heatmap'),
+                        active,
+                      )
+                    }
                     className={classes.actionButton}
                   >
                     {is3DView ? <Text fw="bold">1D</Text> : heatmapLogo}
@@ -262,11 +292,7 @@ export const HoverButtons = React.memo(
               )}
 
               <Tooltip
-                label={
-                  data.isEditing
-                    ? 'Validate/Close editing the grid'
-                    : 'Open editing the grid'
-                }
+                label={data.isEditing ? 'Save the edition' : 'Edit the grid'}
               >
                 <ActionIcon
                   variant="filled"
