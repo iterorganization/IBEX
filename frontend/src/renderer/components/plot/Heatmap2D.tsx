@@ -78,7 +78,12 @@ export const Heatmap2D = ({
     modebar: {
       orientation: 'v',
     },
-    legend: { x: 1.3, y: 1 },
+    legend: {
+      x: 1.3,
+      y: 1,
+      groupclick: 'togglegroup',
+      tracegroupgap: 0,
+    },
   });
   // Custom hook used for trigger some useEffects to update the layout
   usePlotLayout({

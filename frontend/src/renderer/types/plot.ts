@@ -53,8 +53,10 @@ export type Geometry = {
   y: number[];
   line: GeometryLine;
   nodeUris: string[];
+  name: string;
+  legendgroup: string;
+  showlegend: boolean;
   fill?: 'toself';
-  name?: string;
 };
 
 type GeometryLine = {

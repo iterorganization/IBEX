@@ -627,6 +627,12 @@ const fetchGeometryOutline = async (
     x = rVector;
     y = zVector;
   }
+
+  // Get legend name
+  const firstPart = path.slice(1).split('/')[0];
+  const secondPart = path.slice(1).split('/unit')[0].split('/');
+  const groupLegend = firstPart + '/' + secondPart[secondPart.length - 1];
+
   // Get outline
   const outlineGeometry: Geometry = {
     x: [...x],
@@ -635,7 +641,9 @@ const fetchGeometryOutline = async (
     mode: 'lines',
     line: { color: 'black', width: 2 },
     nodeUris: [uri + rPath, uri + zPath],
-    name: 'outline',
+    name: groupLegend,
+    legendgroup: groupLegend,
+    showlegend: false,
   };
   return outlineGeometry;
 };
@@ -672,7 +680,7 @@ const fetchGeometryRectangle = async (
   const rectangleGeometry: Geometry[] = [];
   const lastCoord =
     zResponse.data.coordinates[zResponse.data.coordinates.length - 1];
-  for (const [coordIndex, coordValue] of lastCoord.value.entries()) {
+  for (const [coordIndex] of lastCoord.value.entries()) {
     if (
       rVector[coordIndex][0] === -9e40 ||
       zVector[coordIndex][0] === -9e40 ||
@@ -707,6 +715,11 @@ const fetchGeometryRectangle = async (
       x = y;
       y = tempX;
     }
+
+    // Get legend name
+    const groupLegend =
+      path.slice(1).split('/')[0] + '/' + path.slice(1).split('/')[1];
+
     // Add a rectangle
     rectangleGeometry.push({
       x: [...x],
@@ -715,12 +728,143 @@ const fetchGeometryRectangle = async (
       mode: 'lines',
       line: { color: 'orange', width: 2 },
       nodeUris: [uri + rPath, uri + zPath],
-      name: coordValue,
+      name: groupLegend,
+      legendgroup: groupLegend,
+      showlegend: false,
       fill: 'toself',
     } as Geometry);
   }
   // Return rectangle list
   return rectangleGeometry;
+};
+
+const fetchGeometryOblique = async (
+  uri: string,
+  path: string,
+  shouldSwitchAxis: boolean,
+) => {
+  // TODO replace constrained paths by them provided by BE
+  const rPath = path + '/r';
+  const zPath = path + '/z';
+  const lengthAlphaPath = path + '/length_alpha';
+  const lengthBetaPath = path + '/length_beta';
+  const alphaPath = path + '/alpha';
+  const betaPath = path + '/beta';
+
+  // Get r
+  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  const rVector = rResponse.data.value as number[][];
+
+  // Get z
+  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+  const zVector = zResponse.data.value as number[][];
+
+  // Get length alpha
+  const lengthAlphaResponse = await fetchDataPlot(
+    normalizeIndices(uri + lengthAlphaPath),
+  );
+  const lengthAlphaVector = lengthAlphaResponse.data.value as number[][];
+
+  // Get length beta
+  const lengthBetaResponse = await fetchDataPlot(
+    normalizeIndices(uri + lengthBetaPath),
+  );
+  const lengthBetaVector = lengthBetaResponse.data.value as number[][];
+
+  // Get alpha
+  const alphaResponse = await fetchDataPlot(normalizeIndices(uri + alphaPath));
+  const alphaVector = alphaResponse.data.value as number[][];
+
+  // Get beta
+  const betaResponse = await fetchDataPlot(normalizeIndices(uri + betaPath));
+  const betaVector = betaResponse.data.value as number[][];
+  const obliqueGeometry: Geometry[] = [];
+  const lastCoord =
+    zResponse.data.coordinates[zResponse.data.coordinates.length - 1];
+  for (const [coordIndex] of lastCoord.value.entries()) {
+    if (
+      rVector[coordIndex][0] === -9e40 ||
+      zVector[coordIndex][0] === -9e40 ||
+      lengthAlphaVector[coordIndex][0] === -9e40 ||
+      lengthBetaVector[coordIndex][0] === -9e40 ||
+      alphaVector[coordIndex][0] === -9e40 ||
+      betaVector[coordIndex][0] === -9e40
+    ) {
+      // Data equals to -9e+40 are unexpected
+      continue;
+    }
+
+    // Format (x,y) points with oblique rule
+    let x, y: number[];
+
+    const r = rVector[coordIndex][0];
+    const z = zVector[coordIndex][0];
+
+    const alphaLength = lengthAlphaVector[coordIndex][0];
+    const betaLength = lengthBetaVector[coordIndex][0];
+
+    const alpha = alphaVector[coordIndex][0];
+    const beta = betaVector[coordIndex][0];
+
+    // alpha: R axis reference
+    const vxAlpha = alphaLength * Math.cos(alpha);
+    const vyAlpha = alphaLength * Math.sin(alpha);
+
+    // beta: Z axis reference
+    const vxBeta = -betaLength * Math.sin(beta);
+    const vyBeta = betaLength * Math.cos(beta);
+
+    const p0 = { x: r, y: z };
+
+    const p1 = {
+      x: r + vxAlpha,
+      y: z + vyAlpha,
+    };
+
+    const p2 = {
+      x: r + vxBeta,
+      y: z + vyBeta,
+    };
+
+    const p3 = {
+      x: p1.x + vxBeta,
+      y: p1.y + vyBeta,
+    };
+
+    x = [p0.x, p1.x, p3.x, p2.x, p0.x];
+
+    y = [p0.y, p1.y, p3.y, p2.y, p0.y];
+
+    // Close x & y vectors
+    x.push(x[0]);
+    y.push(y[0]);
+
+    if (shouldSwitchAxis) {
+      const tempX = x;
+      x = y;
+      y = tempX;
+    }
+
+    // Get legend name
+    const groupLegend =
+      path.slice(1).split('/')[0] + '/' + path.slice(1).split('/')[1];
+
+    // Add a oblique
+    obliqueGeometry.push({
+      x: [...x],
+      y: [...y],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'orange', width: 2 },
+      nodeUris: [uri + rPath, uri + zPath],
+      name: groupLegend,
+      legendgroup: groupLegend,
+      showlegend: false,
+      fill: 'toself',
+    } as Geometry);
+  }
+  // Return oblique list
+  return obliqueGeometry;
 };
 
 export const fetchGeometries = async (
@@ -733,7 +877,8 @@ export const fetchGeometries = async (
     // TODO : get from BE all geometries to display
     const paths: string[] = [
       '#wall:0/description_2d[:]/limiter/unit[:]/outline',
-      '#pf_active/coil[0]/element[0]/geometry/rectangle',
+      '#pf_active/coil[:]/element[:]/geometry/rectangle',
+      '#pf_active/coil[:]/element[:]/geometry/oblique',
     ];
 
     const shouldSwitchAxis =
@@ -761,6 +906,27 @@ export const fetchGeometries = async (
         );
         dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
       }
+
+      if (typeOfGeometry === 'oblique') {
+        // Get oblique
+        const obliqueGeometry = await fetchGeometryOblique(
+          uri,
+          path,
+          shouldSwitchAxis,
+        );
+        dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
+      }
+    }
+
+    if (dataPlot?.geometrie) {
+      const displayedLegendGroups: string[] = [];
+      // Show each group in legend
+      for (const geometry of dataPlot.geometrie) {
+        if (!displayedLegendGroups.find((lg) => lg === geometry.legendgroup)) {
+          displayedLegendGroups.push(geometry.legendgroup);
+          geometry.showlegend = true;
+        }
+      }
     }
 
     if (dataPlot.isEditing && dataPlot?.geometrie) {
@@ -784,7 +950,7 @@ export const fetchGeometries = async (
       }
     }
 
-    // Return dataPlot list with the plot which includes error bands
+    // Return dataPlot list with all geometries
     return dataPlot;
   } catch (error) {
     console.error('Error getting geometries:', error);
