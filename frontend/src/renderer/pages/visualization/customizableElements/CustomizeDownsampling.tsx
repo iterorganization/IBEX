@@ -6,6 +6,7 @@ import {
   fetchErrorBands,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
+  getUrisToInterpolate,
   getVectorData,
   normalizeIndices,
 } from '../../../utils';
@@ -45,12 +46,16 @@ export const CustomizeDownsampling = ({
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
         // Downsample data
+        const urisToInterpolate = getUrisToInterpolate(
+          plot.nodeUri,
+          updatedDataPlot.plot,
+        );
         const dataPlotDownsampled = await fetchDataPlot(
           normalizeIndices(plot.nodeUri),
           downsamplingMethod,
           downsamplingSize,
           updatedDataPlot?.dataType,
-          undefined,
+          urisToInterpolate,
           updatedDataPlot?.interpolated_method,
         );
 

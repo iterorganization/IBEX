@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
-  fetchDataManipulationMethods,
   fetchErrorBands,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getVectorData,
   normalizeIndices,
+  getInterpolationMethods,
+  getUrisToInterpolate,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Group, Loader, Select, Stack } from '@mantine/core';
@@ -26,9 +27,9 @@ export const CustomizeInterpolation = ({
   const [interpolationMethods, setInterpolationMethods] = useState<
     OptionWithTooltip[]
   >([]);
-  const [selectedInterpolation, setSelectedInterpolation] = useState<
-    string | null
-  >(null);
+  const [selectedInterpolation, setSelectedInterpolation] = useState<string>(
+    customizedDataGrid.interpolated_method,
+  );
   const [loading, { open, close }] = useDisclosure();
 
   /**
@@ -44,12 +45,16 @@ export const CustomizeInterpolation = ({
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
         // Interpolated data
+        const urisToInterpolate = getUrisToInterpolate(
+          plot.nodeUri,
+          updatedDataPlot.plot,
+        );
         const dataPlotInterpolated = await fetchDataPlot(
           normalizeIndices(plot.nodeUri),
           customizedDataGrid?.downsampled_method,
           customizedDataGrid?.downsampled_size,
           updatedDataPlot?.dataType,
-          undefined,
+          urisToInterpolate,
           selectedInterpolation,
         );
 
@@ -60,7 +65,7 @@ export const CustomizeInterpolation = ({
             plot.nodeUri,
             undefined,
             undefined,
-            // selectedInterpolation, // TODO : force the interpolation with the selected one
+            selectedInterpolation,
           );
         }
 
@@ -136,31 +141,15 @@ export const CustomizeInterpolation = ({
    * Get interpolated methods to show in select
    */
   useEffect(() => {
-    const getInterpolationMethods = async () => {
-      const methodsRes = await fetchDataManipulationMethods();
-      const options: OptionWithTooltip[] = methodsRes.data_manipulation_methods
-        .find((data_manip) => data_manip.name === 'Data interpolation')
-        .method_parameters.find(
-          (param) => param.name === 'interpolation_method',
-        )
-        .possible_values.map((item) => ({
-          value: item.value,
-          tooltip: item.description,
-        }));
+    const getInterpolationOptions = async () => {
+      const options = await getInterpolationMethods();
       setInterpolationMethods(options);
     };
-    getInterpolationMethods();
+    getInterpolationOptions();
   }, []);
 
   useEffect(() => {
-    // Update interpolated method after a timeout
-    if (customizedDataGrid.interpolated_method) {
-      setSelectedInterpolation(customizedDataGrid.interpolated_method);
-    }
-  }, [customizedDataGrid.interpolated_method]);
-
-  useEffect(() => {
-    if (selectedInterpolation) {
+    if (selectedInterpolation !== customizedDataGrid?.interpolated_method) {
       getInterpolatedData();
     }
   }, [selectedInterpolation]);
@@ -172,12 +161,14 @@ export const CustomizeInterpolation = ({
           label="Method"
           description="Select the method"
           placeholder="Select the method"
-          value={selectedInterpolation || 'exact_value'}
+          value={selectedInterpolation}
           data={interpolationMethods.map((meth) => meth.value)}
           rightSection={loading ? <Loader size={16} /> : null}
-          onChange={(selectedMethod) =>
-            setSelectedInterpolation(selectedMethod || 'exact_value')
-          }
+          onChange={(selectedMethod) => {
+            if (selectedMethod !== selectedInterpolation) {
+              setSelectedInterpolation(selectedMethod || selectedInterpolation);
+            }
+          }}
           renderOption={(option) => {
             const selectedOption = interpolationMethods.find(
               (meth) => option.option.value === meth.value,

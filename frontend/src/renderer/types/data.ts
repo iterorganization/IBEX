@@ -19,8 +19,8 @@ export type PlotDataResponse = {
     unit: string;
     value: AxisData;
     downsampled_shape: number[];
-    downsampled_method?: string;
-    interpolated_method?: string;
+    downsampled_method: string;
+    interpolated_method: string;
     shape: number[] | 'irregular';
     ndim: number;
     path: string;

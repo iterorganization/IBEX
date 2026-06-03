@@ -57,7 +57,7 @@ export const DataplotCustomization = () => {
         ...dataGridLayout,
         title: customizedDataGrid?.title,
         downsampled_method: customizedDataGrid?.downsampled_method,
-        interpolated_method: customizedDataGrid?.interpolated_method,
+        interpolated_method: customizedDataGrid.interpolated_method,
         plot: customizedDataGrid?.plot,
       } as DataGridPlot;
       setDataGridLayout(updatedDataGridLayout);

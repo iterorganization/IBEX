@@ -18,6 +18,7 @@ import {
 } from '../types';
 import { getTensorizedMatrix, transformComplexData } from './plot';
 import { replaceNullsWithNaN } from './functions';
+import { OptionWithTooltip } from '../types/components/select';
 
 /**
  * Retrieves the API configuration.
@@ -178,13 +179,20 @@ export const fetchDataPlot = async (
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
-  let firstMethod: string;
+  let firstDownsampledMethods: string;
 
   // Provide interpolate_over param if needed
   let encodedInterpolateOver: string = '';
   if (interpolateOver) {
     for (const uriToInterpolate of interpolateOver) {
       encodedInterpolateOver += `&interpolate_over=${encodeURIComponent(uriToInterpolate)}`;
+    }
+    if (!interpolationMethod) {
+      // Use first interplation method by default to fetch data
+      const interpolationMethods = (await getInterpolationMethods()).map(
+        (m) => m.value,
+      );
+      interpolationMethod = interpolationMethods[0];
     }
     encodedInterpolateOver += `&interpolation_method=${encodeURIComponent(interpolationMethod)}`;
   }
@@ -205,12 +213,13 @@ export const fetchDataPlot = async (
       if (error.name === 'AbortError' || error.name === 'SyntaxError') {
         // "SyntaxError" can be triggered when too heavy (eof error)
         // Use first downsampling method by default to fetch data
-        const methods = await fetchDownsamplingMethods();
-        firstMethod =
-          methods?.downsampling_methods.find((meth) => meth.name === 'M4')
-            ?.name || methods?.downsampling_methods.slice(0)[1].name;
+        const downsampledMethods = await fetchDownsamplingMethods();
+        firstDownsampledMethods =
+          downsampledMethods?.downsampling_methods.find(
+            (meth) => meth.name === 'M4',
+          )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethods)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
         );
       }
     }
@@ -231,9 +240,11 @@ export const fetchDataPlot = async (
       coord.target = coord.target += '[:]';
     }
   }
-  if (firstMethod || downsamplingMethod) {
-    response.data.downsampled_method = firstMethod || downsamplingMethod;
-  }
+
+  // Return used methods
+  response.data.downsampled_method =
+    firstDownsampledMethods || downsamplingMethod;
+  response.data.interpolated_method = interpolationMethod;
 
   if (response.data.shape === 'irregular') {
     // Alert when getting irregular shape
@@ -283,6 +294,18 @@ export const fetchDataManipulationMethods = async () => {
   return fetchFromApi<DataManipulationListResponse>(
     `/info/data_manipulation_methods`,
   );
+};
+
+export const getInterpolationMethods = async () => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const options: OptionWithTooltip[] = methodsRes.data_manipulation_methods
+    .find((data_manip) => data_manip.name === 'Data interpolation')
+    .method_parameters.find((param) => param.name === 'interpolation_method')
+    .possible_values.map((item) => ({
+      value: item.value,
+      tooltip: item.description,
+    }));
+  return options;
 };
 
 /**

@@ -239,6 +239,7 @@ const updateInterpolatedPlots = async (
       interpolatedDataPlot?.downsampled_size,
       nodeType,
       urisToInterpolate.filter((uri) => uri !== normalizeIndices(plot.nodeUri)),
+      interpolatedDataPlot?.interpolated_method,
     );
 
     if (plotsUpdated === 1 && isInDeleteCase) {
@@ -800,6 +801,7 @@ export const fetchErrorBandsInConfig = async (
  * @param uri Uri to get the data
  * @param forcedDownsamplingMethod Forced downsample method (optional)
  * @param forcedDownsamplingSize Forced downsample size (optional)
+ * @param forcedInterpolationMethod Forced interpolation method (optional)
  * @returns
  */
 export const fetchErrorBands = async (
@@ -807,7 +809,7 @@ export const fetchErrorBands = async (
   uri: string,
   forcedDownsamplingMethod?: string,
   forcedDownsamplingSize?: number,
-  // forcedInterpolationMethod?: string, // TODO : use it for forcing interpolation method in interpolation customization
+  forcedInterpolationMethod?: string,
 ) => {
   if (!dataPlot.displayErrorBand) {
     // Stop error bands when the dataPlot switch is off
@@ -827,13 +829,10 @@ export const fetchErrorBands = async (
     const downsamplingSize: number =
       forcedDownsamplingSize || dataPlot?.downsampled_size;
     const urisToInterpolate = getUrisToInterpolate(plot.nodeUri, dataPlot.plot);
+    const interpolationMethod: string =
+      forcedInterpolationMethod || dataPlot?.interpolated_method;
 
     let upperResponse, lowerResponse: FieldValueResponse;
-
-    /*
-    const interpolationMethod: string =
-      forcedInterpolationMethod || dataPlot?.interpolated_method; // TODO : send interpolationMethod in dataPlot instead of fieldValue if we have to get interpolated data
-    */
 
     // Get error bands
     if (urisToInterpolate.length) {
@@ -843,6 +842,7 @@ export const fetchErrorBands = async (
         downsamplingSize,
         dataPlot?.dataType,
         urisToInterpolate,
+        interpolationMethod,
       );
       upperResponse = {
         value: interpolatedUpper.data.value,
@@ -854,6 +854,7 @@ export const fetchErrorBands = async (
         downsamplingSize,
         dataPlot?.dataType,
         urisToInterpolate,
+        interpolationMethod,
       );
       lowerResponse = {
         value: interpolatedLower.data.value,
