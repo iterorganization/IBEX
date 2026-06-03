@@ -338,7 +338,7 @@ export const VisualizationMetaData = () => {
         {dataGridLayout &&
           dataGridLayout.plot.map((item: DataPlotly, index) => {
             // force to have only one axis in metadata plot
-            const itemWithoutY2axis = JSON.parse(JSON.stringify(item));
+            const itemWithoutY2axis = structuredClone(item);
             if (item.yaxis != '') {
               delete itemWithoutY2axis.yaxis;
             }

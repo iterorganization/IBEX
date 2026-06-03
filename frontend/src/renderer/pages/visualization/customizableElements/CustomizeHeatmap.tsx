@@ -16,9 +16,7 @@ export const CustomizeHeatmap = ({
   setApplyToAllHeatmap,
 }: CustomizeHeatmapProps) => {
   const updateColorscale = (value: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     if (applyToAllHeatmap) {
       for (const plot of updatedDataPlot.plot) {

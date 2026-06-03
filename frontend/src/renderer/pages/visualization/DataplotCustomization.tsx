@@ -72,11 +72,9 @@ export const DataplotCustomization = () => {
    */
   useEffect(() => {
     if (active?.customizedGridLayout) {
-      const data = JSON.parse(
-        JSON.stringify(
-          active.dataPlot.find(
-            (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
-          ),
+      const data = structuredClone(
+        active.dataPlot.find(
+          (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
         ),
       );
       if (data) {
@@ -115,8 +113,8 @@ export const DataplotCustomization = () => {
    * Handle close of customization
    */
   const closeWithoutSaving = useCallback(() => {
-    const updatedActive: Configuration = JSON.parse(
-      JSON.stringify(active),
+    const updatedActive: Configuration = structuredClone(
+      active,
     ) as Configuration;
     updatedActive.customizedGridLayout = null;
     updatedConfiguration(updatedActive);
@@ -143,10 +141,8 @@ export const DataplotCustomization = () => {
 
     // Update synchronized grids dependencies
     if (
-      JSON.parse(JSON.stringify(oldDataGrid.synchronizedGrids.list))
-        .sort()
-        .toString() !==
-      JSON.parse(JSON.stringify(customizedDataGrid.synchronizedGrids.list))
+      structuredClone(oldDataGrid.synchronizedGrids.list).sort().toString() !==
+      structuredClone(customizedDataGrid.synchronizedGrids.list)
         .sort()
         .toString()
     ) {
@@ -264,7 +260,7 @@ export const DataplotCustomization = () => {
         {dataGridLayout &&
           dataGridLayout.plot.map((item: DataPlotly, index) => {
             // force to have only one axis in metadata plot
-            const itemWithoutY2axis = JSON.parse(JSON.stringify(item));
+            const itemWithoutY2axis = structuredClone(item);
             if (item.yaxis != '') {
               delete itemWithoutY2axis.yaxis;
             }

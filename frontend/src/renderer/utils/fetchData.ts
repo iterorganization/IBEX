@@ -17,6 +17,7 @@ import {
   URIFromPathResponse,
 } from '../types';
 import { getTensorizedMatrix, transformComplexData } from './plot';
+import { replaceNullsWithNaN } from './functions';
 
 /**
  * Retrieves the API configuration.
@@ -144,9 +145,11 @@ export const fetchNodeInfos = async (
   nodeUri: string,
   showErrorBars: boolean,
 ) => {
-  return fetchFromApi<NodeInfoResponse>(
+  const nodeInfos = await fetchFromApi<NodeInfoResponse>(
     `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
+  nodeInfos.children = nodeInfos.children.filter((c) => c.has_data !== false);
+  return nodeInfos;
 };
 
 /**
@@ -259,6 +262,8 @@ export const fetchDataPlot = async (
     const updatedData = transformComplexData(response.data.value) as AxisData;
     response.data.value = updatedData;
   }
+
+  response.data.value = replaceNullsWithNaN(response.data.value);
   return response;
 };
 
@@ -306,6 +311,7 @@ export const fetchFieldValue = async (
     const updatedData = transformComplexData(response.value) as AxisData;
     response.value = updatedData;
   }
+  response.value = replaceNullsWithNaN(response.value);
   return response;
 };
 

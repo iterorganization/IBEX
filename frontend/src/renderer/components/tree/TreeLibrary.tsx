@@ -9,7 +9,7 @@ import {
   UseTreeReturnType,
   useTree,
 } from '@mantine/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   IconMathFunction,
   IconFileUnknown,
@@ -22,6 +22,7 @@ import {
 import classes from './TreeLibrary.module.css';
 import {
   CustomTreeNodeData,
+  DataGridPlot,
   NodeInfoTypeEnum,
   URITreeNodeData,
 } from '../../types';
@@ -43,9 +44,13 @@ interface NodeIconProps {
 
 interface TreeLibraryProps {
   treeData: CustomTreeNodeData[];
+  editedDataPlot?: DataGridPlot;
   height?: string;
   checkedNodes?: URITreeNodeData[];
   expendAll?: boolean;
+  metadataGridLayout?: string;
+  customizedGridLayout?: string;
+  previousEditedIdRef?: React.MutableRefObject<string>;
   handleSelectChildren: (nodeUri: string) => Promise<void>;
   getCheckedNodes?: (nodes: URITreeNodeData[]) => void;
   getCurrentSelectedURI: () => string;
@@ -337,15 +342,18 @@ function NodeIcon({
 
 export const TreeLibrary = ({
   treeData,
+  editedDataPlot,
   height,
   checkedNodes,
   expendAll,
+  metadataGridLayout,
+  customizedGridLayout,
+  previousEditedIdRef,
   handleSelectChildren,
   getCheckedNodes,
   getCurrentSelectedURI,
   handleAccordionChange,
 }: TreeLibraryProps) => {
-  const { active } = useIbexStore();
   const tree = useTree();
   const [selectedNode, setSelectedNode] = useState<string>(null);
   const [shouldDisableTree, setShouldDisableTree] = useState<boolean>(false);
@@ -393,27 +401,31 @@ export const TreeLibrary = ({
     }
   }, [expendAll]);
 
-  const isEditingPlot = useMemo(
-    () => active?.dataPlot?.map((p) => p.isEditing).join(','),
-    [active],
-  );
-
   useEffect(() => {
-    if (!active?.dataPlot) return;
+    if (!editedDataPlot) {
+      previousEditedIdRef.current = null;
+      return;
+    }
 
-    const run = async () => {
-      const dataPlot = active.dataPlot.find((p) => p.isEditing);
-      if (!dataPlot || dataPlot.plot.length === 0) return;
+    const openSelectedNodes = async () => {
+      if (!editedDataPlot || editedDataPlot.plot.length === 0) return;
 
       let selectedURI: string | undefined = undefined;
 
-      for (const plot of dataPlot.plot) {
+      let mainPlotUri: string;
+      for (const [index, plot] of editedDataPlot.plot.entries()) {
         const plotUriSplit = plot.nodeUri.split('#');
         const plotUri = plotUriSplit[0];
         const nodeList = plotUriSplit[1]
           .replace(/\[\d+\]/g, '[:]')
           .split(/(?<=\/)/);
         nodeList.pop();
+
+        if (index === 0) {
+          mainPlotUri = plotUri;
+        } else if (plotUri !== mainPlotUri) {
+          continue;
+        }
 
         if (!plotUri || plotUri === '') {
           continue;
@@ -423,7 +435,7 @@ export const TreeLibrary = ({
           continue;
         }
 
-        if (!selectedURI || selectedURI === plotUri) {
+        if (!selectedURI || selectedURI === getCurrentSelectedURI()) {
           selectedURI = plotUri;
 
           if (selectedURI !== getCurrentSelectedURI()) {
@@ -456,15 +468,18 @@ export const TreeLibrary = ({
       }
     };
 
-    run();
-  }, [isEditingPlot]);
+    if (
+      previousEditedIdRef.current === null &&
+      editedDataPlot?.i !== previousEditedIdRef.current
+    ) {
+      openSelectedNodes();
+      previousEditedIdRef.current = editedDataPlot.i;
+    }
+  }, [editedDataPlot?.i]);
 
   useEffect(() => {
-    handleDisableTree(
-      active?.metadataGridLayout,
-      active?.customizedGridLayout?.id,
-    );
-  }, [active?.metadataGridLayout, active?.customizedGridLayout?.id]);
+    handleDisableTree(metadataGridLayout, customizedGridLayout);
+  }, [metadataGridLayout, customizedGridLayout]);
 
   return (
     <ScrollArea h={height}>
