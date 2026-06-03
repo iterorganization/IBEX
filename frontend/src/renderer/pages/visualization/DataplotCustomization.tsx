@@ -405,6 +405,15 @@ const Customization = ({
       tooltip: "This grid can't display heatmap",
     },
     {
+      value: 'Axis range',
+      component: (
+        <CustomizeDataRange
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
       value: 'Dataplots synchronization',
       component: (
         <CustomizeSynchronization
@@ -427,15 +436,6 @@ const Customization = ({
   ];
 
   const dataAccordions: accordionItemsType[] = [
-    {
-      value: 'Axis range',
-      component: (
-        <CustomizeDataRange
-          customizedDataGrid={customizedDataGrid}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-        />
-      ),
-    },
     {
       value: 'Downsampling',
       component: (
