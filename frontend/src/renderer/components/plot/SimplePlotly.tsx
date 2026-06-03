@@ -47,8 +47,11 @@ export const SimplePlotly = ({
   const coordsUsedInAxes: 1 | 2 = 1;
   const { active, updatedConfiguration } = useIbexStore();
   const SELECT_AXIS_HEIGHT = 40; // Height of the select axis component
+  const [shouldForceRatio, setShouldForceRatio] = useState<boolean>(false);
   const [layoutPlot, setLayoutPlot] = useState<Partial<Layout>>({
     xaxis: {
+      scaleanchor: null,
+      scaleratio: null,
       title: {
         font: {
           family: 'Courier New, monospace',
@@ -116,6 +119,31 @@ export const SimplePlotly = ({
     ? width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1)
     : width;
   const customContainerRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Rule to determine if we have to force ratio
+   */
+  useEffect(() => {
+    const coordinateUnit = itemDataGrid.coordinates.find(
+      (c) => c.axeIndex === 0,
+    )?.unit;
+    const allPlotsHaveSameUnit = itemDataGrid.plot.every(
+      (plot) => plot.unit === itemDataGrid.plot[0]?.unit,
+    );
+    setShouldForceRatio(
+      allPlotsHaveSameUnit && coordinateUnit === itemDataGrid.plot[0]?.unit,
+    );
+  }, [itemDataGrid.coordinates]);
+
+  /**
+   * Update layout to force ratio are not
+   */
+  useEffect(() => {
+    const updatedLayoutPlot = structuredClone(layoutPlot);
+    updatedLayoutPlot.xaxis.scaleanchor = shouldForceRatio ? 'y' : null;
+    updatedLayoutPlot.xaxis.scaleratio = shouldForceRatio ? 1 : null;
+    setLayoutPlot(updatedLayoutPlot);
+  }, [shouldForceRatio]);
 
   useEffect(() => {
     // Check data entries to update axes titles when needed

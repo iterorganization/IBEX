@@ -58,6 +58,7 @@ export const Heatmap2D = ({
   const [y, setY] = useState<number[]>([]);
   const [z, setZ] = useState<(number | string)[][]>([]);
   const plotRef = useRef<Plot | null>(null);
+  const [shouldForceRatio, setShouldForceRatio] = useState<boolean>(false);
   const [layoutPlot, setLayoutPlot] = useState<Partial<Layout>>({
     autosize: true,
     scene: {
@@ -69,6 +70,8 @@ export const Heatmap2D = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      scaleanchor: null,
+      scaleratio: null,
     },
     yaxis: {
       exponentformat: 'power',
@@ -86,6 +89,29 @@ export const Heatmap2D = ({
   });
   const [title, setTitle] = useState(itemDataGrid.title);
   const layoutPlotWidth = showSliders ? width * 0.8 : width;
+
+  /**
+   * Rule to determine if we have to force ratio
+   */
+  useEffect(() => {
+    const firstCoordinateUnit = itemDataGrid.coordinates.find(
+      (c) => c.axeIndex === 0,
+    )?.unit;
+    const secondCoordinateUnit = itemDataGrid.coordinates.find(
+      (c) => c.axeIndex === 1,
+    )?.unit;
+    setShouldForceRatio(firstCoordinateUnit === secondCoordinateUnit);
+  }, [itemDataGrid.coordinates]);
+
+  /**
+   * Update layout to force ratio are not
+   */
+  useEffect(() => {
+    const updatedLayoutPlot = structuredClone(layoutPlot);
+    updatedLayoutPlot.xaxis.scaleanchor = shouldForceRatio ? 'y' : null;
+    updatedLayoutPlot.xaxis.scaleratio = shouldForceRatio ? 1 : null;
+    setLayoutPlot(updatedLayoutPlot);
+  }, [shouldForceRatio]);
 
   /**
    * Update the editable title when layout title change
