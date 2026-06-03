@@ -69,11 +69,13 @@ export const Heatmap2D = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      zeroline: false,
     },
     yaxis: {
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      zeroline: false,
     },
     modebar: {
       orientation: 'v',
