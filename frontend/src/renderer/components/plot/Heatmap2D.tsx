@@ -430,7 +430,7 @@ export const Heatmap2D = ({
                     ? 'heatmap'
                     : itemDataGrid.selectedPlotMode === 'Geometry'
                       ? 'contour'
-                      : plotRef.current.props.data[0].type,
+                      : 'heatmap',
                 contours: {
                   coloring: 'lines',
                 },
