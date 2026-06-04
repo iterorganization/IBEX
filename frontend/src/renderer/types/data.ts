@@ -43,13 +43,11 @@ export type DownsamplingMethodsResponse = {
 };
 
 export type DataManipulationListResponse = {
-  data_manipulation_methods: [
-    {
-      name: string;
-      description: string;
-      method_parameters: DataManipulationParameterResponse[];
-    },
-  ];
+  data_manipulation_methods: Array<{
+    name: string;
+    description: string;
+    method_parameters: DataManipulationParameterResponse[];
+  }>;
 };
 
 type DataManipulationParameterResponse = {

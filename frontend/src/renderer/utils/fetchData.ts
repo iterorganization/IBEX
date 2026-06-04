@@ -167,6 +167,42 @@ export const fetchFindPaths = async (
 };
 
 /**
+ * Retrieves downsampling methods.
+ */
+export const fetchDownsamplingMethods = async () => {
+  return fetchFromApi<DownsamplingMethodsResponse>(
+    `/info/downsampling_methods`,
+  );
+};
+
+/**
+ * Retrieves data manipulation methods.
+ */
+export const fetchDataManipulationMethods = async () => {
+  return fetchFromApi<DataManipulationListResponse>(
+    `/info/data_manipulation_methods`,
+  );
+};
+
+export const getInterpolationMethods = async (): Promise<
+  OptionWithTooltip[]
+> => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const interpolation = methodsRes.data_manipulation_methods.find(
+    (m) => m.name === 'Data interpolation',
+  );
+  const param = interpolation?.method_parameters.find(
+    (p) => p.name === 'interpolation_method',
+  );
+  return (
+    param?.possible_values?.map((item) => ({
+      value: item.value,
+      tooltip: item.description,
+    })) ?? []
+  );
+};
+
+/**
  * Retrieves plot data for a given URI.
  */
 export const fetchDataPlot = async (
@@ -179,7 +215,7 @@ export const fetchDataPlot = async (
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
-  let firstDownsampledMethods: string;
+  let firstDownsampledMethod: string;
 
   // Provide interpolate_over param if needed
   let encodedInterpolateOver: string = '';
@@ -188,11 +224,18 @@ export const fetchDataPlot = async (
       encodedInterpolateOver += `&interpolate_over=${encodeURIComponent(uriToInterpolate)}`;
     }
     if (!interpolationMethod) {
-      // Use first interplation method by default to fetch data
-      const interpolationMethods = (await getInterpolationMethods()).map(
-        (m) => m.value,
-      );
-      interpolationMethod = interpolationMethods[0];
+      // Use first interpolation method by default to fetch data
+      const interpolationMethods = await getInterpolationMethods();
+      interpolationMethod = interpolationMethods[0]?.value;
+      if (!interpolationMethod) {
+        showNotification({
+          title: 'No interpolation methods',
+          message:
+            'No interpolation methods returned by /info/data_manipulation_methods',
+          color: 'red',
+        });
+        return;
+      }
     }
     encodedInterpolateOver += `&interpolation_method=${encodeURIComponent(interpolationMethod)}`;
   }
@@ -214,12 +257,24 @@ export const fetchDataPlot = async (
         // "SyntaxError" can be triggered when too heavy (eof error)
         // Use first downsampling method by default to fetch data
         const downsampledMethods = await fetchDownsamplingMethods();
-        firstDownsampledMethods =
+        if (
+          !downsampledMethods.downsampling_methods.length ||
+          downsampledMethods.downsampling_methods.length < 2
+        ) {
+          showNotification({
+            title: 'No downsampling methods',
+            message:
+              'No downsampling methods returned by /info/downsampling_methods',
+            color: 'red',
+          });
+          return;
+        }
+        firstDownsampledMethod =
           downsampledMethods?.downsampling_methods.find(
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethods)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
         );
       }
     }
@@ -243,7 +298,7 @@ export const fetchDataPlot = async (
 
   // Return used methods
   response.data.downsampled_method =
-    firstDownsampledMethods || downsamplingMethod;
+    firstDownsampledMethod || downsamplingMethod;
   response.data.interpolated_method = interpolationMethod;
 
   if (response.data.shape === 'irregular') {
@@ -276,36 +331,6 @@ export const fetchDataPlot = async (
 
   response.data.value = replaceNullsWithNaN(response.data.value);
   return response;
-};
-
-/**
- * Retrieves downsampling methods.
- */
-export const fetchDownsamplingMethods = async () => {
-  return fetchFromApi<DownsamplingMethodsResponse>(
-    `/info/downsampling_methods`,
-  );
-};
-
-/**
- * Retrieves downsampling methods.
- */
-export const fetchDataManipulationMethods = async () => {
-  return fetchFromApi<DataManipulationListResponse>(
-    `/info/data_manipulation_methods`,
-  );
-};
-
-export const getInterpolationMethods = async () => {
-  const methodsRes = await fetchDataManipulationMethods();
-  const options: OptionWithTooltip[] = methodsRes.data_manipulation_methods
-    .find((data_manip) => data_manip.name === 'Data interpolation')
-    .method_parameters.find((param) => param.name === 'interpolation_method')
-    .possible_values.map((item) => ({
-      value: item.value,
-      tooltip: item.description,
-    }));
-  return options;
 };
 
 /**

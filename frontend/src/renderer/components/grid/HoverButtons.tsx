@@ -275,11 +275,11 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
-                // Show customization button only if plottable
+                // Show data manipulation button only if plottable
                 <Tooltip label="Data manipulation">
                   <ActionIcon
                     variant="filled"
-                    aria-label="Metadatas"
+                    aria-label="Data manipulation"
                     data-testid="data-customization-access-button"
                     onClick={() => handleCustomization(data.i, 'data')}
                     className={classes.actionButton}
@@ -293,11 +293,11 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
-                // Show customization button only if plottable
+                // Show visual customization button only if plottable
                 <Tooltip label="Visual customization">
                   <ActionIcon
                     variant="filled"
-                    aria-label="Metadatas"
+                    aria-label="Visual customization"
                     data-testid="visual-customization-access-button"
                     onClick={() => handleCustomization(data.i, 'visual')}
                     className={classes.actionButton}
