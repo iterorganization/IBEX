@@ -92,7 +92,7 @@ export interface BaseDataGridPlot {
   synchronizedGrids: synchronizedList;
   downsampled_method?: string;
   downsampled_size?: number;
-  interpolated_method: string;
+  interpolated_method?: string;
   xAxisData?: Axis;
   yAxisData?: Axis;
   y2AxisData?: Axis;
@@ -103,8 +103,6 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   isEditing: boolean;
   dataType?: NodeInfoTypeEnum;
   coordinates?: Coordinates[];
-  downsampled_method?: string;
-  downsampled_size?: number;
   selectedPlotMode?: 'Heatmap' | '1D';
 }
 
