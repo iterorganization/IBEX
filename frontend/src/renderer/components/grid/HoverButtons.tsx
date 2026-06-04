@@ -280,7 +280,7 @@ export const HoverButtons = React.memo(
                   <ActionIcon
                     variant="filled"
                     aria-label="Metadatas"
-                    data-testid="customization-access-button"
+                    data-testid="data-customization-access-button"
                     onClick={() => handleCustomization(data.i, 'data')}
                     className={classes.actionButton}
                   >
@@ -298,7 +298,7 @@ export const HoverButtons = React.memo(
                   <ActionIcon
                     variant="filled"
                     aria-label="Metadatas"
-                    data-testid="customization-access-button"
+                    data-testid="visual-customization-access-button"
                     onClick={() => handleCustomization(data.i, 'visual')}
                     className={classes.actionButton}
                   >
