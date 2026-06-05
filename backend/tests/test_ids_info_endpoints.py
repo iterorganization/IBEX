@@ -53,6 +53,9 @@ def test_find_paths(entry_path):
         "#core_profiles/ids_properties/version_put/data_dictionary",
         "#core_profiles/ids_properties/version_put/access_layer",
         "#core_profiles/ids_properties/version_put/access_layer_language",
+        "#wall/ids_properties/version_put/data_dictionary",
+        "#wall/ids_properties/version_put/access_layer",
+        "#wall/ids_properties/version_put/access_layer_language",
     ]
 
 

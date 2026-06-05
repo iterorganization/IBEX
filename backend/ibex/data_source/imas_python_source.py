@@ -597,6 +597,22 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
+    def _leaf_node_coordinates_contain_time(self, leaf_node_path: str, coordinates_to_be_returned: list[dict]) -> bool:
+        """
+        Returns True when the leaf-node coordinates contain a time coordinate.
+
+        :param loaf_node_path: path to tested_node
+        :param coordinates_to_be_returned: list of dicts of coordinates from get_plot_data() method
+        :return: True or False
+        """
+        if not coordinates_to_be_returned:
+            return False
+        for coordinate in coordinates_to_be_returned:
+            if coordinate["name"] == "time" and coordinate["target"] == leaf_node_path:
+                return True
+
+        return False
+
     def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
@@ -630,8 +646,8 @@ class IMASPythonSource(DataSourceInterface):
             for _node_path, _coordinate_path_list in coordinates_dict.items():
                 _new_coordinate_path_list = []
                 for _coordinate_path in _coordinate_path_list:
-                    if _coordinate_path == "1...N":
-                        _new_coordinate_path_list.append("1...N")
+                    if _coordinate_path.startswith("1..."):  # 1...N, 1...2, 1...3 etc.
+                        _new_coordinate_path_list.append(_coordinate_path)
                         continue
 
                     _new_coordinate_path = ""
@@ -664,10 +680,8 @@ class IMASPythonSource(DataSourceInterface):
                 shapes_dimension = not bool(re.search(r"\[\d+\]$", str(target)))
 
                 for coord in coord_list:
-                    if coord == "1...N":
-                        # 1...N coords are targeting AoS
+                    if coord.startswith("1..."):
                         # remove last array operator ([<number or colon>]) from path and save it as target_str
-
                         splitted_target = str(target).split("/")
                         splitted_target[-1] = re.sub(r"[\[\(](.*?)[\]\)]", "", splitted_target[-1])
                         target_str = "/".join([x for x in splitted_target])
@@ -678,7 +692,7 @@ class IMASPythonSource(DataSourceInterface):
                         coord_target_objects = self._get_raw_data(ids_obj, path_elements)
                         self._check_data_is_leaf_node(coord_target_objects)
 
-                        # collect labels for 1...N coordinates
+                        # collect labels for 1... coordinates
                         labels = []
                         try:
                             for element in coord_target_objects:
@@ -717,7 +731,7 @@ class IMASPythonSource(DataSourceInterface):
                         # (otherwise coordinate name would be the same as target node name)
                         coordinate_name = splitted_target[-1]
                         if f"{target}" == f"{node_path}":
-                            coordinate_name = "1...N"
+                            coordinate_name = coord
 
                         try:
                             coord_data_shape = np.asarray(coord_values).shape
@@ -779,23 +793,17 @@ class IMASPythonSource(DataSourceInterface):
             first_value = find_first_value_in_list(ids_data)
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
-            if first_value.metadata.ndim == 2:
-                # Transform 2D arrays.
-                # By default first dimension of 2D has coordinate that is second on the list
-                # FE expects data's first dimension to be connected with second dimension, thus this transformation
-                data_to_be_returned = transform_2D_data(data_to_be_returned)
-
             # ============= BEGIN data smoothing ============
-
             if plot_data_query.smoothing_method is not None:
-                if first_value.metadata.ndim != 1:
-                    raise InvalidParametersException("Data smoothing is only supported for 1D data")
-                if not coordinates_to_be_returned or coordinates_to_be_returned[0]["name"] != "time":
+                if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
                     raise InvalidParametersException(
-                        "Data smoothing is only supported when the first coordinate is time"
+                        "Data smoothing is only supported when leaf-node coordinates contain time"
                     )
 
                 if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+                    if first_value.metadata.ndim != 1:
+                        message = f"Savitzky-Golay filter supports only 1D smoothing. Selected data node is {first_value.metadata.ndim}D."
+                        raise InvalidParametersException(message)
                     data_to_be_returned = apply_savgol_filter(
                         data_to_be_returned,
                         window_length=plot_data_query.savgol_smoothing_window_length,
@@ -807,8 +815,15 @@ class IMASPythonSource(DataSourceInterface):
                     )
 
                 elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
+                    time_coordinate_axis = None
+                    if first_value.metadata.ndim == 2:
+                        time_coordinate_axis = next(
+                            (i for i, d in enumerate(coordinates_to_be_returned) if d.get("name") == "time"), None
+                        )
                     data_to_be_returned = apply_gaussian_filter(
-                        data_to_be_returned, sigma=plot_data_query.gaussian_smoothing_sigma
+                        data_to_be_returned,
+                        sigma=plot_data_query.gaussian_smoothing_sigma,
+                        axis=time_coordinate_axis,
                     )
 
             # ============= END data smoothing =============
@@ -893,6 +908,13 @@ class IMASPythonSource(DataSourceInterface):
                     c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
+
+            if first_value.metadata.ndim == 2:
+                # Transform 2D arrays.
+                # By default first dimension of 2D has coordinate that is second on the list
+                # FE expects data's first dimension to be connected with second dimension, thus this transformation
+
+                data_to_be_returned = transform_2D_data(data_to_be_returned)
 
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape

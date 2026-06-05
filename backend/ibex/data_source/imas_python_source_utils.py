@@ -3,7 +3,7 @@ from functools import reduce
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, gaussian_filter1d
 from scipy.signal import savgol_filter
 from ibex.data_source.exception import InvalidParametersException
 
@@ -49,7 +49,7 @@ def apply_savgol_filter(
         raise InvalidParametersException(msg)
 
 
-def apply_gaussian_filter(data: list | np.ndarray, sigma):
+def apply_gaussian_filter(data: list | np.ndarray, sigma, axis: int | None = None):
     """
     Apply Gaussian filer to data
     :param data: The input array.
@@ -59,7 +59,10 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
     if isinstance(data, list):
         return [apply_gaussian_filter(x, sigma) for x in data]
     elif isinstance(data, (np.ndarray, IDSNumericArray)):
-        return gaussian_filter(data, sigma=sigma)
+        if axis is None:
+            return gaussian_filter1d(data, sigma=sigma)
+        else:
+            return gaussian_filter1d(data, sigma=sigma, axis=axis)
     else:
         msg = "Smoothing can be executed only on numeric arrays, not single values or strings."
         raise InvalidParametersException(msg)

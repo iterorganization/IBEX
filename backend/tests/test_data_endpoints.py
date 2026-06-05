@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 
 def test_status_codes(entry_path):
@@ -81,6 +82,21 @@ def test_plot_data_with_gaussian_smoothing(entry_path):
     response_body = response.json()
     assert response_body["data"]["value"] == pytest.approx([1.42, 2.06, 3.0, 3.93, 4.57], 0.1)
 
+
+def test_plot_data_with_gaussian_smoothing_2d(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#wall/global_quantities/electrons/particle_flux_from_wall",
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+
+    assert np.array(response_body["data"]["value"]) == pytest.approx(
+        np.array([[1.6, 1.0, 1.0], [2.2, 1.0, 1.0], [2.7, 1.0, 1.0], [3.1, 1.0, 1.0], [3.2, 1.0, 1.0]]), 0.1
+    )
 
 def test_plot_data_with_savgol_smoothing(entry_path):
     parameters = {
