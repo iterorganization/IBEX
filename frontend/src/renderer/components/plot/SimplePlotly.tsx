@@ -198,9 +198,7 @@ export const SimplePlotly = ({
     }
 
     // Update title only if is editing
-    const updatedDataPlot: DataGridPlot[] = JSON.parse(
-      JSON.stringify(active.dataPlot),
-    );
+    const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
     for (const dataPlot of updatedDataPlot) {
       if (dataPlot.i === itemDataGrid.i) {
         dataPlot.title = title;
@@ -240,9 +238,13 @@ export const SimplePlotly = ({
    * Update the layout yAxis
    */
   useEffect(() => {
-    const coordsYNames = itemDataGrid.plot
-      .filter((plot) => plot.yaxis !== 'y2')
-      ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri));
+    const coordsYNames = [
+      ...new Set(
+        itemDataGrid.plot
+          .filter((plot) => plot.yaxis !== 'y2')
+          ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri)),
+      ),
+    ];
     const YTitle = itemDataGrid.yAxisData?.name
       ? `${coordsYNames.length > 1 ? coordsYNames[0] + ', ...' : coordsYNames[0]} ${(itemDataGrid.yAxisData?.unit && '[' + itemDataGrid.yAxisData.unit + ']') || ''}`
       : '';
@@ -281,9 +283,13 @@ export const SimplePlotly = ({
    * Update the layout y2Axis
    */
   useEffect(() => {
-    const coordsY2Names = itemDataGrid.plot
-      .filter((plot) => plot.yaxis === 'y2')
-      ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri));
+    const coordsY2Names = [
+      ...new Set(
+        itemDataGrid.plot
+          .filter((plot) => plot.yaxis === 'y2')
+          ?.map((coord) => removeSuffix(coord.name, '_' + coord.labelUri)),
+      ),
+    ];
     const Y2Title = itemDataGrid.y2AxisData?.name
       ? `${coordsY2Names.length > 1 ? coordsY2Names[0] + ', ...' : coordsY2Names[0]} ${(itemDataGrid.y2AxisData?.unit && '[' + itemDataGrid.y2AxisData.unit + ']') || ''}`
       : '';
@@ -389,7 +395,7 @@ export const SimplePlotly = ({
               align="flex-end"
               pos="relative"
             >
-              {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
+              {structuredClone(itemDataGrid.coordinates)
                 .sort(compareByAxeIndex)
                 .map(
                   (item: Coordinates, valueIndex: number) =>
@@ -440,7 +446,7 @@ export const SimplePlotly = ({
           </Grid.Col>
         )}
 
-      {itemDataGrid.plot.every((plot) =>
+      {itemDataGrid.plot.some((plot) =>
         [plot.x, plot.y].every(isMatrixPlottable),
       ) ? (
         <Grid.Col

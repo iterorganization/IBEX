@@ -69,11 +69,13 @@ export const Heatmap2D = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      zeroline: false,
     },
     yaxis: {
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      zeroline: false,
     },
     modebar: {
       orientation: 'v',
@@ -358,7 +360,7 @@ export const Heatmap2D = ({
                 align="flex-end"
                 pos="relative"
               >
-                {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
+                {structuredClone(itemDataGrid.coordinates)
                   .sort(compareByAxeIndex)
                   .map(
                     (item: Coordinates, valueIndex: number) =>

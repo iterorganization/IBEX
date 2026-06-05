@@ -9,6 +9,8 @@ import {
 } from '@mantine/core';
 import { CustomTreeData, URITreeNodeData } from 'src/renderer/types';
 import { TreeLibrary } from '../../components';
+import { useIbexStore } from '../../stores';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface VisualizationTreeProps {
   customDataTree: CustomTreeData[];
@@ -62,6 +64,46 @@ export const TreeLibrariesAccordion = ({
   getNodesChecked,
   getCurrentSelectedURI,
 }: VisualizationTreeProps) => {
+  const { active } = useIbexStore();
+  const [editedDataPlot, setEditedDataPlot] = useState(
+    active?.dataPlot?.find((p) => p.isEditing),
+  );
+  const metadataGridLayout = useIbexStore(
+    (state) => state.active?.metadataGridLayout,
+  );
+  const customizedGridLayout = useIbexStore(
+    (state) => state.active?.customizedGridLayout,
+  );
+  const stableMetadataGridLayout = useMemo(
+    () => metadataGridLayout,
+    [JSON.stringify(metadataGridLayout)],
+  );
+  const stableCustomizedGridLayout = useMemo(
+    () => customizedGridLayout,
+    [JSON.stringify(customizedGridLayout)],
+  );
+  const previousEditedIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setEditedDataPlot(active?.dataPlot?.find((p) => p.isEditing));
+  }, [active.dataPlot]);
+
+  useEffect(() => {
+    const openAccordionToAccessNodes = async () => {
+      if (editedDataPlot?.plot.length) {
+        const plotUriSplit = editedDataPlot.plot[0].nodeUri.split('#');
+        const firstUri = plotUriSplit[0];
+        if (!value) {
+          await handleAccordionChange(firstUri);
+        }
+      } else {
+        previousEditedIdRef.current = null;
+      }
+    };
+
+    openAccordionToAccessNodes();
+  }, [editedDataPlot]);
+
   const items = customDataTree.map((item) => {
     return (
       <Accordion.Item
@@ -79,7 +121,11 @@ export const TreeLibrariesAccordion = ({
         <Accordion.Panel>
           <TreeLibrary
             treeData={item.data}
+            editedDataPlot={editedDataPlot}
             checkedNodes={checkedNodes}
+            metadataGridLayout={stableMetadataGridLayout}
+            customizedGridLayout={stableCustomizedGridLayout?.id}
+            previousEditedIdRef={previousEditedIdRef}
             handleSelectChildren={handleSelectChildren}
             getCheckedNodes={getNodesChecked}
             expendAll={item.expendAll}
