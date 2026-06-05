@@ -3,7 +3,7 @@ from functools import reduce
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import gaussian_filter, gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from ibex.data_source.exception import InvalidParametersException
 
