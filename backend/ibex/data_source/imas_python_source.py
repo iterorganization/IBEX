@@ -622,7 +622,7 @@ class IMASPythonSource(DataSourceInterface):
         :return: Dictionary containing data values, metadata and coordinates.
         """
 
-        uri_obj = IMAS_URI(plot_data_query.uri)
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
         uri = uri_obj.uri_entry_identifiers
         ids = uri_obj.ids_name
         node_path = uri_obj.node_path
