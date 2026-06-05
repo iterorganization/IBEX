@@ -98,6 +98,7 @@ def test_plot_data_with_gaussian_smoothing_2d(entry_path):
         np.array([[1.6, 1.0, 1.0], [2.2, 1.0, 1.0], [2.7, 1.0, 1.0], [3.1, 1.0, 1.0], [3.2, 1.0, 1.0]]), 0.1
     )
 
+
 def test_plot_data_with_savgol_smoothing(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip",
