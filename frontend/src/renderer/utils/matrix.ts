@@ -43,8 +43,8 @@ export const getArrayValueFromDependance = (
   }
 
   // get sorted valueIndex list (sorted by shape length) to access to data matrix
-  const dependances = JSON.parse(
-    JSON.stringify(wantedCoordinate.coord_dependencies),
+  const dependances = structuredClone(
+    wantedCoordinate.coord_dependencies,
   ).reverse();
   const sortedIndexValueDependances: number[] = [];
   for (const dependance of dependances) {

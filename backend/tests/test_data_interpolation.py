@@ -111,3 +111,36 @@ def test_resample_without_interpolation_function():
         [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
     ]
     assert np.allclose(returned_data, expected_returned_data, equal_nan=True)
+
+
+def test_interpolation_codes(interpolation_entry_path_directory):
+
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+    uri_fragment = "#equilibrium/time_slice[:]/profiles_1d/psi"
+
+    # test interpolation ...psi_error_upper over ...psi
+    parameters = {
+        "uri": f"{db_names[0]}/{uri_fragment}_error_upper",
+        "interpolate_over": [f"{db_names[1]}/{uri_fragment}"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    # test interpolation ...psi over ...psi_error_upper (should return an error 466)
+    parameters = {
+        "uri": f"{db_names[0]}/{uri_fragment}",
+        "interpolate_over": [f"{db_names[1]}/{uri_fragment}_error_upper"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 466
+
+    # test interpolation ...psi_error_lower over ...psi_error_lower (second node is empty - should return an error 464)
+    parameters = {
+        "uri": f"{db_names[0]}/{uri_fragment}_error_lower",
+        "interpolate_over": [f"{db_names[1]}/{uri_fragment}_error_lower"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 464

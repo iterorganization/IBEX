@@ -12,6 +12,7 @@ import {
   updateIndexFieldName,
   getLastIndexedField,
   transposeDataGrid,
+  getUrisToInterpolate,
 } from '../../../utils';
 import {
   Button,
@@ -162,18 +163,23 @@ export const CustomizeDataRange = ({
 
     const restoreRange = async () => {
       try {
-        const updatedDataPlot = JSON.parse(
-          JSON.stringify(customizedDataGrid),
+        const updatedDataPlot = structuredClone(
+          customizedDataGrid,
         ) as DataGridPlot;
         // Step 1 => get full original data (coordinates + plots) && applyRange in coordinates having range (not main range since we'll delete it)
         let plotIndex = 0;
         for (const plot of updatedDataPlot.plot) {
           // Get original data for each plot
+          const urisToInterpolate = getUrisToInterpolate(
+            plot.nodeUri,
+            updatedDataPlot.plot,
+          );
           const dataRestored = await fetchDataPlot(
             normalizeIndices(plot.nodeUri),
             updatedDataPlot?.downsampled_method,
             updatedDataPlot?.downsampled_size,
             updatedDataPlot?.dataType,
+            urisToInterpolate,
           );
 
           if (plot?.error_bands?.length > 0) {

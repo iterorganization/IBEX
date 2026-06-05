@@ -25,9 +25,7 @@ export const Customize1DPlot = ({
   const [colorPlot, setColorPlot] = useState(selectedPlot?.line?.color || '');
 
   const updatePlotColor = (newColor: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     const updatedLine = selectedPlot?.line || {};
     updatedLine.color = newColor;
@@ -42,7 +40,7 @@ export const Customize1DPlot = ({
   };
 
   const resetPlotColors = () => {
-    const updatedPlots = JSON.parse(JSON.stringify(customizedDataGrid.plot));
+    const updatedPlots = structuredClone(customizedDataGrid.plot);
     for (const plot of updatedPlots) {
       if (plot?.line?.color) {
         delete plot.line.color;
@@ -54,9 +52,7 @@ export const Customize1DPlot = ({
   };
 
   const updatePlotMode = (newMode: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     updatedDataPlot.plot.find((plot) => plot.name === selectedPlot.name).mode =
       newMode;
@@ -68,9 +64,7 @@ export const Customize1DPlot = ({
   };
 
   const updatePlotShape = (newShape: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     const plotToUpdate = updatedDataPlot.plot.find(
       (plot) => plot.name === selectedPlot.name,

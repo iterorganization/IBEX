@@ -29,6 +29,7 @@ def node_info(uri: str, show_error_bars: bool = False) -> dict:
     |     "type": <type_of_data (str)>,
     |     "ndim": <number_of_data_dimensions (int)>,
     |     "shape": <data_shape (list(int))>,
+    |     "has_data": <True if node has data inside (bool)>
     |     "children": <node_info_of_children_nodes (list(dict))>,
     |     "coordinates": <coordinates_names (list(str))>
     | }
@@ -58,10 +59,10 @@ def find_field(uri: str, searched_node: str, show_error_bars: bool = False) -> d
     | Response JSON is constructed as follows:
     | {
     |   "paths": [
-    |   <path_1 (str)>,
-    |   <path_2 (str)>,
+    |   {"path" : <path_1 (str)>, "has_data" : <has_data (bool)>},
+    |   {"path" : <path_2 (str)>, "has_data" : <has_data (bool)>},
     |   ...
-    |   <path_N (str)>,
+    |   {"path" : <path_N (str)>, "has_data" : <has_data (bool)>},
     |   ]
     | }
 
