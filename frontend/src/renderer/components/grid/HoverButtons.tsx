@@ -12,12 +12,13 @@ import {
 import {
   IconBrandDatabricks,
   IconCheck,
+  IconDatabaseEdit,
   IconEdit,
-  IconPalette,
+  IconEyeEdit,
   IconTrash,
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
-import { Configuration, DataGridPlot } from '../../types';
+import { Configuration, CustomizedGridType, DataGridPlot } from '../../types';
 import {
   applyRange,
   containsFloat,
@@ -30,7 +31,7 @@ interface HoverButtonsProps {
   shouldDisplayMetadata: boolean;
   handleEditGrid: (id: string) => void;
   handleInspectMetadata: (id: string) => void;
-  handleCustomization: (id: string) => void;
+  handleCustomization: (id: string, typeOfEdition: CustomizedGridType) => void;
   handleDeleteGrid: (id: string) => void;
   is3DView: boolean;
   active3DTab: string;
@@ -274,16 +275,34 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
-                // Show customization button only if plottable
-                <Tooltip label="Customize the grid">
+                // Show data manipulation button only if plottable
+                <Tooltip label="Data manipulation">
                   <ActionIcon
                     variant="filled"
-                    aria-label="Metadatas"
-                    data-testid="customization-access-button"
-                    onClick={() => handleCustomization(data.i)}
+                    aria-label="Data manipulation"
+                    data-testid="data-customization-access-button"
+                    onClick={() => handleCustomization(data.i, 'data')}
                     className={classes.actionButton}
                   >
-                    <IconPalette
+                    <IconDatabaseEdit
+                      style={{ width: '70%', height: '70%' }}
+                      stroke={1.5}
+                    />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+
+              {data.coordinates.length && !shouldDisplayMetadata && (
+                // Show visual customization button only if plottable
+                <Tooltip label="Visual customization">
+                  <ActionIcon
+                    variant="filled"
+                    aria-label="Visual customization"
+                    data-testid="visual-customization-access-button"
+                    onClick={() => handleCustomization(data.i, 'visual')}
+                    className={classes.actionButton}
+                  >
+                    <IconEyeEdit
                       style={{ width: '70%', height: '70%' }}
                       stroke={1.5}
                     />

@@ -63,6 +63,7 @@ export const plotData = (
   labelUri: string,
   unit: string,
   downsampled_method: string,
+  interpolated_method: string,
   description?: string,
   y2Axis?: boolean,
 ): DataGridPlot => {
@@ -103,6 +104,7 @@ export const plotData = (
           ? `${trace.name}`
           : `${dataPlot.title} / ${trace.name}`,
     downsampled_method: downsampled_method,
+    interpolated_method: interpolated_method,
     plot: [...currentPlot, trace],
   };
 };
@@ -184,6 +186,7 @@ export const handleNewPlot = async (
     nodes[0].name,
     response.data.unit,
     response.data.downsampled_method,
+    response.data.interpolated_method,
     response.data.description,
   );
   updatedPlot.dataType = nodes[0].type;
@@ -236,6 +239,7 @@ const updateInterpolatedPlots = async (
       interpolatedDataPlot?.downsampled_size,
       nodeType,
       urisToInterpolate.filter((uri) => uri !== normalizeIndices(plot.nodeUri)),
+      interpolatedDataPlot?.interpolated_method,
     );
 
     if (plotsUpdated === 1 && isInDeleteCase) {
@@ -385,6 +389,7 @@ export const handleExistingPlot = async (
       findDataPlot?.downsampled_size,
       node.type,
       urisToInterpolate,
+      findDataPlot?.interpolated_method,
     );
 
     // Update the common coordinates from interpolation
@@ -576,6 +581,7 @@ export const handleExistingPlot = async (
         node.name,
         response.data.unit,
         response.data.downsampled_method,
+        response.data.interpolated_method,
         response.data.description,
       );
     } else if (!findDataPlot.y2AxisData) {
@@ -597,6 +603,7 @@ export const handleExistingPlot = async (
         node.name,
         response.data.unit,
         response.data.downsampled_method,
+        response.data.interpolated_method,
         response.data.description,
         true,
       );
@@ -794,6 +801,7 @@ export const fetchErrorBandsInConfig = async (
  * @param uri Uri to get the data
  * @param forcedDownsamplingMethod Forced downsample method (optional)
  * @param forcedDownsamplingSize Forced downsample size (optional)
+ * @param forcedInterpolationMethod Forced interpolation method (optional)
  * @returns
  */
 export const fetchErrorBands = async (
@@ -801,6 +809,7 @@ export const fetchErrorBands = async (
   uri: string,
   forcedDownsamplingMethod?: string,
   forcedDownsamplingSize?: number,
+  forcedInterpolationMethod?: string,
 ) => {
   if (!dataPlot.displayErrorBand) {
     // Stop error bands when the dataPlot switch is off
@@ -820,6 +829,8 @@ export const fetchErrorBands = async (
     const downsamplingSize: number =
       forcedDownsamplingSize || dataPlot?.downsampled_size;
     const urisToInterpolate = getUrisToInterpolate(plot.nodeUri, dataPlot.plot);
+    const interpolationMethod: string =
+      forcedInterpolationMethod || dataPlot?.interpolated_method;
 
     let upperResponse, lowerResponse: FieldValueResponse;
 
@@ -831,6 +842,7 @@ export const fetchErrorBands = async (
         downsamplingSize,
         dataPlot?.dataType,
         urisToInterpolate,
+        interpolationMethod,
       );
       upperResponse = {
         value: interpolatedUpper.data.value,
@@ -842,6 +854,7 @@ export const fetchErrorBands = async (
         downsamplingSize,
         dataPlot?.dataType,
         urisToInterpolate,
+        interpolationMethod,
       );
       lowerResponse = {
         value: interpolatedLower.data.value,
@@ -1254,6 +1267,7 @@ export async function plotNodeUriLoaded(
               dataGrid?.downsampled_size,
               dataGrid?.dataType,
               urisToInterpolate,
+              dataGrid?.interpolated_method,
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);
@@ -1320,6 +1334,10 @@ export async function plotNodeUriLoaded(
 
             if (response.data.downsampled_method) {
               dataGrid.downsampled_method = response.data.downsampled_method;
+            }
+
+            if (response.data.interpolated_method) {
+              dataGrid.interpolated_method = response.data.interpolated_method;
             }
 
             // Save plot unit

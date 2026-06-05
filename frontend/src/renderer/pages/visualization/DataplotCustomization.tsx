@@ -15,186 +15,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SimplePlotly, Heatmap2D, TabsListCustom } from '../../components';
 import {
   Configuration,
+  CustomizedGridType,
   DataGridPlot,
   DataPlotly,
   synchronizedList,
 } from '../../types';
-import { CustomizeDownsampling, CustomizeGlobal } from './customizableElements';
-import { CustomizeHeatmap } from './customizableElements/CustomizeHeatmap';
-import { Customize1DPlot } from './customizableElements/Customize1DPlot';
-import { CustomizeDataRange } from './customizableElements/CustomizeDataRange';
-import { CustomizeSynchronization } from './customizableElements/CustomizeSynchronization';
+import {
+  CustomizeDownsampling,
+  CustomizeGlobal,
+  CustomizeHeatmap,
+  Customize1DPlot,
+  CustomizeDataRange,
+  CustomizeSynchronization,
+  CustomizeInterpolation,
+} from './customizableElements';
 import { IconLink } from '@tabler/icons-react';
 import { initPlotColors } from '../../utils';
-interface CustomizationProps {
-  customizedDataGrid: DataGridPlot;
-  selectedAccordion: string | null;
-  selectedPlot: DataPlotly | null;
-  applyToAllHeatmap: boolean;
-  customContainerRef: React.MutableRefObject<HTMLDivElement>;
-  setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
-  setSelectedAccordion: React.Dispatch<React.SetStateAction<string | null>>;
-  setApplyToAllHeatmap: React.Dispatch<React.SetStateAction<boolean>>;
-}
-const Customization = ({
-  customizedDataGrid,
-  selectedAccordion,
-  selectedPlot,
-  applyToAllHeatmap,
-  customContainerRef,
-  setCustomizedDataGrid,
-  setSelectedAccordion,
-  setApplyToAllHeatmap,
-}: CustomizationProps) => {
-  type accordionItemsType = {
-    value: string;
-    component: JSX.Element;
-    icon?: JSX.Element;
-    disabled?: boolean;
-    tooltip?: string;
-  };
-  const accordionItems: accordionItemsType[] = [
-    {
-      value: 'Global',
-      component: (
-        <CustomizeGlobal
-          customizedDataGrid={customizedDataGrid}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-        />
-      ),
-    },
-    {
-      value: '1D plots',
-      component: (
-        <Customize1DPlot
-          customizedDataGrid={customizedDataGrid}
-          selectedPlot={selectedPlot}
-          customContainerRef={customContainerRef}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-        />
-      ),
-      icon: (
-        <ActionIcon variant="filled" component="span">
-          <Text fw="bold">1D</Text>
-        </ActionIcon>
-      ),
-    },
-    {
-      value: 'Heatmap',
-      component: (
-        <CustomizeHeatmap
-          customizedDataGrid={customizedDataGrid}
-          selectedPlot={selectedPlot}
-          applyToAllHeatmap={applyToAllHeatmap}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-          setApplyToAllHeatmap={setApplyToAllHeatmap}
-        />
-      ),
-      icon: (
-        <ActionIcon
-          variant="filled"
-          component="span"
-          disabled={customizedDataGrid.coordinates.length < 2}
-        >
-          <svg width="50" height="50" viewBox="0 0 50 50">
-            <rect x="0" y="0" width="15" height="15" fill="#440154" />
-            <rect x="17" y="0" width="15" height="15" fill="#31688e" />
-            <rect x="34" y="0" width="15" height="15" fill="#35b779" />
-
-            <rect x="0" y="17" width="15" height="15" fill="#fde725" />
-            <rect x="17" y="17" width="15" height="15" fill="#440154" />
-            <rect x="34" y="17" width="15" height="15" fill="#31688e" />
-
-            <rect x="0" y="34" width="15" height="15" fill="#35b779" />
-            <rect x="17" y="34" width="15" height="15" fill="#fde725" />
-            <rect x="34" y="34" width="15" height="15" fill="#440154" />
-          </svg>
-        </ActionIcon>
-      ),
-      disabled: customizedDataGrid.coordinates.length < 2,
-      tooltip: "This grid can't display heatmap",
-    },
-    {
-      value: 'Axis range',
-      component: (
-        <CustomizeDataRange
-          customizedDataGrid={customizedDataGrid}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-        />
-      ),
-    },
-    {
-      value: 'Downsampling',
-      component: (
-        <CustomizeDownsampling
-          customizedDataGrid={customizedDataGrid}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-        />
-      ),
-    },
-    {
-      value: 'Dataplots synchronization',
-      component: (
-        <CustomizeSynchronization
-          customizedDataGrid={customizedDataGrid}
-          setCustomizedDataGrid={setCustomizedDataGrid}
-        />
-      ),
-      icon:
-        customizedDataGrid.synchronizedGrids.color !== '' ? (
-          <IconLink
-            size={20}
-            color={customizedDataGrid.synchronizedGrids.color}
-          />
-        ) : (
-          <IconLink size={20} />
-        ),
-      disabled: customizedDataGrid.coordinates.length < 2,
-      tooltip: "This grid can't be synchronized",
-    },
-  ];
-
-  const items = accordionItems.map((item) => (
-    <Tooltip
-      key={item.value}
-      label={
-        item?.disabled
-          ? item?.tooltip || 'This feature will be available soon'
-          : ''
-      }
-      position="bottom-start"
-      opened={item?.disabled ? null : false}
-    >
-      <Accordion.Item value={item.value}>
-        <Accordion.Control
-          icon={item.icon}
-          disabled={item?.disabled || false}
-          data-testid={`customization-${item.value}-accordion`}
-        >
-          {item.value}
-        </Accordion.Control>
-        <Accordion.Panel>{item.component}</Accordion.Panel>
-      </Accordion.Item>
-    </Tooltip>
-  ));
-
-  return (
-    <Stack gap={0}>
-      <Title ta={'center'} order={3} pt={10}>
-        Customize plot parameters
-      </Title>
-      <ScrollArea h="79vh">
-        <Accordion
-          value={selectedAccordion}
-          onChange={setSelectedAccordion}
-          {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
-        >
-          {items}
-        </Accordion>
-      </ScrollArea>
-    </Stack>
-  );
-};
 
 export const DataplotCustomization = () => {
   const customContainerRef = useRef<HTMLDivElement>(null);
@@ -221,6 +57,7 @@ export const DataplotCustomization = () => {
         ...dataGridLayout,
         title: customizedDataGrid?.title,
         downsampled_method: customizedDataGrid?.downsampled_method,
+        interpolated_method: customizedDataGrid.interpolated_method,
         plot: customizedDataGrid?.plot,
       } as DataGridPlot;
       setDataGridLayout(updatedDataGridLayout);
@@ -237,7 +74,7 @@ export const DataplotCustomization = () => {
     if (active?.customizedGridLayout) {
       const data = structuredClone(
         active.dataPlot.find(
-          (item: DataGridPlot) => item.i === active.customizedGridLayout,
+          (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
         ),
       );
       if (data) {
@@ -293,11 +130,11 @@ export const DataplotCustomization = () => {
       saved: false,
     };
     const oldDataGrid = updatedActive.dataPlot.find(
-      (dp) => dp.i === active.customizedGridLayout,
+      (dp) => dp.i === active.customizedGridLayout.id,
     );
     const updatedDataPlot: DataGridPlot[] = [
       ...updatedActive.dataPlot.filter(
-        (dp) => dp.i !== active.customizedGridLayout,
+        (dp) => dp.i !== active.customizedGridLayout.id,
       ),
       customizedDataGrid,
     ];
@@ -456,6 +293,7 @@ export const DataplotCustomization = () => {
                       <Grid.Col span={6}>
                         <Customization
                           customizedDataGrid={customizedDataGrid}
+                          customizedType={active.customizedGridLayout.type}
                           selectedAccordion={selectedAccordion}
                           selectedPlot={selectedPlot}
                           applyToAllHeatmap={applyToAllHeatmap}
@@ -473,5 +311,193 @@ export const DataplotCustomization = () => {
           })}
       </Tabs>
     </Container>
+  );
+};
+
+interface CustomizationProps {
+  customizedDataGrid: DataGridPlot;
+  customizedType: CustomizedGridType;
+  selectedAccordion: string | null;
+  selectedPlot: DataPlotly | null;
+  applyToAllHeatmap: boolean;
+  customContainerRef: React.MutableRefObject<HTMLDivElement>;
+  setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
+  setSelectedAccordion: React.Dispatch<React.SetStateAction<string | null>>;
+  setApplyToAllHeatmap: React.Dispatch<React.SetStateAction<boolean>>;
+}
+const Customization = ({
+  customizedDataGrid,
+  customizedType,
+  selectedAccordion,
+  selectedPlot,
+  applyToAllHeatmap,
+  customContainerRef,
+  setCustomizedDataGrid,
+  setSelectedAccordion,
+  setApplyToAllHeatmap,
+}: CustomizationProps) => {
+  type accordionItemsType = {
+    value: string;
+    component: JSX.Element;
+    icon?: JSX.Element;
+    disabled?: boolean;
+    tooltip?: string;
+  };
+  const visualAccordions: accordionItemsType[] = [
+    {
+      value: 'Global',
+      component: (
+        <CustomizeGlobal
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: '1D plots',
+      component: (
+        <Customize1DPlot
+          customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
+          customContainerRef={customContainerRef}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+      icon: (
+        <ActionIcon variant="filled" component="span">
+          <Text fw="bold">1D</Text>
+        </ActionIcon>
+      ),
+    },
+    {
+      value: 'Heatmap',
+      component: (
+        <CustomizeHeatmap
+          customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
+          applyToAllHeatmap={applyToAllHeatmap}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+          setApplyToAllHeatmap={setApplyToAllHeatmap}
+        />
+      ),
+      icon: (
+        <ActionIcon
+          variant="filled"
+          component="span"
+          disabled={customizedDataGrid.coordinates.length < 2}
+        >
+          <svg width="50" height="50" viewBox="0 0 50 50">
+            <rect x="0" y="0" width="15" height="15" fill="#440154" />
+            <rect x="17" y="0" width="15" height="15" fill="#31688e" />
+            <rect x="34" y="0" width="15" height="15" fill="#35b779" />
+
+            <rect x="0" y="17" width="15" height="15" fill="#fde725" />
+            <rect x="17" y="17" width="15" height="15" fill="#440154" />
+            <rect x="34" y="17" width="15" height="15" fill="#31688e" />
+
+            <rect x="0" y="34" width="15" height="15" fill="#35b779" />
+            <rect x="17" y="34" width="15" height="15" fill="#fde725" />
+            <rect x="34" y="34" width="15" height="15" fill="#440154" />
+          </svg>
+        </ActionIcon>
+      ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't display heatmap",
+    },
+    {
+      value: 'Axis range',
+      component: (
+        <CustomizeDataRange
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Dataplots synchronization',
+      component: (
+        <CustomizeSynchronization
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+      icon:
+        customizedDataGrid.synchronizedGrids.color !== '' ? (
+          <IconLink
+            size={20}
+            color={customizedDataGrid.synchronizedGrids.color}
+          />
+        ) : (
+          <IconLink size={20} />
+        ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't be synchronized",
+    },
+  ];
+
+  const dataAccordions: accordionItemsType[] = [
+    {
+      value: 'Downsampling',
+      component: (
+        <CustomizeDownsampling
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Interpolation',
+      component: (
+        <CustomizeInterpolation
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+  ];
+
+  const items = (
+    customizedType === 'visual' ? visualAccordions : dataAccordions
+  ).map((item) => (
+    <Tooltip
+      key={item.value}
+      label={
+        item?.disabled
+          ? item?.tooltip || 'This feature will be available soon'
+          : ''
+      }
+      position="bottom-start"
+      opened={item?.disabled ? null : false}
+    >
+      <Accordion.Item value={item.value}>
+        <Accordion.Control
+          icon={item.icon}
+          disabled={item?.disabled || false}
+          data-testid={`customization-${item.value}-accordion`}
+        >
+          {item.value}
+        </Accordion.Control>
+        <Accordion.Panel>{item.component}</Accordion.Panel>
+      </Accordion.Item>
+    </Tooltip>
+  ));
+
+  return (
+    <Stack gap={0}>
+      <Title ta={'center'} order={3} pt={10}>
+        {customizedType === 'visual'
+          ? 'Visual customization'
+          : 'Data manipulation'}
+      </Title>
+      <ScrollArea h="79vh">
+        <Accordion
+          value={selectedAccordion}
+          onChange={setSelectedAccordion}
+          {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+        >
+          {items}
+        </Accordion>
+      </ScrollArea>
+    </Stack>
   );
 };
