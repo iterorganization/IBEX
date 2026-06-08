@@ -106,6 +106,7 @@ export const plotData = (
     downsampled_method: downsampled_method,
     interpolated_method: interpolated_method,
     plot: [...currentPlot, trace],
+    xyRatioRule: dataPlot?.xyRatioRule || 'Auto',
   };
 };
 
@@ -1381,6 +1382,7 @@ export async function plotNodeUriLoaded(
 
         const dataGridUpdated = {
           ...dataGrid,
+          xyRatioRule: dataGrid?.xyRatioRule || 'Auto',
           xAxisData: updatedXAxisData,
           plot: updatedPlot,
         } as DataGridPlot;

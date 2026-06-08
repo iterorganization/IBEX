@@ -73,12 +73,14 @@ export const Heatmap2D = ({
       scaleanchor: null,
       scaleratio: null,
       zeroline: false,
+      showgrid: itemDataGrid.displayGrid,
     },
     yaxis: {
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
       zeroline: false,
+      showgrid: itemDataGrid.displayGrid,
     },
     modebar: {
       orientation: 'v',
@@ -96,14 +98,25 @@ export const Heatmap2D = ({
    * Rule to determine if we have to force ratio
    */
   useEffect(() => {
-    const firstCoordinateUnit = itemDataGrid.coordinates.find(
-      (c) => c.axeIndex === 0,
-    )?.unit;
-    const secondCoordinateUnit = itemDataGrid.coordinates.find(
-      (c) => c.axeIndex === 1,
-    )?.unit;
-    setShouldForceRatio(firstCoordinateUnit === secondCoordinateUnit);
-  }, [itemDataGrid.coordinates]);
+    const getShouldForceRatio = () => {
+      let shoudForceRatioSwitchRule = false;
+      if (itemDataGrid.xyRatioRule === 'Force') {
+        shoudForceRatioSwitchRule = true;
+      } else if (itemDataGrid.xyRatioRule === 'Auto') {
+        const firstCoordinateUnit = itemDataGrid.coordinates.find(
+          (c) => c.axeIndex === 0,
+        )?.unit;
+        const secondCoordinateUnit = itemDataGrid.coordinates.find(
+          (c) => c.axeIndex === 1,
+        )?.unit;
+        shoudForceRatioSwitchRule =
+          firstCoordinateUnit === secondCoordinateUnit;
+      }
+      setShouldForceRatio(shoudForceRatioSwitchRule);
+    };
+
+    getShouldForceRatio();
+  }, [itemDataGrid.xyRatioRule, itemDataGrid.coordinates]);
 
   /**
    * Update layout to force ratio are not

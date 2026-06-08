@@ -137,6 +137,22 @@ export const CustomizeGlobal = ({
           })
         }
       />
+
+      <Select
+        label="Rule of axis ratios"
+        description="Select the rule of axis ratios"
+        placeholder="Select the rule of axis ratios"
+        data={['Auto', 'None', 'Force']}
+        value={customizedDataGrid?.xyRatioRule || 'Auto'}
+        onChange={(value: 'Auto' | 'None' | 'Force') =>
+          value &&
+          setCustomizedDataGrid({
+            ...customizedDataGrid,
+            xyRatioRule: value,
+          })
+        }
+        maw={200}
+      />
     </Stack>
   );
 };

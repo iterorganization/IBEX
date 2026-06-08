@@ -72,6 +72,7 @@ export const SimplePlotly = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      showgrid: itemDataGrid.displayGrid,
     },
     yaxis: {
       title: {
@@ -88,12 +89,14 @@ export const SimplePlotly = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      showgrid: itemDataGrid.displayGrid,
     },
     yaxis2: {
       type: (itemDataGrid?.y2AxisData?.type as AxisType) || 'linear',
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      showgrid: itemDataGrid.displayGrid,
     },
     modebar: {
       orientation: 'v',
@@ -124,16 +127,25 @@ export const SimplePlotly = ({
    * Rule to determine if we have to force ratio
    */
   useEffect(() => {
-    const coordinateUnit = itemDataGrid.coordinates.find(
-      (c) => c.axeIndex === 0,
-    )?.unit;
-    const allPlotsHaveSameUnit = itemDataGrid.plot.every(
-      (plot) => plot.unit === itemDataGrid.plot[0]?.unit,
-    );
-    setShouldForceRatio(
-      allPlotsHaveSameUnit && coordinateUnit === itemDataGrid.plot[0]?.unit,
-    );
-  }, [itemDataGrid.coordinates]);
+    const getShouldForceRatio = () => {
+      let shoudForceRatioSwitchRule = false;
+      if (itemDataGrid.xyRatioRule === 'Force') {
+        shoudForceRatioSwitchRule = true;
+      } else if (itemDataGrid.xyRatioRule === 'Auto') {
+        const coordinateUnit = itemDataGrid.coordinates.find(
+          (c) => c.axeIndex === 0,
+        )?.unit;
+        const allPlotsHaveSameUnit = itemDataGrid.plot.every(
+          (plot) => plot.unit === itemDataGrid.plot[0]?.unit,
+        );
+        shoudForceRatioSwitchRule =
+          allPlotsHaveSameUnit && coordinateUnit === itemDataGrid.plot[0]?.unit;
+      }
+      setShouldForceRatio(shoudForceRatioSwitchRule);
+    };
+
+    getShouldForceRatio();
+  }, [itemDataGrid.xyRatioRule, itemDataGrid.coordinates]);
 
   /**
    * Update layout to force ratio are not

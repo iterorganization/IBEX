@@ -89,6 +89,7 @@ export interface BaseDataGridPlot {
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
   displayGrid: boolean;
+  xyRatioRule: 'Auto' | 'None' | 'Force';
   synchronizedGrids: synchronizedList;
   downsampled_method?: string;
   downsampled_size?: number;
