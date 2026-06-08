@@ -32,6 +32,7 @@ interface Heatmap2DProps {
   height: number;
   plotIndex: string;
   showSliders: boolean;
+  forcedPlotType?: 'heatmap' | 'contour';
   handleUpdateCoordinate?: (
     coordinate: Coordinates,
     valueIndex: number,
@@ -44,6 +45,7 @@ export const Heatmap2D = ({
   height,
   plotIndex,
   showSliders,
+  forcedPlotType,
   handleUpdateCoordinate,
 }: Heatmap2DProps) => {
   const { active, updatedConfiguration } = useIbexStore();
@@ -324,7 +326,7 @@ export const Heatmap2D = ({
                             coord.axeIndex === (targetAxis === 'y' ? 1 : 0),
                         ).name
                       }
-                      data={(itemDataGrid.geometrie // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
+                      data={(itemDataGrid.geometrie.length // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
                         ? itemDataGrid.coordinates.filter(
                             (coord) =>
                               coord.axeIndex === 0 || coord.axeIndex === 1,
@@ -427,10 +429,11 @@ export const Heatmap2D = ({
             ref={plotRef}
             data={[
               {
-                type:
-                  itemDataGrid.selectedPlotMode === 'Heatmap'
+                type: forcedPlotType
+                  ? forcedPlotType
+                  : itemDataGrid.selectedPlotMode === 'Heatmap'
                     ? 'heatmap'
-                    : itemDataGrid.selectedPlotMode === 'Geometry'
+                    : itemDataGrid.selectedPlotMode === 'Contour'
                       ? 'contour'
                       : 'heatmap',
                 contours: {

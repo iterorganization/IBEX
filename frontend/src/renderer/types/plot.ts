@@ -139,4 +139,4 @@ export type synchronizedList = {
   list: string[];
 };
 
-export type PlotType = '1D' | 'Heatmap' | 'Geometry';
+export type PlotType = '1D' | 'Heatmap' | 'Contour';

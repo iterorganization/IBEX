@@ -815,8 +815,8 @@ const fetchGeometryOutline = async (
   shouldSwitchAxis: boolean,
 ) => {
   // TODO replace constrained paths by them provided by BE
-  const rPath = path + '/r';
-  const zPath = path + '/z';
+  const rPath = path + 'r';
+  const zPath = path + 'z';
 
   // Get r
   const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
@@ -872,10 +872,10 @@ const fetchGeometryRectangle = async (
   shouldSwitchAxis: boolean,
 ) => {
   // TODO replace constrained paths by them provided by BE
-  const rPath = path + '/r';
-  const zPath = path + '/z';
-  const widthPath = path + '/width';
-  const heightPath = path + '/height';
+  const rPath = path + 'r';
+  const zPath = path + 'z';
+  const widthPath = path + 'width';
+  const heightPath = path + 'height';
 
   // Get r
   const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
@@ -962,12 +962,12 @@ const fetchGeometryOblique = async (
   shouldSwitchAxis: boolean,
 ) => {
   // TODO replace constrained paths by them provided by BE
-  const rPath = path + '/r';
-  const zPath = path + '/z';
-  const lengthAlphaPath = path + '/length_alpha';
-  const lengthBetaPath = path + '/length_beta';
-  const alphaPath = path + '/alpha';
-  const betaPath = path + '/beta';
+  const rPath = path + 'r';
+  const zPath = path + 'z';
+  const lengthAlphaPath = path + 'length_alpha';
+  const lengthBetaPath = path + 'length_beta';
+  const alphaPath = path + 'alpha';
+  const betaPath = path + 'beta';
 
   // Get r
   const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
@@ -1086,54 +1086,48 @@ const fetchGeometryOblique = async (
 };
 
 export const fetchGeometries = async (
+  wantedGeometryPath: string,
   dataPlot: DataGridPlot,
   updatedCheckedNodeURI: URITreeNodeData[],
 ) => {
   try {
-    const uri = dataPlot.plot[0].nodeUri.split('#')[0]; // ? Need a rule in the case we have plots from different URIs (at the moment we get geometries from first URI plotted)
-
-    // TODO : get from BE all geometries to display
-    const paths: string[] = [
-      '#wall:0/description_2d[:]/limiter/unit[:]/outline',
-      '#pf_active/coil[:]/element[:]/geometry/rectangle',
-      '#pf_active/coil[:]/element[:]/geometry/oblique',
-    ];
+    const uri = wantedGeometryPath.split('#')[0];
+    const path = '#' + wantedGeometryPath.split('#')[1];
 
     const shouldSwitchAxis =
       dataPlot.coordinates.findIndex((coord) => coord.axeIndex === 0) === 1;
 
-    for (const path of paths) {
-      const pathSplitted = path.split('/');
-      const typeOfGeometry = pathSplitted[pathSplitted.length - 1];
-      if (typeOfGeometry === 'outline') {
-        // Get outline
-        const contourGeometry = await fetchGeometryOutline(
-          uri,
-          path,
-          shouldSwitchAxis,
-        );
-        dataPlot.geometrie.push(contourGeometry);
-      }
+    const pathSplitted = wantedGeometryPath.split('/');
+    const typeOfGeometry = pathSplitted[pathSplitted.length - 2];
 
-      if (typeOfGeometry === 'rectangle') {
-        // Get rectangle
-        const rectangleGeometry = await fetchGeometryRectangle(
-          uri,
-          path,
-          shouldSwitchAxis,
-        );
-        dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
-      }
+    if (typeOfGeometry === 'outline') {
+      // Get outline
+      const contourGeometry = await fetchGeometryOutline(
+        uri,
+        path,
+        shouldSwitchAxis,
+      );
+      dataPlot.geometrie.push(contourGeometry);
+    }
 
-      if (typeOfGeometry === 'oblique') {
-        // Get oblique
-        const obliqueGeometry = await fetchGeometryOblique(
-          uri,
-          path,
-          shouldSwitchAxis,
-        );
-        dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
-      }
+    if (typeOfGeometry === 'rectangle') {
+      // Get rectangle
+      const rectangleGeometry = await fetchGeometryRectangle(
+        uri,
+        path,
+        shouldSwitchAxis,
+      );
+      dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
+    }
+
+    if (typeOfGeometry === 'oblique') {
+      // Get oblique
+      const obliqueGeometry = await fetchGeometryOblique(
+        uri,
+        path,
+        shouldSwitchAxis,
+      );
+      dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
     }
 
     if (dataPlot?.geometrie) {

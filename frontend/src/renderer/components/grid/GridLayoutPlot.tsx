@@ -35,8 +35,7 @@ export const GridLayoutPlot = ({
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
   const [is3DView, setIs3DView] = useState<boolean>(
-    data?.selectedPlotMode === 'Heatmap' ||
-      data?.selectedPlotMode === 'Geometry'
+    data?.selectedPlotMode === 'Heatmap' || data?.selectedPlotMode === 'Contour'
       ? true
       : false,
   );
@@ -220,7 +219,7 @@ export const GridLayoutPlot = ({
   useEffect(() => {
     setIs3DView(
       data?.selectedPlotMode === 'Heatmap' ||
-        data?.selectedPlotMode === 'Geometry'
+        data?.selectedPlotMode === 'Contour'
         ? true
         : false,
     );

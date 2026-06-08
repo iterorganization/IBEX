@@ -15,19 +15,19 @@ import {
   IconCheck,
   IconDatabaseEdit,
   IconEdit,
-  IconGeometry,
   IconEyeEdit,
   IconTrash,
+  IconTarget,
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
-import { Configuration, CustomizedGridType, DataGridPlot, PlotType } from '../../types';
 import {
-  applyRange,
-  fetchErrorBandsInConfig,
-  fetchGeometries,
-} from '../../utils';
+  Configuration,
+  CustomizedGridType,
+  DataGridPlot,
+  PlotType,
+} from '../../types';
+import { applyRange, fetchErrorBandsInConfig } from '../../utils';
 import { useIbexStore } from '../../stores';
-import { showNotification } from '@mantine/notifications';
 
 interface HoverButtonsProps {
   data: DataGridPlot;
@@ -88,7 +88,7 @@ export const HoverButtons = React.memo(
     }[] = [
       { value: '1D' },
       { value: 'Heatmap', icon: heatmapLogo },
-      { value: 'Geometry', icon: <IconGeometry width={20} /> },
+      { value: 'Contour', icon: <IconTarget width={22} /> },
     ];
 
     const updateDisplayErrorBands = useCallback(
@@ -179,64 +179,18 @@ export const HoverButtons = React.memo(
     const updateTypeOfPlot = async (wantedType: PlotType) => {
       setPlotTypeMenuOpened(false);
       setForcePlotTypeMenuOpened(false);
+      setPlotMode(wantedType);
       const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
       const selectedDataPlot = updatedDataPlot.find(
         (dataPlot) => dataPlot.i === data.i,
       );
 
-      // Control the coordinates order to prevent from adding geometry when coordinates are incompatible with geometries
-      if (
-        wantedType === 'Geometry' &&
-        !(
-          selectedDataPlot.coordinates.length >= 2 &&
-          (selectedDataPlot.coordinates[0].axeIndex === 0 ||
-            selectedDataPlot.coordinates[0].axeIndex === 1) &&
-          (selectedDataPlot.coordinates[1].axeIndex === 0 ||
-            selectedDataPlot.coordinates[1].axeIndex === 1)
-        )
-      ) {
-        console.warn(
-          'Axis are not matching with geometries: the default axis should be restored to get geometries.',
-        );
-        showNotification({
-          title: 'Axis are not matching with geometries',
-          message: 'The default axis should be restored to get geometries.',
-          color: 'yellow',
-        });
-        return;
-      }
-
-      const checkedNodeURI = structuredClone(active.checkedNodeURI);
-
       // Update plot type
       selectedDataPlot.selectedPlotMode = wantedType;
-
-      // Handle geometries in contour type
-      if (wantedType === 'Geometry') {
-        // Get geometries
-        const fetchedGeometrie = await fetchGeometries(
-          selectedDataPlot,
-          checkedNodeURI,
-        );
-        if (!fetchedGeometrie) {
-          // Prevent from displaying contour plot when no geometry are available
-          showNotification({
-            title: 'No geometry available',
-            message: 'This dataset does not contain any geometry to display.',
-            color: 'yellow',
-          });
-          return;
-        }
-        selectedDataPlot.geometrie = fetchedGeometrie.geometrie;
-      } else {
-        selectedDataPlot.geometrie = [];
-      }
-      setPlotMode(wantedType);
 
       const updatedActive: Configuration = {
         ...active,
         dataPlot: updatedDataPlot,
-        checkedNodeURI: checkedNodeURI,
       };
       updatedConfiguration(updatedActive);
     };
@@ -322,9 +276,7 @@ export const HoverButtons = React.memo(
                     {modes.map((mode) => (
                       <Menu.Item
                         key={mode.value}
-                        onClick={async () => {
-                          await updateTypeOfPlot(mode.value);
-                        }}
+                        onClick={() => updateTypeOfPlot(mode.value)}
                         leftSection={mode.icon}
                         rightSection={
                           plotMode === mode.value ? (
