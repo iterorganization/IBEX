@@ -61,10 +61,19 @@ class ArraySummaryResponse(BaseModel):
 # ========== GEOMETRY OVERLAY NODES ==========
 
 
+class GeometryOverlayNodesSingleEntry(BaseModel):
+    """Response for /ids_info/geometry_overlay_nodes endpoint"""
+
+    geometry_node: str = Field(
+        description="Full uri pointing to a specific geometry node structure",
+        examples=["imas:hdf5?path=<entry_path>#equilibrium/time_slic[:]/profiles_2d[:]/psi"],
+    )
+    parameters: list[str] = Field(description="Name of child node of geometry_node", examples=["r", "z", "width"])
+
+
 class GeometryOverlayNodesResponse(BaseModel):
     """Response for /ids_info/geometry_overlay_nodes endpoint"""
 
-    outline_nodes: list[str] = Field(
-        description="List of filled geometry overlay node paths",
-        examples=[["description_2d/limiter/unit/outline", "description_2d/vessel/unit/element/outline"]],
+    outline_nodes: list[GeometryOverlayNodesSingleEntry] = Field(
+        description="List of dicts describing geometry overlay node paths",
     )

@@ -153,20 +153,20 @@ class DataSourceInterface(ABC):
     def get_geometry_overlay_nodes(
         self,
         uri: str,
-        ids: str,
-        occurrence: int = 0,
-        show_error_nodes: bool = False,
-        show_structures: bool = False,
+        show_empty_nodes: bool = False,
+        show_error_bars: bool = False,
     ) -> dict:
         """
-        Returns paths to filled geometry overlay nodes found in the entry metadata.
+        Returns paths to metadata nodes that describe geometry overlays.
+
+        A node is included when:
+        - its type is ``outline_2d_geometry_static``, or
+        - its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+        Error bar nodes are filtered out by default and can be included with ``show_error_bars=True``.
 
         :param uri: imas URI
-        :param ids: name of ids e.g. core_profiles
-        :param occurrence: ids occurrence number
         :param show_empty_nodes: whether empty nodes should be returned, or not
-        :param show_error_nodes: whether error nodes should be returned, or not
-        :param show_structures: whether structure nodes should be returned, or not
-        :return: dictionary {'outline_nodes': ['path/to/node1', 'path/to/node2', ...]}
+        :param show_error_bars: whether error bar nodes should be returned, or not
+        :return: dictionary {'outline_nodes': [{'geometry_node': '...', 'parameters': [...]}, ...]}
         """
         ...
