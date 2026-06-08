@@ -110,7 +110,7 @@ export const Heatmap2D = ({
           (c) => c.axeIndex === 1,
         )?.unit;
         shoudForceRatioSwitchRule =
-          firstCoordinateUnit === secondCoordinateUnit;
+          !!firstCoordinateUnit && firstCoordinateUnit === secondCoordinateUnit;
       }
       setShouldForceRatio(shoudForceRatioSwitchRule);
     };
@@ -119,7 +119,7 @@ export const Heatmap2D = ({
   }, [itemDataGrid.xyRatioRule, itemDataGrid.coordinates]);
 
   /**
-   * Update layout to force ratio are not
+   * Update layout to force ratio or not
    */
   useEffect(() => {
     const updatedLayoutPlot = structuredClone(layoutPlot);

@@ -145,10 +145,10 @@ export const SimplePlotly = ({
     };
 
     getShouldForceRatio();
-  }, [itemDataGrid.xyRatioRule, itemDataGrid.coordinates]);
+  }, [itemDataGrid.xyRatioRule, itemDataGrid.coordinates, itemDataGrid.plot]);
 
   /**
-   * Update layout to force ratio are not
+   * Update layout to force ratio or not
    */
   useEffect(() => {
     const updatedLayoutPlot = structuredClone(layoutPlot);
