@@ -657,6 +657,7 @@ class IMASPythonSource(DataSourceInterface):
             metadata: IDSMetadata,
             results: list[dict[str, list[str]]],
             show_error_bars: bool = False,
+            ignore_check: bool = False,
             filled_paths: list[str] | None = None,
         ) -> None:
             """
@@ -672,13 +673,16 @@ class IMASPythonSource(DataSourceInterface):
             :param metadata: current metadata node to inspect
             :param results: list to which collected geometry overlay entries are appended
             :param show_error_bars: whether to include error bar parameter names (e.g. ``_error_upper``)
+            :param ignore_check: whether to ignore checking node for structure reference, or node_type
             :param filled_paths: optional list of filled paths; when given, only nodes with filled parameters are collected
             """
             node_name = metadata.name
             node_type = getattr(metadata, "structure_reference", None)
 
-            is_outline_static = node_type == "outline_2d_geometry_static"
-            is_outline_rz = "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+            is_outline_static = (node_type == "outline_2d_geometry_static") or ignore_check
+            is_outline_rz = (
+                "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+            ) or ignore_check
 
             if is_outline_static or is_outline_rz:
                 tensorized_path = self._add_index_to_aos_in_path(root_metadata, metadata.path_string)
@@ -686,11 +690,26 @@ class IMASPythonSource(DataSourceInterface):
                 parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
 
                 for child in metadata:
-                    is_error_node = any(
-                        error_node in child.name for error_node in ["_error_upper", "_error_lower", "_error_index"]
-                    )
-                    if show_error_bars or not is_error_node:
-                        parameters_entry["parameters"].append(child.name)
+                    child_node_type = getattr(child, "structure_reference", None)
+
+                    if child_node_type is not None:
+                        _walk_outline_nodes(
+                            uri=uri,
+                            ids=ids,
+                            occurrence=occurrence,
+                            root_metadata=root_metadata,
+                            metadata=child,
+                            results=results,
+                            show_error_bars=show_error_bars,
+                            ignore_check=True,
+                            filled_paths=filled_paths,
+                        )
+                    else:
+                        is_error_node = any(
+                            error_node in child.name for error_node in ["_error_upper", "_error_lower", "_error_index"]
+                        )
+                        if (show_error_bars or not is_error_node) and child.name != "geometry_type":
+                            parameters_entry["parameters"].append(child.name)
 
                 if filled_paths is not None:
                     node_filled = any(
@@ -698,22 +717,23 @@ class IMASPythonSource(DataSourceInterface):
                         for parameter in parameters_entry["parameters"]
                     )
 
-                    if node_filled:
+                    if node_filled and parameters_entry["parameters"]:  # don't put structures with empty "parameters"
                         results.append(parameters_entry)
-                else:
+                elif parameters_entry["parameters"]:  # don't put structures with empty "parameters"
                     results.append(parameters_entry)
 
-            for child in metadata:
-                _walk_outline_nodes(
-                    uri=uri,
-                    ids=ids,
-                    occurrence=occurrence,
-                    root_metadata=root_metadata,
-                    metadata=child,
-                    results=results,
-                    show_error_bars=show_error_bars,
-                    filled_paths=filled_paths,
-                )
+            else:
+                for child in metadata:
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids,
+                        occurrence=occurrence,
+                        root_metadata=root_metadata,
+                        metadata=child,
+                        results=results,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
 
         # ============ END HELPER FUNCTION ============
 
