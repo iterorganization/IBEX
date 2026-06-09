@@ -628,6 +628,17 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
+    def _find_grid_type(self, data_node: IDSNumericArray):
+
+        try:
+            grid_type_node = data_node._parent.grid_type
+            grid_index = grid_type_node.name
+            identifiers = imas.identifiers.poloidal_plane_coordinates_identifier
+            identifier_description = ...
+        except AttributeError:
+            ...
+
+
     def get_plot_data(
         self,
         uri: str,
@@ -803,6 +814,9 @@ class IMASPythonSource(DataSourceInterface):
                         except ValueError:
                             coord_data_shape = "irregular"
 
+
+                        #if re.search(r"dim[0-9]", coord.split("/")[-1]):
+                            #_find_grid_type()...
                         c = {
                             "name": coord.split("/")[-1],
                             "target": f"#{ids}/{target}",
