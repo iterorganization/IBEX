@@ -628,16 +628,32 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
-    def _find_grid_type(self, data_node: IDSNumericArray):
+    def _generate_grid_quantity_alias(self, grid_node: IDSNumericArray):
+        """
+        Generates alias and unit for selected grid node. Assumes grid_node.name == "dimX" X=(1...N)
+        :param grid_node:
+        :return:
+        """
+        if grid_node._parent is None or grid_node._parent._parent is None:
+            return None
+        if not re.search(r"dim[1-9]", grid_node.metadata.name):
+            return None
 
+        dim_index = int(grid_node.metadata.name[-1]) - 1  # dim1->0, dim2->1 etc...
+
+        # assume grid_node is located inside XXX/grid/<node> and grid_type is located in XXX/grid_type
+        grid_type_index = grid_node._parent._parent.grid_type.index
+
+        units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
         try:
-            grid_type_node = data_node._parent.grid_type
-            grid_index = grid_type_node.name
-            identifiers = imas.identifiers.poloidal_plane_coordinates_identifier
-            identifier_description = ...
-        except AttributeError:
-            ...
+            axis_labels = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).axis_labels.split(",")
+            result_alias = axis_labels[dim_index]
 
+        except AttributeError:
+            description = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).description
+            result_alias = "ALIAS"
+
+        return {"alias": result_alias, "unit": units[dim_index]}
 
     def get_plot_data(
         self,
@@ -814,9 +830,14 @@ class IMASPythonSource(DataSourceInterface):
                         except ValueError:
                             coord_data_shape = "irregular"
 
-
-                        #if re.search(r"dim[0-9]", coord.split("/")[-1]):
-                            #_find_grid_type()...
+                        alias = None
+                        alias_unit = None
+                        if re.search(r"dim[1-9]", coord.split("/")[-1]):
+                            alias_dict = self._generate_grid_quantity_alias(first_value)
+                            if alias_dict is not None:
+                                alias = alias_dict["alias"]
+                                alias_unit = alias_dict["unit"]
+                        print(f"==== GENERATED ALIAS FOR : {coord.split('/')[-1]} = {alias} ||| {alias_unit}")
                         c = {
                             "name": coord.split("/")[-1],
                             "target": f"#{ids}/{target}",
