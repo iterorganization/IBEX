@@ -25,6 +25,39 @@ def test_node_info_coordinates(entry_path):
         )
 
 
+def test_node_info_geometry_nodes(entry_path):
+
+    response = pytest.test_client.get(
+        "/ids_info/node_info",
+        params={
+            "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[:]",
+        },
+    )
+
+    assert response.status_code == 200
+    assert not response.json()["is_geometry_node"]
+
+    response = pytest.test_client.get(
+        "/ids_info/node_info",
+        params={
+            "uri": f"imas:hdf5?path={entry_path}#wall/description_2d[:]/limiter/unit[:]/outline",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_geometry_node"]
+
+    response = pytest.test_client.get(
+        "/ids_info/node_info",
+        params={
+            "uri": f"imas:hdf5?path={entry_path}#wall/description_2d[:]/limiter/unit[:]/outline/r",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_geometry_node"]
+
+
 def test_node_info_empty_path(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles",

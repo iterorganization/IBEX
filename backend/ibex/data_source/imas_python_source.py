@@ -160,17 +160,41 @@ class IMASPythonSource(DataSourceInterface):
         result["type"] = metadata.data_type or "structure"
         result["ndim"] = metadata.ndim
         result["shape"] = []  # empty for 0D data
+        result["is_geometry_node"] = self._is_geometry_node(metadata)
 
         if recursive:
             result["children"] = [self._jsonify_metadata(child, recursive) for child in metadata]
         else:
             result["children"] = [
-                {"name": child.name, "type": child.data_type, "ndim": child.ndim}
+                {
+                    "name": child.name,
+                    "type": child.data_type,
+                    "ndim": child.ndim,
+                    "is_geometry_node": self._is_geometry_node(child),
+                }
                 for child in metadata
                 if show_error_bars or not any(x in child.name for x in ["_error_upper", "_error_lower", "_error_index"])
             ]
 
         return result
+
+    def _is_geometry_node(self, metadata: IDSMetadata):
+        """
+        Checks if node lies inside geometry structure
+        :param metadata: metadata of ids node
+        :return:
+        """
+        if metadata is None:
+            return False
+
+        node_type = getattr(metadata, "structure_reference", None)
+        is_outline_static = node_type == "outline_2d_geometry_static"
+        is_outline_rz = "outline" in metadata.name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+
+        if is_outline_rz or is_outline_static:
+            return True
+
+        return self._is_geometry_node(metadata._parent)
 
     def get_node_info(
         self,

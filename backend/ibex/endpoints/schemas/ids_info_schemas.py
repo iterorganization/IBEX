@@ -10,6 +10,7 @@ class NodeInfoChildModel(BaseModel):
     name: str = Field(description="Node name", examples=["t_i_average", "psi"])
     type: str = Field(description="Node type", examples=["FLT", "STR"])
     ndim: int = Field(description="Number of data dimensions stored in node", examples=[1, 5, 7])
+    is_geometry_node: bool = Field(description="True if node is inside geometry structure", examples=[True, False])
     has_data: Optional[bool] = Field(default=None, description="True if node contains data", examples=[True, False])
 
 
@@ -20,6 +21,7 @@ class NodeInfoResponse(BaseModel):
     type: str = Field(description="Node type", examples=["struct_array", "FLT", "STR"])
     ndim: int = Field(description="Number of data dimensions stored in node", examples=[1, 5, 7])
     shape: list[int] = Field(description="Shape of the data", examples=[[3], [5], [2, 5, 10]])
+    is_geometry_node: bool = Field(description="True if node is inside geometry structure", examples=[True, False])
     has_data: Optional[bool] = Field(default=None, description="True if node contains data", examples=[True, False])
     children: list[NodeInfoChildModel] = Field(description="Node info about node's children")
     coordinates: list[str] = Field(
