@@ -149,14 +149,10 @@ export const Heatmap2D = ({
     setData3D(selectedDataMatrix);
 
     // get colorscale name and unit linked to selected plot
+    const selectedPlot = itemDataGrid.plot[parseInt(plotIndex)];
     const colorscaleName =
-      itemDataGrid.plot[parseInt(plotIndex)].yaxis === 'y2'
-        ? itemDataGrid.y2AxisData?.name || 'Z Axis'
-        : itemDataGrid.yAxisData?.name || 'Z Axis';
-    const colorscaleUnit =
-      itemDataGrid.plot[parseInt(plotIndex)].yaxis === 'y2'
-        ? itemDataGrid.y2AxisData?.unit || ''
-        : itemDataGrid.yAxisData?.unit || '';
+      selectedPlot?.name.replace(`_${selectedPlot.labelUri}`, '') || 'Z Axis';
+    const colorscaleUnit = itemDataGrid.plot[parseInt(plotIndex)]?.unit || '';
 
     //Initialize xAxis, yAxis, zAxis
     setZAxis({
