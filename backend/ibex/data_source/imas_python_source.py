@@ -708,7 +708,7 @@ class IMASPythonSource(DataSourceInterface):
                         is_error_node = any(
                             error_node in child.name for error_node in ["_error_upper", "_error_lower", "_error_index"]
                         )
-                        if (show_error_bars or not is_error_node):
+                        if show_error_bars or not is_error_node:
                             parameters_entry["parameters"].append(child.name)
 
                 if filled_paths is not None:
