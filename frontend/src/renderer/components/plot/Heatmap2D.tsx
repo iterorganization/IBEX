@@ -81,6 +81,7 @@ export const Heatmap2D = ({
       orientation: 'v',
     },
   });
+  const selectedPlot = itemDataGrid.plot[parseInt(plotIndex)];
   // Custom hook used for trigger some useEffects to update the layout
   usePlotLayout({
     itemDataGrid,
@@ -142,17 +143,16 @@ export const Heatmap2D = ({
 
   const init3DAxis = useCallback(async () => {
     // Transpose data matrix to orign values
-    const selectedDataMatrix = itemDataGrid.plot[parseInt(plotIndex)]?.yData;
+    const selectedDataMatrix = selectedPlot?.yData;
     if (!selectedDataMatrix) {
       return;
     }
     setData3D(selectedDataMatrix);
 
     // get colorscale name and unit linked to selected plot
-    const selectedPlot = itemDataGrid.plot[parseInt(plotIndex)];
     const colorscaleName =
       selectedPlot?.name.replace(`_${selectedPlot.labelUri}`, '') || 'Z Axis';
-    const colorscaleUnit = itemDataGrid.plot[parseInt(plotIndex)]?.unit || '';
+    const colorscaleUnit = selectedPlot?.unit || '';
 
     //Initialize xAxis, yAxis, zAxis
     setZAxis({
@@ -244,7 +244,7 @@ export const Heatmap2D = ({
   }, [yAxis]);
 
   useEffect(() => {
-    if (data3D) {
+    if (data3D && selectedPlot) {
       // Update x, y & z useStates to plot heatmap
       setX(
         getArrayValueFromDependance(itemDataGrid.coordinates, 0) as number[],
@@ -252,10 +252,8 @@ export const Heatmap2D = ({
       setY(
         getArrayValueFromDependance(itemDataGrid.coordinates, 1) as number[],
       );
-
       // Get matrix [[]] needed for z in 3D
-      let zData: AxisData | number | string | Complex =
-        itemDataGrid.plot[parseInt(plotIndex)].yData;
+      let zData: AxisData | number | string | Complex = selectedPlot.yData;
 
       const tensor = tf.tensor(zData);
       const depthToGoThrough = tensor.shape.length - 2; // shape length - 2 because z need a vector of depth 2 ([][])
@@ -415,8 +413,7 @@ export const Heatmap2D = ({
               {
                 type: 'heatmap',
                 colorscale:
-                  itemDataGrid.plot[parseInt(plotIndex)]?.customPreferences
-                    ?.colorscale || 'Viridis',
+                  selectedPlot?.customPreferences?.colorscale || 'Viridis',
                 colorbar: {
                   title: {
                     text: zAxis?.name
@@ -463,7 +460,7 @@ export const Heatmap2D = ({
           <Center h={height}>
             <NoDataForURI
               itemDataGrid={itemDataGrid}
-              selectedPlot={itemDataGrid.plot[parseInt(plotIndex)]}
+              selectedPlot={selectedPlot}
             />
           </Center>
         </Grid.Col>
