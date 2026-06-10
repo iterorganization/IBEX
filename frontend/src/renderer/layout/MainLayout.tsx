@@ -107,6 +107,10 @@ export function MainLayout() {
         downsampled_size: dataGrid?.downsampled_size,
         interpolated_method: dataGrid.interpolated_method,
         is_geometry_node: dataGrid.is_geometry_node,
+        geometrie:
+          dataGrid?.geometrie.map((geo) => ({
+            geometryUri: geo.geometryUri,
+          })) || [],
         xAxisData: dataGrid.xAxisData,
         yAxisData: dataGrid.yAxisData,
         y2AxisData: dataGrid?.y2AxisData,

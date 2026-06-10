@@ -50,20 +50,19 @@ export const CustomizeGeometry = ({
     // TODO : call BE endpoint to get geometries and fill multiselect data
     const rawData = [
       {
-        geometryNode: 'URI-0#wall/description_2d[:]/limiter/unit[:]/outline/',
+        geometryUri: 'URI-0#wall/description_2d[:]/limiter/unit[:]/outline/',
         parameters: ['r', 'z'],
       },
       {
-        geometryNode:
-          'URI-0#pf_active:0/coil[:]/element[:]/geometry/rectangle/',
+        geometryUri: 'URI-0#pf_active:0/coil[:]/element[:]/geometry/rectangle/',
         parameters: ['r', 'z'],
       },
       {
-        geometryNode: 'URI-0#pf_active:0/coil[:]/element[:]/geometry/oblique/',
+        geometryUri: 'URI-0#pf_active:0/coil[:]/element[:]/geometry/oblique/',
         parameters: ['r', 'z', 'width', 'height'],
       },
     ];
-    setGeometriesSelectable(rawData?.map((d) => d.geometryNode));
+    setGeometriesSelectable(rawData?.map((d) => d.geometryUri));
   };
 
   /**

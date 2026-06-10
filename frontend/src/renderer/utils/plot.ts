@@ -861,6 +861,7 @@ const fetchGeometryOutline = async (
     type: 'scatter',
     mode: 'lines',
     line: { color: 'black', width: 2 },
+    geometryUri: uri + path,
     nodeUris: [uri + rPath, uri + zPath],
     name: groupLegend,
     legendgroup: groupLegend,
@@ -948,6 +949,7 @@ const fetchGeometryRectangle = async (
       type: 'scatter',
       mode: 'lines',
       line: { color: 'orange', width: 2 },
+      geometryUri: uri + path,
       nodeUris: [uri + rPath, uri + zPath],
       name: groupLegend,
       legendgroup: groupLegend,
@@ -1077,6 +1079,7 @@ const fetchGeometryOblique = async (
       type: 'scatter',
       mode: 'lines',
       line: { color: 'orange', width: 2 },
+      geometryUri: uri + path,
       nodeUris: [uri + rPath, uri + zPath],
       name: groupLegend,
       legendgroup: groupLegend,
@@ -1091,7 +1094,7 @@ const fetchGeometryOblique = async (
 export const fetchGeometries = async (
   wantedGeometryPath: string,
   dataPlot: DataGridPlot,
-  updatedCheckedNodeURI: URITreeNodeData[],
+  updatedCheckedNodeURI?: URITreeNodeData[],
 ) => {
   try {
     const uri = wantedGeometryPath.split('#')[0];
@@ -1144,7 +1147,7 @@ export const fetchGeometries = async (
       }
     }
 
-    if (dataPlot.isEditing && dataPlot?.geometrie) {
+    if (dataPlot.isEditing && dataPlot?.geometrie && updatedCheckedNodeURI) {
       // Check geometries in tree
       for (const geometry of dataPlot.geometrie) {
         for (const uriOfGeo of geometry.nodeUris) {
@@ -1561,7 +1564,7 @@ export function formatConfigBeforeLoadingURIs(
           unit: '',
         } as DataPlotly;
       }),
-      geometrie: [],
+      geometrie: (data?.geometrie as Geometry[]) || [],
       synchronizedGrids: data?.synchronizedGrids
         ? data.synchronizedGrids
         : { color: '', list: [] },
@@ -1793,6 +1796,18 @@ export async function plotNodeUriLoaded(
           dataGridUpdated.coordinates = transposedDataPlot.coordinates;
           dataGridUpdated.plot = transposedDataPlot.plot;
         }
+
+        // Retrieve saved geometries
+        if (dataGridUpdated.geometrie.length) {
+          const listOfGeometries = Array.from(
+            new Set(dataGridUpdated.geometrie.map((g) => g.geometryUri)),
+          );
+          dataGridUpdated.geometrie = [];
+          for (const geometry of listOfGeometries) {
+            await fetchGeometries(geometry, dataGridUpdated);
+          }
+        }
+
         return dataGridUpdated;
       }),
     );

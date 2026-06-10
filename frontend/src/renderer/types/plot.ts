@@ -52,6 +52,7 @@ export type Geometry = {
   x: number[];
   y: number[];
   line: GeometryLine;
+  geometryUri: string;
   nodeUris: string[];
   name: string;
   legendgroup: string;
@@ -133,7 +134,7 @@ export interface DataGridPlotToSave extends BaseDataGridPlot {
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
   is_geometry_node: boolean;
-  geometrie?: Geometry[];
+  geometrie: Partial<Geometry>[];
 }
 
 export type synchronizedList = {

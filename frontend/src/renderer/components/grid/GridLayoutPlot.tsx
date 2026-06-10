@@ -418,6 +418,7 @@ export const GridLayoutPlot = ({
             return (
               index.toString() === active3DTab && (
                 <MetaDataInfos
+                  key={`metadata_${data.i}`}
                   gridLayoutKey={data.i}
                   data={plot}
                   yAxis={plot.yaxis !== '' ? data.y2AxisData : data.yAxisData}
