@@ -159,6 +159,7 @@ export const handleNewPlot = async (
     xAxis,
     yAxis,
     updatedActive.dataPlot || [],
+    nodes[0],
   );
 
   let defaultXValue: number[] = [];
@@ -191,6 +192,7 @@ export const handleNewPlot = async (
     response.data.description,
   );
   updatedPlot.dataType = nodes[0].type;
+  updatedPlot.is_geometry_node = nodes[0].is_geometry_node;
 
   // Rule to define the default plot mode
   updatedPlot.selectedPlotMode =
@@ -773,6 +775,7 @@ export const fetchErrorBandsInConfig = async (
             name: updatedPlot.labelUri,
             uri: normalizeIndices(error_band.path),
             type: selectedDataPlot.dataType,
+            is_geometry_node: selectedDataPlot.is_geometry_node,
           };
           const exists = updatedCheckedNodeURI.some(
             (node) =>
@@ -1148,7 +1151,8 @@ export const fetchGeometries = async (
           const newCheckedNode = {
             name: dataPlot.plot[0].labelUri,
             uri: normalizeIndices(uriOfGeo),
-            type: 'GEO', // ? geometry type, (contour at the moment)
+            type: NodeInfoTypeEnum.FLOAT,
+            is_geometry_node: true,
           } as URITreeNodeData;
           const exists = updatedCheckedNodeURI.some(
             (node) =>

@@ -150,6 +150,20 @@ export const fetchNodeInfos = async (
     `/ids_info/node_info?uri=${encodeURIComponent(nodeUri)}&show_error_bars=${showErrorBars}`,
   );
   nodeInfos.children = nodeInfos.children.filter((c) => c.has_data !== false);
+
+  if (nodeInfos.children[0].name === 'r') {
+    // TODO: call PSNC feature instead of this temporary solution getting geometry_node
+    nodeInfos.is_geometry_node = true;
+    for (const child of nodeInfos.children) {
+      child.is_geometry_node = true;
+    }
+  }
+  for (const child of nodeInfos.children) {
+    if (child.name === 'geometry_type') {
+      child.is_geometry_node = true;
+    }
+  }
+
   return nodeInfos;
 };
 
@@ -161,9 +175,18 @@ export const fetchFindPaths = async (
   value: string,
   showErrorBars: boolean,
 ) => {
-  return fetchFromApi<SearchNodeResponse>(
+  const searchedNodes = await fetchFromApi<SearchNodeResponse>(
     `/ids_info/find_paths?uri=${encodeURIComponent(uri)}&searched_node=${encodeURIComponent(value)}&show_error_bars=${showErrorBars}`,
   );
+  searchedNodes.paths = searchedNodes.paths.filter((c) => c.has_data !== false);
+
+  for (const node of searchedNodes.paths) {
+    // TODO: call PSNC feature instead of this temporary solution getting geometry_node
+    if (node.path.split('/')[node.path.split('/').length - 1] === 'r') {
+      node.is_geometry_node = true;
+    }
+  }
+  return searchedNodes;
 };
 
 /**

@@ -125,12 +125,14 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   downsampled_size?: number;
   selectedPlotMode?: PlotType;
   geometrie: Geometry[];
+  is_geometry_node: boolean;
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
   dataType: NodeInfoTypeEnum;
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
+  is_geometry_node: boolean;
   geometrie?: Geometry[];
 }
 

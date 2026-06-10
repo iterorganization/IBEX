@@ -1,4 +1,4 @@
-import { Axis, Coordinates, DataGridPlot } from '../types';
+import { Axis, Coordinates, DataGridPlot, URITreeNodeData } from '../types';
 import { generateUuid } from './uuid';
 
 export const findNextAvailableY = (existingPlots: DataGridPlot[]): number => {
@@ -14,21 +14,21 @@ export const generateNewGridPlot = (
   xAxis: Axis,
   yAxis: Axis,
   existingPlots: DataGridPlot[],
-  y2Axis?: Axis,
+  node: URITreeNodeData,
 ): DataGridPlot => {
-  const newGrid = generateNewGrid(existingPlots);
+  const newGrid = generateNewGrid(existingPlots, node);
 
   return {
     ...newGrid,
     xAxisData: xAxis,
     yAxisData: yAxis,
-    y2AxisData: y2Axis,
     coordinates: coordinatesOfFirstPlot,
   };
 };
 
 export const generateNewGrid = (
   existingPlots: DataGridPlot[],
+  node: URITreeNodeData,
 ): DataGridPlot => {
   return {
     title: '',
@@ -45,5 +45,6 @@ export const generateNewGrid = (
     w: 6,
     h: 12,
     geometrie: [],
+    is_geometry_node: node.is_geometry_node,
   };
 };

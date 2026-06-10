@@ -7,6 +7,7 @@ import {
   DataGridPlot,
   DataPlotly,
   GridLayoutPlotProps,
+  NodeInfoTypeEnum,
   URITreeNodeData,
 } from '../../../renderer/types';
 import { Center, Container, Text } from '@mantine/core';
@@ -182,6 +183,8 @@ export const GridLayoutPlot = ({
   };
 
   useEffect(() => {
+    let forceToDisplayMetadata = false;
+
     // Rule to force to show metadata when y data is of type string
     let isYDataString = false;
     for (const plot of data.plot) {
@@ -192,7 +195,15 @@ export const GridLayoutPlot = ({
         }
       }
     }
-    setShouldDisplayMetadata(isYDataString);
+
+    // Rule to force to show metadata when y data is a geometry
+    let isGeometry = false;
+    if (data.is_geometry_node === true) {
+      isGeometry = true;
+    }
+
+    forceToDisplayMetadata = isYDataString || isGeometry;
+    setShouldDisplayMetadata(forceToDisplayMetadata);
   }, [data.plot.length]);
 
   /**
@@ -288,6 +299,7 @@ export const GridLayoutPlot = ({
             uri: normalizeIndices(item.nodeUri),
             name: item.labelUri,
             type: findPlot.dataType,
+            is_geometry_node: findPlot.is_geometry_node,
           }))
         : [];
 
@@ -302,6 +314,7 @@ export const GridLayoutPlot = ({
               name: plot.labelUri,
               uri: normalizeIndices(error_band.path),
               type: findPlot.dataType,
+              is_geometry_node: findPlot.is_geometry_node,
             };
             const exists = checkedNodeURI.some(
               (node) =>
@@ -322,7 +335,8 @@ export const GridLayoutPlot = ({
               const newCheckedNode = {
                 name: findPlot.plot[0].labelUri,
                 uri: normalizeIndices(uriOfGeo),
-                type: 'GEO',
+                type: NodeInfoTypeEnum.FLOAT,
+                is_geometry_node: true,
               } as URITreeNodeData;
               const exists = checkedNodeURI.some(
                 (node) =>

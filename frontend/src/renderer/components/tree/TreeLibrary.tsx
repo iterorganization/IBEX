@@ -18,7 +18,6 @@ import {
   IconHash,
   IconRipple,
   IconTypography,
-  IconGeometry,
 } from '@tabler/icons-react';
 import classes from './TreeLibrary.module.css';
 import {
@@ -190,7 +189,11 @@ function NodeIcon({
       if (
         shouldDisableTree ||
         node.label.toString().endsWith('_error_lower') ||
-        node.label.toString().endsWith('_error_upper')
+        node.label.toString().endsWith('_error_upper') ||
+        (node.is_geometry_node === true &&
+          checkedNodes.length &&
+          checkedNodes[0].is_geometry_node !== true &&
+          checkedNodes[0]?.type !== 'STR')
       ) {
         return;
       }
@@ -233,6 +236,7 @@ function NodeIcon({
             name: uriLabel,
             uri: node.value,
             type: node.type,
+            is_geometry_node: node.is_geometry_node,
           };
           checkedNodes.push(newCheckedNode);
         }
@@ -274,7 +278,11 @@ function NodeIcon({
             cursor:
               shouldDisableTree ||
               node.label.toString().endsWith('_error_lower') ||
-              node.label.toString().endsWith('_error_upper')
+              node.label.toString().endsWith('_error_upper') ||
+              (node.is_geometry_node === true &&
+                checkedNodes.length &&
+                checkedNodes[0].is_geometry_node !== true &&
+                checkedNodes[0]?.type !== 'STR')
                 ? 'not-allowed'
                 : 'pointer',
           }}
@@ -294,7 +302,11 @@ function NodeIcon({
             disabled={
               shouldDisableTree ||
               node.label.toString().endsWith('_error_lower') ||
-              node.label.toString().endsWith('_error_upper')
+              node.label.toString().endsWith('_error_upper') ||
+              (node.is_geometry_node === true &&
+                checkedNodes.length &&
+                checkedNodes[0].is_geometry_node !== true &&
+                checkedNodes[0]?.type !== 'STR')
             }
           />
           {IconComponent}
@@ -319,10 +331,6 @@ function NodeIcon({
       ),
       [NodeInfoTypeEnum.COMPLEX]: getCheckboxIcon(
         <IconMathFunction {...commonProps} className={classes.forcedWidth} />,
-      ),
-      [NodeInfoTypeEnum.GEOMETRY]: getCheckboxIcon(
-        // TODO : use geometry type from BE
-        <IconGeometry {...commonProps} className={classes.forcedWidth} />,
       ),
     };
 

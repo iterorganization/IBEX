@@ -106,6 +106,7 @@ export function MainLayout() {
         downsampled_method: dataGrid?.downsampled_method,
         downsampled_size: dataGrid?.downsampled_size,
         interpolated_method: dataGrid.interpolated_method,
+        is_geometry_node: dataGrid.is_geometry_node,
         xAxisData: dataGrid.xAxisData,
         yAxisData: dataGrid.yAxisData,
         y2AxisData: dataGrid?.y2AxisData,

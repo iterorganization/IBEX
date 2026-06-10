@@ -5,7 +5,6 @@ export enum NodeInfoTypeEnum {
   FLOAT = 'FLT',
   STRING = 'STR',
   COMPLEX = 'CPX',
-  GEOMETRY = 'GEO', // TODO : use geometry type from BE
 }
 
 export type NodeInfoChildrenResponse = {
@@ -13,6 +12,7 @@ export type NodeInfoChildrenResponse = {
   ndim: number;
   type: NodeInfoTypeEnum;
   has_data: boolean | null;
+  is_geometry_node: boolean;
 };
 
 export type NodeInfoResponse = NodeInfoChildrenResponse & {
@@ -23,5 +23,9 @@ export type NodeInfoResponse = NodeInfoChildrenResponse & {
 };
 
 export type SearchNodeResponse = {
-  paths: string[];
+  paths: {
+    has_data: boolean | null;
+    is_geometry_node: boolean;
+    path: string;
+  }[];
 };

@@ -228,6 +228,7 @@ export const VisualizationTree = ({
               children: [],
               seeErrorBars: showErrorBars,
               uriLabel: dataUri.name,
+              is_geometry_node: false,
             });
           }
         }
@@ -275,11 +276,7 @@ export const VisualizationTree = ({
         (item) => item.uri === dataUri.uri,
       ).data;
 
-      const dataTree = buildTree(
-        customDataTreeUri,
-        dataUri,
-        searchResults.paths,
-      );
+      const dataTree = buildTree(customDataTreeUri, dataUri, searchResults);
 
       const updatedActive: Configuration = {
         ...active,
@@ -366,6 +363,7 @@ export const VisualizationTree = ({
           type: child.type,
           children: [] as CustomTreeNodeData[],
           uriLabel: uriSelectedRef.current.name,
+          is_geometry_node: child.is_geometry_node,
         };
       },
     );

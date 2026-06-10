@@ -429,7 +429,6 @@ export const VisualizationURIModal = ({
    *
    */
   async function fetchDataIDSFromURI() {
-    // ? function write/paste
     if (!formURI.values.uri) {
       console.error('URI is empty.');
       formURI.setFieldError('uri', 'Please provide a valid URI');
