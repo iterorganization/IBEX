@@ -37,6 +37,7 @@ class FoundPathModel(BaseModel):
 
     path: str = Field(description="", examples=["t_i_average", "path"])
     has_data: Optional[bool] = Field(default=None, description="True if node contains data", examples=[True, False])
+    is_geometry_node: bool = Field(description="True if node contains geometry data", examples=[True, False])
 
 
 class FindPathsResponse(BaseModel):

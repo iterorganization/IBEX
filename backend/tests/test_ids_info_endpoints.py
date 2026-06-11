@@ -121,12 +121,32 @@ def test_find_paths(entry_path):
     else:
         has_data_true = True
     assert response.json()["paths"] == [
-        {"path": "#core_profiles/ids_properties/version_put/data_dictionary", "has_data": has_data_true},
-        {"path": "#core_profiles/ids_properties/version_put/access_layer", "has_data": has_data_true},
-        {"path": "#core_profiles/ids_properties/version_put/access_layer_language", "has_data": has_data_true},
-        {"path": "#wall/ids_properties/version_put/data_dictionary", "has_data": has_data_true},
-        {"path": "#wall/ids_properties/version_put/access_layer", "has_data": has_data_true},
-        {"path": "#wall/ids_properties/version_put/access_layer_language", "has_data": has_data_true},
+        {
+            "path": "#core_profiles/ids_properties/version_put/data_dictionary",
+            "has_data": has_data_true,
+            "is_geometry_node": False,
+        },
+        {
+            "path": "#core_profiles/ids_properties/version_put/access_layer",
+            "has_data": has_data_true,
+            "is_geometry_node": False,
+        },
+        {
+            "path": "#core_profiles/ids_properties/version_put/access_layer_language",
+            "has_data": has_data_true,
+            "is_geometry_node": False,
+        },
+        {
+            "path": "#wall/ids_properties/version_put/data_dictionary",
+            "has_data": has_data_true,
+            "is_geometry_node": False,
+        },
+        {"path": "#wall/ids_properties/version_put/access_layer", "has_data": has_data_true, "is_geometry_node": False},
+        {
+            "path": "#wall/ids_properties/version_put/access_layer_language",
+            "has_data": has_data_true,
+            "is_geometry_node": False,
+        },
     ]
 
 

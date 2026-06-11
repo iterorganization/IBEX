@@ -536,12 +536,17 @@ class IMASPythonSource(DataSourceInterface):
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
                             path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
+                            is_geometry_node = self._is_geometry_node(ids_obj.metadata[path])
                             if not filled_paths:
                                 # every ids has at least one filled path. If not, it means functionality is not available.
-                                found_paths.append({"path": path_name, "has_data": None})
+                                found_paths.append(
+                                    {"path": path_name, "has_data": None, "is_geometry_node": is_geometry_node}
+                                )
                             else:
                                 path_has_data = path_in_filled_paths(path, filled_paths)
-                                found_paths.append({"path": path_name, "has_data": path_has_data})
+                                found_paths.append(
+                                    {"path": path_name, "has_data": path_has_data, "is_geometry_node": is_geometry_node}
+                                )
 
                 except imas.exception.DataEntryException:
                     continue
