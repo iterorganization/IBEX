@@ -88,7 +88,12 @@ def entry_path(tmp_path_factory):
             ion.temperature = np.array([[i, +1, i + 2], [i + 10, i + 11, i + 12], [i + 20, i + 21, i + 32]])
         profiles_2d.grid.dim1 = np.array([0, 1, 2])
         profiles_2d.grid.dim2 = np.array([0, 1, 2])
+        profiles_2d.grid.volume_element = np.array([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], dtype=float)
         i += 10
+
+    # for coordinate aliases/units
+    core_profiles.profiles_2d[0].grid_type = 1
+    core_profiles.profiles_2d[1].grid_type = 2
 
     entry.put(core_profiles)
     entry.close()

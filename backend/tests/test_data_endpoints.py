@@ -122,3 +122,30 @@ def test_plot_data_1_N_coord(entry_path):
     assert numeric_coordinate["ndim"] == 1
     assert numeric_coordinate["path"] == ""
     assert numeric_coordinate["description"] == "1...N"
+
+
+def test_plot_data_coordinate_aliases(entry_path):
+
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[0]/grid/volume_element",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    assert dim1_coordinate["alias"].lower() == "r"
+    assert dim1_coordinate["unit_alias"] is None
+
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[1]/grid/volume_element",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    assert dim1_coordinate["alias"].lower() == "rho"
+    assert dim1_coordinate["unit_alias"] is None

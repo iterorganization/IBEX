@@ -631,29 +631,39 @@ class IMASPythonSource(DataSourceInterface):
     def _generate_grid_quantity_alias(self, grid_node: IDSNumericArray):
         """
         Generates alias and unit for selected grid node. Assumes grid_node.name == "dimX" X=(1...N)
-        :param grid_node:
+        :param grid_node: IDSNode (named dimX, X = [1...N])
         :return:
         """
+        result = {"alias": None, "unit_alias": None}
         if grid_node._parent is None or grid_node._parent._parent is None:
-            return None
+            return result
         if not re.search(r"dim[1-9]", grid_node.metadata.name):
-            return None
-
-        dim_index = int(grid_node.metadata.name[-1]) - 1  # dim1->0, dim2->1 etc...
+            return result
 
         # assume grid_node is located inside XXX/grid/<node> and grid_type is located in XXX/grid_type
         grid_type_index = grid_node._parent._parent.grid_type.index
+        if grid_type_index == imas.ids_defs.EMPTY_INT:
+            return result
 
-        units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
+        dim_index = int(grid_node.metadata.name[-1]) - 1  # dim1->0, dim2->1 etc...
+        # Extract units
+        try:
+            units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
+            result["unit_alias"] = units[dim_index]
+        except (ValueError, KeyError, AttributeError):
+            result["unit_alias"] = None
+
+        # Extract axis labels
         try:
             axis_labels = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).axis_labels.split(",")
-            result_alias = axis_labels[dim_index]
-
+            result["alias"] = axis_labels[dim_index]
         except AttributeError:
             description = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).description
-            result_alias = "ALIAS"
+            match = re.findall(r"(\w+)=(dim[1-9])", description)
+            axis_labels = {v: k for k, v in match}
+            result["alias"] = axis_labels.get(grid_node.metadata.name, None)
 
-        return {"alias": result_alias, "unit": units[dim_index]}
+        return result
 
     def get_plot_data(
         self,
@@ -830,18 +840,20 @@ class IMASPythonSource(DataSourceInterface):
                         except ValueError:
                             coord_data_shape = "irregular"
 
+                        coord_name = coord.split("/")[-1]
                         alias = None
                         alias_unit = None
-                        if re.search(r"dim[1-9]", coord.split("/")[-1]):
+                        if re.search(r"dim[1-9]", coord_name):
                             alias_dict = self._generate_grid_quantity_alias(first_value)
-                            if alias_dict is not None:
-                                alias = alias_dict["alias"]
-                                alias_unit = alias_dict["unit"]
-                        print(f"==== GENERATED ALIAS FOR : {coord.split('/')[-1]} = {alias} ||| {alias_unit}")
+                            alias = alias_dict["alias"]
+                            alias_unit = alias_dict["unit_alias"]
+
                         c = {
-                            "name": coord.split("/")[-1],
+                            "name": coord_name,
+                            "alias": alias,
                             "target": f"#{ids}/{target}",
                             "unit": first_value.metadata.units,
+                            "unit_alias": alias_unit,
                             "shape": coord_data_shape,  # coord_data could be np.ndarray or list[np.ndarray]
                             "downsampled_shape": coord_data_shape,
                             "ndim": first_value.metadata.ndim,
