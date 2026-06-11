@@ -135,7 +135,7 @@ export const CustomizeGeometry = ({
           // Prevent from displaying contour plot when no geometry are available
           showNotification({
             title: 'No geometry available',
-            message: 'This dataset does not contain any geometry to display.',
+            message: 'No geometry to display.',
             color: 'yellow',
           });
           return;

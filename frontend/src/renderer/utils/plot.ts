@@ -1114,9 +1114,7 @@ export const fetchGeometries = async (
         shouldSwitchAxis,
       );
       dataPlot.geometrie.push(contourGeometry);
-    }
-
-    if (typeOfGeometry === 'rectangle') {
+    } else if (typeOfGeometry === 'rectangle') {
       // Get rectangle
       const rectangleGeometry = await fetchGeometryRectangle(
         uri,
@@ -1124,9 +1122,7 @@ export const fetchGeometries = async (
         shouldSwitchAxis,
       );
       dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
-    }
-
-    if (typeOfGeometry === 'oblique') {
+    } else if (typeOfGeometry === 'oblique') {
       // Get oblique
       const obliqueGeometry = await fetchGeometryOblique(
         uri,
@@ -1134,6 +1130,13 @@ export const fetchGeometries = async (
         shouldSwitchAxis,
       );
       dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
+    } else {
+      showNotification({
+        title: `Unable to plot ${typeOfGeometry} geometry`,
+        message: `${typeOfGeometry} geometries are not implemented yet`,
+        color: 'yellow',
+      });
+      return;
     }
 
     if (dataPlot?.geometrie) {
@@ -1173,6 +1176,11 @@ export const fetchGeometries = async (
     return dataPlot;
   } catch (error) {
     console.error('Error getting geometries:', error);
+    showNotification({
+      title: 'Geometry',
+      message: 'Failed to get geometry',
+      color: 'red',
+    });
   }
 };
 
