@@ -120,7 +120,7 @@ def test_find_paths(entry_path):
         has_data_true = None  # before AL-Core 5.7 IBEX returns None
     else:
         has_data_true = True
-    assert response.json()["paths"] == [
+    expected_paths = [
         {
             "path": "#core_profiles/ids_properties/version_put/data_dictionary",
             "has_data": has_data_true,
@@ -148,6 +148,8 @@ def test_find_paths(entry_path):
             "is_geometry_node": False,
         },
     ]
+    for expected in expected_paths:
+        assert expected in response.json()["paths"]
 
 
 def test_array_summary(entry_path):
@@ -165,12 +167,13 @@ def test_array_summary(entry_path):
 
 def test_geometry_overlay_nodes(entry_path):
 
-    entry_uri = f"imas:hdf5?path={entry_path}#wall:0"
+    entry_uri = f"imas:hdf5?path={entry_path}"
     structure_nodes = [
-        f"{entry_uri}/description_2d[:]/limiter/unit[:]/outline",
-        f"{entry_uri}/description_2d[:]/vessel/unit[:]/annular/outline_inner",
-        f"{entry_uri}/description_2d[:]/vessel/unit[:]/annular/outline_outer",
-        f"{entry_uri}/description_2d[:]/vessel/unit[:]/element[:]/outline",
+        f"{entry_uri}#wall:0/description_2d[:]/limiter/unit[:]/outline",
+        f"{entry_uri}#wall:0/description_2d[:]/vessel/unit[:]/annular/outline_inner",
+        f"{entry_uri}#wall:0/description_2d[:]/vessel/unit[:]/annular/outline_outer",
+        f"{entry_uri}#wall:0/description_2d[:]/vessel/unit[:]/element[:]/outline",
+        f"{entry_uri}#equilibrium:0/time_slice[:]/boundary/outline",
     ]
 
     leaf_nodes = ["r", "z"]

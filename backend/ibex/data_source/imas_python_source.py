@@ -678,6 +678,16 @@ class IMASPythonSource(DataSourceInterface):
         """
 
         # ============ HELPER FUNCTION ============
+        def _get_descendant_node_names(metadata: IDSMetadata):
+
+            res = []
+            if metadata.data_type == IDSDataType.STRUCTURE:
+                for child in metadata:
+                    res.extend([f"{metadata.name}/{x}" for x in _get_descendant_node_names(child)])
+            else:
+                res.append(f"{metadata.name}")
+            return res
+
         def _walk_outline_nodes(
             uri: str,
             ids: str,
@@ -714,22 +724,16 @@ class IMASPythonSource(DataSourceInterface):
                 full_uri_with_path = f"{uri}#{ids}:{occurrence}/{tensorized_path}"
                 parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
 
+                params = []
                 for child in metadata:
-                    if child.data_type == IDSDataType.STRUCTURE:
-                        for grand_child in child:
-                            is_error_node = any(
-                                error_node in grand_child.name
-                                for error_node in ["_error_upper", "_error_lower", "_error_index"]
-                            )
-                            if show_error_bars or not is_error_node:
-                                parameters_entry["parameters"].append(f"{child.name}/{grand_child.name}")
+                    params.extend(_get_descendant_node_names(child))
 
-                    else:
-                        is_error_node = any(
-                            error_node in child.name for error_node in ["_error_upper", "_error_lower", "_error_index"]
-                        )
-                        if show_error_bars or not is_error_node:
-                            parameters_entry["parameters"].append(child.name)
+                for param in params:
+                    is_error_node = any(
+                        error_node in param for error_node in ["_error_upper", "_error_lower", "_error_index"]
+                    )
+                    if show_error_bars or not is_error_node:
+                        parameters_entry["parameters"].append(param)
 
                 if filled_paths is not None:
                     node_filled = any(

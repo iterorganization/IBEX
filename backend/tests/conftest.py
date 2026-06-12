@@ -85,9 +85,11 @@ def entry_path(tmp_path_factory):
         for ion in profiles_2d.ion:
             ion.name = f"random ion name {i}"
 
-            ion.temperature = np.array([[i, +1, i + 2], [i + 10, i + 11, i + 12], [i + 20, i + 21, i + 32]])
-        profiles_2d.grid.dim1 = np.array([0, 1, 2])
-        profiles_2d.grid.dim2 = np.array([0, 1, 2])
+            ion.temperature = np.array(
+                [[i, +1, i + 2], [i + 10, i + 11, i + 12], [i + 20, i + 21, i + 32]], dtype=float
+            )
+        profiles_2d.grid.dim1 = np.array([0, 1, 2], dtype=float)
+        profiles_2d.grid.dim2 = np.array([0, 1, 2], dtype=float)
         i += 10
 
     entry.put(core_profiles)
@@ -100,6 +102,14 @@ def entry_path(tmp_path_factory):
     wall.description_2d[0].limiter.unit[0].outline.r = [1.0]
     wall.description_2d[0].limiter.unit[0].outline.z = [1.0]
     entry.put(wall)
+
+    equilibrium = entry.factory.equilibrium()
+    equilibrium.ids_properties.homogeneous_time = 1
+    equilibrium.time = np.array([1.0], dtype=float)
+    equilibrium.time_slice.resize(1)
+    equilibrium.time_slice[0].boundary.outline.r = np.array([1.0], dtype=float)
+    equilibrium.time_slice[0].boundary.outline.z = np.array([2.0], dtype=float)
+    entry.put(equilibrium)
 
     entry.close()
 
