@@ -22,7 +22,11 @@ import {
   Axis,
   PlotDataResponse,
 } from 'src/renderer/types';
-import { fetchArraySummary, fetchDataPlot } from '../../utils';
+import {
+  fetchArraySummary,
+  fetchDataPlot,
+  getUrisToInterpolate,
+} from '../../utils';
 
 interface MetaDataInfosProps {
   gridLayoutKey: string;
@@ -165,11 +169,17 @@ export const MetaDataInfos = ({
             (gridLayout) => gridLayout.i === gridLayoutKey,
           );
 
+          const urisToInterpolate = getUrisToInterpolate(
+            data.nodeUri,
+            selectedDataPlot.plot,
+          );
           const response: PlotDataResponse = await fetchDataPlot(
             data.nodeUri,
             selectedDataPlot?.downsampled_method,
             selectedDataPlot?.downsampled_size,
             selectedDataPlot?.dataType,
+            urisToInterpolate,
+            selectedDataPlot.interpolated_method,
           );
 
           setCoordinates(response.data.coordinates);
