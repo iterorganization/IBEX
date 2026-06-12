@@ -848,12 +848,12 @@ class IMASPythonSource(DataSourceInterface):
                             alias = alias_dict["alias"]
                             alias_unit = alias_dict["unit_alias"]
 
+                        coord_name = alias if alias else coord_name
+                        units = alias_unit if alias_unit else first_value.metadata.units
                         c = {
                             "name": coord_name,
-                            "alias": alias,
                             "target": f"#{ids}/{target}",
-                            "unit": first_value.metadata.units,
-                            "unit_alias": alias_unit,
+                            "unit": units,
                             "shape": coord_data_shape,  # coord_data could be np.ndarray or list[np.ndarray]
                             "downsampled_shape": coord_data_shape,
                             "ndim": first_value.metadata.ndim,

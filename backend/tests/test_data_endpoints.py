@@ -93,13 +93,13 @@ def test_plot_data_2d(entry_path):
     assert time_coordinate["description"] == "Generic time"
 
     dim1_coordinate = response_body["data"]["coordinates"][0]
-    assert dim1_coordinate["name"] == "dim1"
+    assert dim1_coordinate["name"] == "R"  # alias for dim1
     assert dim1_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
     assert dim1_coordinate["shape"] == [5, 3]
     assert dim1_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim1"
 
     dim2_coordinate = response_body["data"]["coordinates"][1]
-    assert dim2_coordinate["name"] == "dim2"
+    assert dim2_coordinate["name"] == "Z"  # alias for dim2
     assert dim2_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
     assert dim2_coordinate["shape"] == [5, 3]
     assert dim2_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim2"
@@ -135,8 +135,7 @@ def test_plot_data_coordinate_aliases(entry_path):
     assert response.status_code == 200
 
     dim1_coordinate = response_body["data"]["coordinates"][0]
-    assert dim1_coordinate["alias"].lower() == "r"
-    assert dim1_coordinate["unit_alias"] is None
+    assert dim1_coordinate["name"].lower() == "r"
 
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[1]/grid/volume_element",
@@ -147,5 +146,4 @@ def test_plot_data_coordinate_aliases(entry_path):
     assert response.status_code == 200
 
     dim1_coordinate = response_body["data"]["coordinates"][0]
-    assert dim1_coordinate["alias"].lower() == "rho"
-    assert dim1_coordinate["unit_alias"] is None
+    assert dim1_coordinate["name"].lower() == "rho"
