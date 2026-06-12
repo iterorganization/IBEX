@@ -686,7 +686,6 @@ class IMASPythonSource(DataSourceInterface):
             metadata: IDSMetadata,
             results: list[dict[str, list[str]]],
             show_error_bars: bool = False,
-            ignore_check: bool = False,
             filled_paths: list[str] | None = None,
         ) -> None:
             """
@@ -702,16 +701,13 @@ class IMASPythonSource(DataSourceInterface):
             :param metadata: current metadata node to inspect
             :param results: list to which collected geometry overlay entries are appended
             :param show_error_bars: whether to include error bar parameter names (e.g. ``_error_upper``)
-            :param ignore_check: whether to ignore checking node for structure reference, or node_type
             :param filled_paths: optional list of filled paths; when given, only nodes with filled parameters are collected
             """
             node_name = metadata.name
             node_type = getattr(metadata, "structure_reference", None)
 
-            is_outline_static = (node_type == "outline_2d_geometry_static") or ignore_check
-            is_outline_rz = (
-                "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
-            ) or ignore_check
+            is_outline_static = node_type == "outline_2d_geometry_static"
+            is_outline_rz = "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
 
             if is_outline_static or is_outline_rz:
                 tensorized_path = self._add_index_to_aos_in_path(root_metadata, metadata.path_string)
@@ -719,20 +715,15 @@ class IMASPythonSource(DataSourceInterface):
                 parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
 
                 for child in metadata:
-                    child_node_type = getattr(child, "structure_reference", None)
+                    if child.data_type == IDSDataType.STRUCTURE:
+                        for grand_child in child:
+                            is_error_node = any(
+                                error_node in grand_child.name
+                                for error_node in ["_error_upper", "_error_lower", "_error_index"]
+                            )
+                            if show_error_bars or not is_error_node:
+                                parameters_entry["parameters"].append(f"{child.name}/{grand_child.name}")
 
-                    if child_node_type is not None:
-                        _walk_outline_nodes(
-                            uri=uri,
-                            ids=ids,
-                            occurrence=occurrence,
-                            root_metadata=root_metadata,
-                            metadata=child,
-                            results=results,
-                            show_error_bars=show_error_bars,
-                            ignore_check=True,
-                            filled_paths=filled_paths,
-                        )
                     else:
                         is_error_node = any(
                             error_node in child.name for error_node in ["_error_upper", "_error_lower", "_error_index"]
