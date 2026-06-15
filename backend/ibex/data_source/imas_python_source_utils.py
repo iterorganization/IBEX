@@ -70,7 +70,7 @@ def apply_simple_operations(data: list | np.ndarray, plot_data_query: Any):
     """
     Apply simple scalar operations to data.
     Operations are applied in the following order:
-    addition, multiplication, division, exponentiation, root.
+    addition, subtraction, multiplication, division, exponentiation, root.
     """
 
     if isinstance(data, list):
@@ -80,6 +80,9 @@ def apply_simple_operations(data: list | np.ndarray, plot_data_query: Any):
 
         if plot_data_query.addition_addend is not None:
             result = result + plot_data_query.addition_addend
+
+        if plot_data_query.subtraction_subtrahend is not None:
+            result = result - plot_data_query.subtraction_subtrahend
 
         if plot_data_query.multiplication_factor is not None:
             result = result * plot_data_query.multiplication_factor

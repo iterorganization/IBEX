@@ -175,7 +175,7 @@ available_methods.data_manipulation_methods.append(data_smoothing_description)
 
 simple_data_operations_description = DataManipulationOperation(
     name="Simple Data Operations",
-    description="Sequence of scalar operations applied to the dataset in this order: addition, multiplication, division, exponentiation, and root.",
+    description="Sequence of scalar operations applied to the dataset in this order: addition, subtraction, multiplication, division, exponentiation, and root.",
     method_parameters=[],
 )
 
@@ -185,10 +185,16 @@ data_addition_scalar_parameter = DataManipulationParameter(
     description="Scalar value added to every data point. Executed first.",
 )
 
+data_subtraction_subtrahend_parameter = DataManipulationParameter(
+    human_readable_name="Subtraction",
+    name="subtraction_subtrahend",
+    description="Scalar value subtracted from every data point. Executed after addition.",
+)
+
 data_multiplication_scalar_parameter = DataManipulationParameter(
     human_readable_name="Multiplication",
     name="multiplication_factor",
-    description="Scalar value used to multiply every data point. Executed after addition.",
+    description="Scalar value used to multiply every data point. Executed after subtraction.",
 )
 
 data_division_scalar_parameter = DataManipulationParameter(
@@ -210,6 +216,7 @@ data_root_degree_parameter = DataManipulationParameter(
 )
 
 simple_data_operations_description.method_parameters.append(data_addition_scalar_parameter)
+simple_data_operations_description.method_parameters.append(data_subtraction_subtrahend_parameter)
 simple_data_operations_description.method_parameters.append(data_multiplication_scalar_parameter)
 simple_data_operations_description.method_parameters.append(data_division_scalar_parameter)
 simple_data_operations_description.method_parameters.append(data_exponentiation_exponent_parameter)

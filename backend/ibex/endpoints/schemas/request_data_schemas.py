@@ -86,6 +86,10 @@ class SimpleOperationsParameters(BaseModel):
         default=None,
         description="Scalar value added to every data point.",
     )
+    subtraction_subtrahend: float | None = Field(
+        default=None,
+        description="Scalar value subtracted from every data point.",
+    )
     multiplication_factor: float | None = Field(
         default=None,
         description="Scalar value used to multiply every data point.",

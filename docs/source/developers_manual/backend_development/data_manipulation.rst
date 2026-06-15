@@ -101,6 +101,7 @@ Simple scalar operations
 IBEX also supports a sequence of scalar operations that can be applied to the returned dataset:
 
 * addition
+* subtraction
 * multiplication
 * division
 * exponentiation
@@ -111,6 +112,7 @@ These operations are executed in that order. In practice, the backend applies th
 The corresponding request parameters are:
 
 * ``addition_addend``
+* ``subtraction_subtrahend``
 * ``multiplication_factor``
 * ``division_divisor``
 * ``exponentiation_exponent``

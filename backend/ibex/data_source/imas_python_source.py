@@ -788,7 +788,17 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= BEGIN simple operations ============
 
-            data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query)
+            if any(
+                [
+                    plot_data_query.addition_addend is not None,
+                    plot_data_query.subtraction_subtrahend is not None,
+                    plot_data_query.multiplication_factor is not None,
+                    plot_data_query.division_divisor is not None,
+                    plot_data_query.exponentiation_exponent is not None,
+                    plot_data_query.root_degree is not None,
+                ]
+            ):
+                data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query)
 
             # ============= END simple operations =============
 

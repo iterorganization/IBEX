@@ -57,6 +57,7 @@ def test_apply_savitzky_golay_smoothing():
     ("request_kwargs", "data", "expected"),
     [
         ({"addition_addend": 2}, np.array([1.0, 2.0, 3.0]), np.array([3.0, 4.0, 5.0])),
+        ({"subtraction_subtrahend": 1}, np.array([3.0, 4.0, 5.0]), np.array([2.0, 3.0, 4.0])),
         ({"multiplication_factor": 3}, np.array([1.0, 2.0, 3.0]), np.array([3.0, 6.0, 9.0])),
         ({"division_divisor": 2}, np.array([2.0, 4.0, 6.0]), np.array([1.0, 2.0, 3.0])),
         ({"exponentiation_exponent": 2}, np.array([2.0, 3.0, 4.0]), np.array([4.0, 9.0, 16.0])),
@@ -83,6 +84,7 @@ def test_apply_simple_operations_rejects_division_by_zero():
     request = SimpleNamespace(
         division_divisor=0,
         addition_addend=None,
+        subtraction_subtrahend=None,
         multiplication_factor=None,
         exponentiation_exponent=None,
         root_degree=None,
