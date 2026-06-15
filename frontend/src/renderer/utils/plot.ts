@@ -17,6 +17,7 @@ import {
   PlotLine,
   URIData,
   URITreeNodeData,
+  GeometryInfos,
 } from '../types';
 import { ScatterData } from 'plotly.js';
 import { fetchDataPlot, fetchFieldValue } from './fetchData';
@@ -950,7 +951,7 @@ const fetchGeometryRectangle = async (
       mode: 'lines',
       line: { color: 'orange', width: 2 },
       geometryUri: uri + path,
-      nodeUris: [uri + rPath, uri + zPath],
+      nodeUris: [uri + rPath, uri + zPath, uri + widthPath, uri + heightPath],
       name: groupLegend,
       legendgroup: groupLegend,
       showlegend: false,
@@ -1080,7 +1081,14 @@ const fetchGeometryOblique = async (
       mode: 'lines',
       line: { color: 'orange', width: 2 },
       geometryUri: uri + path,
-      nodeUris: [uri + rPath, uri + zPath],
+      nodeUris: [
+        uri + rPath,
+        uri + zPath,
+        uri + lengthAlphaPath,
+        uri + lengthBetaPath,
+        uri + alphaPath,
+        uri + betaPath,
+      ],
       name: groupLegend,
       legendgroup: groupLegend,
       showlegend: false,
@@ -1095,8 +1103,19 @@ export const fetchGeometries = async (
   wantedGeometryPath: string,
   dataPlot: DataGridPlot,
   updatedCheckedNodeURI?: URITreeNodeData[],
+  geometryInfos?: GeometryInfos,
+  dataURI?: URIData[],
 ) => {
   try {
+    // Replace uri name by real uri if needed
+    if (wantedGeometryPath.split('#')[0].includes('URI-')) {
+      const uriName = wantedGeometryPath.split('#')[0];
+      const realUri = dataURI.find((uri) => uri.name === uriName)?.uri;
+      if (realUri) {
+        wantedGeometryPath = realUri + '#' + wantedGeometryPath.split('#')[1];
+      }
+    }
+
     const uri = wantedGeometryPath.split('#')[0];
     const path = '#' + wantedGeometryPath.split('#')[1];
 
@@ -1114,22 +1133,32 @@ export const fetchGeometries = async (
         shouldSwitchAxis,
       );
       dataPlot.geometrie.push(contourGeometry);
-    } else if (typeOfGeometry === 'rectangle') {
-      // Get rectangle
-      const rectangleGeometry = await fetchGeometryRectangle(
-        uri,
-        path,
-        shouldSwitchAxis,
+    } else if (typeOfGeometry === 'geometry') {
+      const types = Array.from(
+        new Set([
+          ...geometryInfos.parameters.map((param) => param.split('/')[0]),
+        ]),
       );
-      dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
-    } else if (typeOfGeometry === 'oblique') {
-      // Get oblique
-      const obliqueGeometry = await fetchGeometryOblique(
-        uri,
-        path,
-        shouldSwitchAxis,
-      );
-      dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
+
+      for (const type of types) {
+        if (type === 'rectangle') {
+          // Get rectangle
+          const rectangleGeometry = await fetchGeometryRectangle(
+            uri,
+            path + type + '/',
+            shouldSwitchAxis,
+          );
+          dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
+        } else if (type === 'oblique') {
+          // Get oblique
+          const obliqueGeometry = await fetchGeometryOblique(
+            uri,
+            path + type + '/',
+            shouldSwitchAxis,
+          );
+          dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
+        }
+      }
     } else {
       showNotification({
         title: `Unable to plot ${typeOfGeometry} geometry`,
@@ -1626,6 +1655,7 @@ function formatCoordinates(
  */
 export async function plotNodeUriLoaded(
   dataGridPlot: DataGridPlot[],
+  dataURI: URIData[],
 ): Promise<DataGridPlot[]> {
   try {
     let errorHasOccurred = false;
@@ -1807,12 +1837,23 @@ export async function plotNodeUriLoaded(
 
         // Retrieve saved geometries
         if (dataGridUpdated.geometrie.length) {
-          const listOfGeometries = Array.from(
-            new Set(dataGridUpdated.geometrie.map((g) => g.geometryUri)),
-          );
+          const listOfGeometries: GeometryInfos[] =
+            dataGridUpdated.geometrie.map((geo) => ({
+              geometryUri: geo.geometryUri,
+              parameters: geo.nodeUris,
+            }));
           dataGridUpdated.geometrie = [];
           for (const geometry of listOfGeometries) {
-            await fetchGeometries(geometry, dataGridUpdated);
+            const geometryToDisplay = listOfGeometries.find(
+              (g) => g.geometryUri === geometry.geometryUri,
+            );
+            await fetchGeometries(
+              geometry.geometryUri,
+              dataGridUpdated,
+              undefined,
+              geometryToDisplay,
+              dataURI,
+            );
           }
         }
 
@@ -2774,4 +2815,44 @@ export async function applyRangeInPlot(
       updatedPlot.error_bands = swapped_error_bands;
     }
   }
+}
+
+export function formatGeometriesToSave(
+  geometries: Geometry[],
+  dataURI: URIData[],
+): Partial<Geometry>[] {
+  const result: Partial<Geometry>[] = [];
+  const geometryMap = new Map<string, Set<string>>();
+
+  for (const geom of geometries) {
+    const splittedUri = geom.geometryUri.split('#');
+
+    const normalizedUri =
+      splittedUri.length >= 0
+        ? `${dataURI.find((uri) => uri.uri === splittedUri[0]).name}#${splittedUri[1]}`
+        : geom.geometryUri;
+
+    const match = normalizedUri.match(/(.*\/geometry\/)([^/]+)$/);
+
+    if (match) {
+      const [, baseUri, parameter] = match;
+
+      if (!geometryMap.has(baseUri)) {
+        geometryMap.set(baseUri, new Set());
+      }
+
+      geometryMap.get(baseUri)!.add(parameter);
+    } else {
+      result.push({ geometryUri: normalizedUri, nodeUris: [] });
+    }
+  }
+
+  for (const [geometryUri, parameters] of geometryMap.entries()) {
+    result.push({
+      geometryUri,
+      nodeUris: [...parameters],
+    });
+  }
+
+  return result;
 }

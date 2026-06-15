@@ -334,7 +334,10 @@ export const VisualizationURIModal = ({
 
     // Get new data from BE
     const newListDataGridPlot = formatConfigBeforeLoadingURIs(active);
-    const wantedDataPlot = await plotNodeUriLoaded(newListDataGridPlot);
+    const wantedDataPlot = await plotNodeUriLoaded(
+      newListDataGridPlot,
+      active.dataURI,
+    );
     active.dataPlot = wantedDataPlot;
 
     const updatedActive: Configuration = {

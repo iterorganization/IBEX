@@ -143,3 +143,8 @@ export type synchronizedList = {
 };
 
 export type PlotType = '1D' | 'Heatmap' | 'Contour';
+
+export type GeometryInfos = {
+  geometryUri: string;
+  parameters: string[];
+};
