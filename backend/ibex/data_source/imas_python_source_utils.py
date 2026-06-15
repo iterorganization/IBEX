@@ -66,39 +66,72 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
         raise InvalidParametersException(msg)
 
 
+def _safe_division(data, divisor):
+    if divisor == 0:
+        raise InvalidParametersException("division_divisor cannot be 0")
+    return data / divisor
+
+
 def apply_simple_operations(data: list | np.ndarray, plot_data_query: Any):
     """
     Apply simple scalar operations to data.
-    Operations are applied in the following order:
-    addition, subtraction, multiplication, division, exponentiation, root.
+    Execution order is determined by the *_priority parameters from the request.
+    Defaults: addition=1, subtraction=2, multiplication=3, division=4, exponentiation=5, root=6.
     """
+
+    _SIMPLE_OPERATION_DEFS = [
+        {
+            "value_field": "addition_addend",
+            "priority_field": "addition_priority",
+            "default_priority": 1,
+            "func": lambda r, v: r + v,
+        },
+        {
+            "value_field": "subtraction_subtrahend",
+            "priority_field": "subtraction_priority",
+            "default_priority": 2,
+            "func": lambda r, v: r - v,
+        },
+        {
+            "value_field": "multiplication_factor",
+            "priority_field": "multiplication_priority",
+            "default_priority": 3,
+            "func": lambda r, v: r * v,
+        },
+        {
+            "value_field": "division_divisor",
+            "priority_field": "division_priority",
+            "default_priority": 4,
+            "func": lambda r, v: _safe_division(r, v),
+        },
+        {
+            "value_field": "exponentiation_exponent",
+            "priority_field": "exponentiation_priority",
+            "default_priority": 5,
+            "func": lambda r, v: np.power(r, v),
+        },
+        {
+            "value_field": "root_degree",
+            "priority_field": "root_priority",
+            "default_priority": 6,
+            "func": lambda r, v: np.power(r, 1 / v),
+        },
+    ]
 
     if isinstance(data, list):
         return [apply_simple_operations(x, plot_data_query) for x in data]
     elif isinstance(data, (np.ndarray, IDSNumericArray)):
         result = data
 
-        if plot_data_query.addition_addend is not None:
-            result = result + plot_data_query.addition_addend
+        operations = []
+        for op in _SIMPLE_OPERATION_DEFS:
+            value = getattr(plot_data_query, op["value_field"])
+            if value is not None:
+                priority = getattr(plot_data_query, op["priority_field"]) or op["default_priority"]
+                operations.append({"priority": priority, "func": op["func"], "value": value})
 
-        if plot_data_query.subtraction_subtrahend is not None:
-            result = result - plot_data_query.subtraction_subtrahend
-
-        if plot_data_query.multiplication_factor is not None:
-            result = result * plot_data_query.multiplication_factor
-
-        if plot_data_query.division_divisor is not None:
-            if plot_data_query.division_divisor == 0:
-                raise InvalidParametersException("division_divisor cannot be 0")
-            result = result / plot_data_query.division_divisor
-
-        if plot_data_query.exponentiation_exponent is not None:
-            result = np.power(result, plot_data_query.exponentiation_exponent)
-
-        if plot_data_query.root_degree is not None:
-            if plot_data_query.root_degree == 0:
-                raise InvalidParametersException("root_degree cannot be 0")
-            result = np.power(result, 1 / plot_data_query.root_degree)
+        for op in sorted(operations, key=lambda x: x["priority"]):
+            result = op["func"](result, op["value"])
 
         return result
     else:

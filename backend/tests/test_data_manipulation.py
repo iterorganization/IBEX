@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from types import SimpleNamespace
 from ibex.data_source.exception import InvalidParametersException
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
@@ -81,14 +80,22 @@ def test_apply_simple_operations_recurses_over_lists():
 
 
 def test_apply_simple_operations_rejects_division_by_zero():
-    request = SimpleNamespace(
-        division_divisor=0,
-        addition_addend=None,
-        subtraction_subtrahend=None,
-        multiplication_factor=None,
-        exponentiation_exponent=None,
-        root_degree=None,
-    )
+    request = PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", division_divisor=0)
 
     with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
         apply_simple_operations(np.array([1.0, 2.0]), request)
+
+
+def test_apply_simple_operations_uses_priority_order():
+    request = PlotDataRequestModel(
+        uri="imas:hdf5?path=/dummy#dummy",
+        addition_addend=1,
+        multiplication_factor=2,
+        addition_priority=2,
+        multiplication_priority=1,
+    )
+    data = np.array([5.0])
+    # default order: add then multiply -> (5+1)*2 = 12
+    # priority order: multiply then add -> (5*2)+1 = 11
+    result = apply_simple_operations(data, request)
+    assert result == pytest.approx([11.0])

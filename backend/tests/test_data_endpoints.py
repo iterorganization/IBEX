@@ -97,10 +97,15 @@ def test_plot_data_with_savgol_smoothing(entry_path):
 
 
 def test_plot_data_with_simple_operations(entry_path):
+    # core_profiles.time = [1,2,3,4,5] (float)
     cases = [
         (
             {"addition_addend": 2, "multiplication_factor": 3},
             [9.0, 12.0, 15.0, 18.0, 21.0],
+        ),
+        (
+            {"addition_addend": 2, "multiplication_factor": 3, "addition_priority": 6, "multiplication_priority": 1},
+            [5.0, 8.0, 11.0, 14.0, 17.0],
         ),
         (
             {"division_divisor": 2},
