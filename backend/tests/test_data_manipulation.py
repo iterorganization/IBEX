@@ -7,6 +7,7 @@ from ibex.data_source.imas_python_source_utils import (
     apply_simple_operations,
 )
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
+from pydantic_core._pydantic_core import ValidationError
 
 
 def test_apply_gaussian_smoothing():
@@ -80,10 +81,8 @@ def test_apply_simple_operations_recurses_over_lists():
 
 
 def test_apply_simple_operations_rejects_division_by_zero():
-    request = PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", division_divisor=0)
-
-    with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
-        apply_simple_operations(np.array([1.0, 2.0]), request)
+    with pytest.raises(ValidationError, match="division_divisor cannot be 0"):
+        PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", division_divisor=0)
 
 
 def test_apply_simple_operations_uses_priority_order():
