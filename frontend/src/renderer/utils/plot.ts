@@ -1132,7 +1132,7 @@ export const fetchGeometries = async (
         path,
         shouldSwitchAxis,
       );
-      dataPlot.geometrie.push(contourGeometry);
+      dataPlot.geometries.push(contourGeometry);
     } else if (typeOfGeometry === 'geometry') {
       const types = Array.from(
         new Set([
@@ -1148,7 +1148,7 @@ export const fetchGeometries = async (
             path + type + '/',
             shouldSwitchAxis,
           );
-          dataPlot.geometrie = [...dataPlot.geometrie, ...rectangleGeometry];
+          dataPlot.geometries = [...dataPlot.geometries, ...rectangleGeometry];
         } else if (type === 'oblique') {
           // Get oblique
           const obliqueGeometry = await fetchGeometryOblique(
@@ -1156,7 +1156,7 @@ export const fetchGeometries = async (
             path + type + '/',
             shouldSwitchAxis,
           );
-          dataPlot.geometrie = [...dataPlot.geometrie, ...obliqueGeometry];
+          dataPlot.geometries = [...dataPlot.geometries, ...obliqueGeometry];
         }
       }
     } else {
@@ -1168,10 +1168,10 @@ export const fetchGeometries = async (
       return;
     }
 
-    if (dataPlot?.geometrie) {
+    if (dataPlot?.geometries) {
       const displayedLegendGroups: string[] = [];
       // Show each group in legend
-      for (const geometry of dataPlot.geometrie) {
+      for (const geometry of dataPlot.geometries) {
         if (!displayedLegendGroups.find((lg) => lg === geometry.legendgroup)) {
           displayedLegendGroups.push(geometry.legendgroup);
           geometry.showlegend = true;
@@ -1179,9 +1179,9 @@ export const fetchGeometries = async (
       }
     }
 
-    if (dataPlot.isEditing && dataPlot?.geometrie && updatedCheckedNodeURI) {
+    if (dataPlot.isEditing && dataPlot?.geometries && updatedCheckedNodeURI) {
       // Check geometries in tree
-      for (const geometry of dataPlot.geometrie) {
+      for (const geometry of dataPlot.geometries) {
         for (const uriOfGeo of geometry.nodeUris) {
           const newCheckedNode = {
             name: dataPlot.plot[0].labelUri,
@@ -1601,7 +1601,7 @@ export function formatConfigBeforeLoadingURIs(
           unit: '',
         } as DataPlotly;
       }),
-      geometrie: (data?.geometrie as Geometry[]) || [],
+      geometries: (data?.geometries as Geometry[]) || [],
       synchronizedGrids: data?.synchronizedGrids
         ? data.synchronizedGrids
         : { color: '', list: [] },
@@ -1836,13 +1836,13 @@ export async function plotNodeUriLoaded(
         }
 
         // Retrieve saved geometries
-        if (dataGridUpdated.geometrie.length) {
+        if (dataGridUpdated.geometries.length) {
           const listOfGeometries: GeometryInfos[] =
-            dataGridUpdated.geometrie.map((geo) => ({
+            dataGridUpdated.geometries.map((geo) => ({
               geometryUri: geo.geometryUri,
               parameters: geo.nodeUris,
             }));
-          dataGridUpdated.geometrie = [];
+          dataGridUpdated.geometries = [];
           for (const geometry of listOfGeometries) {
             const geometryToDisplay = listOfGeometries.find(
               (g) => g.geometryUri === geometry.geometryUri,
@@ -2212,9 +2212,9 @@ export const swapAxis = async (
   // Limit coordinate sliders to the max of their new shape
   limitSlidersToMaxLength(updatedDataPlot.coordinates);
 
-  if (updatedDataPlot.geometrie) {
-    // Swap geometrie x & y in the case we swap x & y coordinates
-    for (const geo of updatedDataPlot.geometrie) {
+  if (updatedDataPlot.geometries) {
+    // Swap geometries x & y in the case we swap x & y coordinates
+    for (const geo of updatedDataPlot.geometries) {
       const tempX = geo.x;
       geo.x = geo.y;
       geo.y = tempX;
@@ -2832,7 +2832,7 @@ export function formatGeometriesToSave(
         ? `${dataURI.find((uri) => uri.uri === splittedUri[0]).name}#${splittedUri[1]}`
         : geom.geometryUri;
 
-    const match = normalizedUri.match(/(.*\/geometry\/)([^/]+)$/);
+    const match = normalizedUri.match(/(.*\/geometry\/)([^/]+)\/?$/);
 
     if (match) {
       const [, baseUri, parameter] = match;

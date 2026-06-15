@@ -125,7 +125,7 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   downsampled_method?: string;
   downsampled_size?: number;
   selectedPlotMode?: PlotType;
-  geometrie: Geometry[];
+  geometries: Geometry[];
   is_geometry_node: boolean;
 }
 
@@ -134,7 +134,7 @@ export interface DataGridPlotToSave extends BaseDataGridPlot {
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
   is_geometry_node: boolean;
-  geometrie: Partial<Geometry>[];
+  geometries: Partial<Geometry>[];
 }
 
 export type synchronizedList = {

@@ -25,7 +25,7 @@ export const CustomizeGeometry = ({
     return [
       ...new Set(
         formatGeometriesToSave(
-          customizedDataGrid.geometrie,
+          customizedDataGrid.geometries,
           active.dataURI,
         ).map((geo) => geo.geometryUri),
       ),
@@ -37,7 +37,7 @@ export const CustomizeGeometry = ({
     // TODO : call BE endpoint to get geometries and fill multiselect data
     const rawData: GeometryInfos[] = [
       {
-        geometryUri: 'URI-0#wall/description_2d[:]/limiter/unit[:]/outline/',
+        geometryUri: 'URI-0#wall:0/description_2d[:]/limiter/unit[:]/outline/',
         parameters: ['r', 'z'],
       },
       {
@@ -91,19 +91,19 @@ export const CustomizeGeometry = ({
 
     if (!values.length) {
       // Remove all geometries
-      customizedDataGrid.geometrie = [];
+      customizedDataGrid.geometries = [];
     } else {
       if (values.length < selectedGeometries.length) {
         // Remove selected geometry
         const selectUriToRemove = selectedGeometries.find(
           (value) => !values.includes(value),
-        ); // Get selected geometrie
+        ); // Get selected geometries
         const uri = active.dataURI.find(
           (uri) => uri.name === selectUriToRemove.split('#')[0],
         )?.uri;
         const pathToRemove = '#' + selectUriToRemove.split('#')[1];
         const fullPathToRemove = uri + pathToRemove;
-        customizedDataGrid.geometrie = customizedDataGrid.geometrie.filter(
+        customizedDataGrid.geometries = customizedDataGrid.geometries.filter(
           (geoToRemove) => !geoToRemove.geometryUri.includes(fullPathToRemove),
         );
       } else if (values.length > selectedGeometries.length) {
@@ -112,7 +112,7 @@ export const CustomizeGeometry = ({
           '#' +
           values
             .find((value) => !selectedGeometries.includes(value))
-            .split('#')[1]; // Get selected geometrie
+            .split('#')[1]; // Get selected geometries
 
         const wantedGeometryInfos: GeometryInfos = geometriesAvailable.find(
           (geo) => geo.geometryUri.includes(added),
@@ -136,7 +136,7 @@ export const CustomizeGeometry = ({
           return;
         }
 
-        customizedDataGrid.geometrie = fetchedGeometrie.geometrie;
+        customizedDataGrid.geometries = fetchedGeometrie.geometries;
       }
     }
     setCustomizedDataGrid({

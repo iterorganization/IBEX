@@ -326,7 +326,7 @@ export const Heatmap2D = ({
                             coord.axeIndex === (targetAxis === 'y' ? 1 : 0),
                         ).name
                       }
-                      data={(itemDataGrid.geometrie.length // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
+                      data={(itemDataGrid.geometries.length // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
                         ? itemDataGrid.coordinates.filter(
                             (coord) =>
                               coord.axeIndex === 0 || coord.axeIndex === 1,
@@ -460,7 +460,7 @@ export const Heatmap2D = ({
               },
 
               // Add geometries in contour type
-              ...(itemDataGrid?.geometrie ?? []),
+              ...(itemDataGrid?.geometries ?? []),
             ]}
             config={{
               autosizable: false,

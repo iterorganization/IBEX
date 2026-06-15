@@ -328,9 +328,9 @@ export const GridLayoutPlot = ({
           }
         }
 
-        if (findPlot?.geometrie) {
+        if (findPlot?.geometries) {
           // Check geometries in tree
-          for (const geometry of findPlot.geometrie) {
+          for (const geometry of findPlot.geometries) {
             for (const uriOfGeo of geometry.nodeUris) {
               const newCheckedNode = {
                 name: findPlot.plot[0].labelUri,

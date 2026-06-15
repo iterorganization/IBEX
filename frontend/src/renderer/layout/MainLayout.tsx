@@ -108,7 +108,10 @@ export function MainLayout() {
         downsampled_size: dataGrid?.downsampled_size,
         interpolated_method: dataGrid.interpolated_method,
         is_geometry_node: dataGrid.is_geometry_node,
-        geometrie: formatGeometriesToSave(dataGrid?.geometrie, active.dataURI),
+        geometries: formatGeometriesToSave(
+          dataGrid?.geometries,
+          active.dataURI,
+        ),
         xAxisData: dataGrid.xAxisData,
         yAxisData: dataGrid.yAxisData,
         y2AxisData: dataGrid?.y2AxisData,

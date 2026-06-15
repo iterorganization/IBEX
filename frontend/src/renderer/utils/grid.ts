@@ -44,7 +44,7 @@ export const generateNewGrid = (
     y: findNextAvailableY(existingPlots),
     w: 6,
     h: 12,
-    geometrie: [],
+    geometries: [],
     is_geometry_node: node.is_geometry_node,
   };
 };
