@@ -120,3 +120,44 @@ class PlotDataRequestModel(
                 )
 
         return self
+
+    @model_validator(mode="after")
+    def validate_arithmetic_parameters(self) -> "PlotDataRequestModel":
+        if self.division_divisor == 0:
+            raise ValueError("division_divisor cannot be 0")
+
+        signal_uri_lists = [
+            self.signal_addition_addend_uri,
+            self.signal_subtraction_subtrahend_uri,
+            self.signal_multiplication_factor_uri,
+            self.signal_division_divisor_uri,
+        ]
+        for uri_list in signal_uri_lists:
+            if uri_list:
+                for signal_uri in uri_list:
+                    if not self.interpolate_over or signal_uri not in self.interpolate_over:
+                        raise ValueError(f"Signal URI '{signal_uri}' must be listed in interpolate_over")
+
+        signal_priorities = [
+            self.signal_addition_priority,
+            self.signal_subtraction_priority,
+            self.signal_multiplication_priority,
+            self.signal_division_priority,
+        ]
+        defined_signal_priorities = [p for p in signal_priorities if p is not None]
+        if len(defined_signal_priorities) != len(set(defined_signal_priorities)):
+            raise ValueError("signal operation priorities must be unique")
+
+        priorities = [
+            self.addition_priority,
+            self.subtraction_priority,
+            self.multiplication_priority,
+            self.division_priority,
+            self.exponentiation_priority,
+            self.root_priority,
+        ]
+        defined_priorities = [p for p in priorities if p is not None]
+        if len(defined_priorities) != len(set(defined_priorities)):
+            raise ValueError("operation priorities must be unique")
+
+        return self

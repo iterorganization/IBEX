@@ -66,7 +66,10 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
 
 
 def _safe_division(data, divisor):
-    if divisor == 0:
+    if isinstance(divisor, np.ndarray):
+        if np.any(divisor == 0):
+            raise InvalidParametersException("Division by zero is not allowed")
+    elif divisor == 0:
         raise InvalidParametersException("Division by zero is not allowed")
     return data / divisor
 
@@ -103,6 +106,41 @@ def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
     else:
         msg = "Simple operations can be executed only on numeric arrays, not single values or strings."
         raise InvalidParametersException(msg)
+
+
+def apply_signal_operations(data: list | np.ndarray, plot_data_query: Any, signal_data_by_uri: dict):
+    """
+    Apply signal operations to data.
+
+    :param data: The input data array.
+    :param plot_data_query: Request model with signal URI fields.
+    :param signal_data_by_uri: Dict mapping signal URIs to their interpolated data arrays.
+    """
+    # signal_data_by_uri: {
+    #   uri : <uri>
+    #   data : <ids_data>
+    #   interpolated_data : <data with shape of argument "data">
+    # }
+
+    _SIGNAL_OPERATION_DEFS = [
+        ("signal_addition_addend_uri", "signal_addition_priority", 1, lambda r, v: r + v),
+        ("signal_subtraction_subtrahend_uri", "signal_subtraction_priority", 2, lambda r, v: r - v),
+        ("signal_multiplication_factor_uri", "signal_multiplication_priority", 3, lambda r, v: r * v),
+        ("signal_division_divisor_uri", "signal_division_priority", 4, lambda r, v: _safe_division(r, v)),
+    ]
+
+    operations = []
+    for uri_field, priority_field, default_priority, func in _SIGNAL_OPERATION_DEFS:
+        uris = getattr(plot_data_query, uri_field)
+        if uris:
+            for uri in uris:
+                priority = getattr(plot_data_query, priority_field) or default_priority
+                signal_data = signal_data_by_uri[uri]
+                operations.append({"priority": priority, "func": func, "value": signal_data})
+
+    for op in sorted(operations, key=lambda x: x["priority"]):
+        data = op["func"](data, op["value"])
+    return data
 
 
 def union_arrays(data: list):
