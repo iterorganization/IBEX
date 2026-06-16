@@ -3,10 +3,63 @@ import pytest
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_savgol_filter,
+    apply_signal_operations,
     apply_simple_operations,
 )
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 from pydantic_core._pydantic_core import ValidationError
+
+
+def test_apply_signal_operations_addition():
+    addend_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([1.0, 2.0, 3.0])
+    request = PlotDataRequestModel(
+        uri="imas:hdf5?path=/dummy#dummy",
+        interpolate_over=[addend_uri],
+        signal_addition_addend_uri=[addend_uri],
+    )
+    signal_data_by_uri = {addend_uri: np.array([10.0, 20.0, 30.0])}
+    result = apply_signal_operations(data, request, signal_data_by_uri)
+    assert np.allclose(result, [11.0, 22.0, 33.0])
+
+
+def test_apply_signal_operations_subtraction():
+    subtrahend_uri = "imas:hdf5?path=/dummy/interpolation_db_2#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([10.0, 20.0, 30.0])
+    request = PlotDataRequestModel(
+        uri="imas:hdf5?path=/dummy#dummy",
+        interpolate_over=[subtrahend_uri],
+        signal_subtraction_subtrahend_uri=[subtrahend_uri],
+    )
+    signal_data_by_uri = {subtrahend_uri: np.array([1.0, 2.0, 3.0])}
+    result = apply_signal_operations(data, request, signal_data_by_uri)
+    assert np.allclose(result, [9.0, 18.0, 27.0])
+
+
+def test_apply_signal_operations_multiplication():
+    factor_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([1.0, 2.0, 3.0])
+    request = PlotDataRequestModel(
+        uri="imas:hdf5?path=/dummy#dummy",
+        interpolate_over=[factor_uri],
+        signal_multiplication_factor_uri=[factor_uri],
+    )
+    signal_data_by_uri = {factor_uri: np.array([2.0, 3.0, 4.0])}
+    result = apply_signal_operations(data, request, signal_data_by_uri)
+    assert np.allclose(result, [2.0, 6.0, 12.0])
+
+
+def test_apply_signal_operations_division():
+    divisor_uri = "imas:hdf5?path=/dummy/interpolation_db_2#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([10.0, 20.0, 30.0])
+    request = PlotDataRequestModel(
+        uri="imas:hdf5?path=/dummy#dummy",
+        interpolate_over=[divisor_uri],
+        signal_division_divisor_uri=[divisor_uri],
+    )
+    signal_data_by_uri = {divisor_uri: np.array([2.0, 5.0, 6.0])}
+    result = apply_signal_operations(data, request, signal_data_by_uri)
+    assert np.allclose(result, [5.0, 4.0, 5.0])
 
 
 def test_apply_gaussian_smoothing():

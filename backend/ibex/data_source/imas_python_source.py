@@ -50,6 +50,7 @@ from ibex.data_source.imas_python_source_utils import (
     apply_savgol_filter,
     apply_gaussian_filter,
     apply_simple_operations,
+    apply_signal_operations,
 )
 from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
@@ -831,7 +832,6 @@ class IMASPythonSource(DataSourceInterface):
             # ============= END data smoothing =============
 
             # ============= BEGIN resample data onto new time vector =============
-
             def convert_to_lists(data):
                 if isinstance(data, list):
                     return [convert_to_lists(d) for d in data]
@@ -839,6 +839,10 @@ class IMASPythonSource(DataSourceInterface):
                     return data.tolist()
                 else:
                     return data
+
+            # list of dicts used when combining signals after
+            # {uri:str, data:list[*], interpolated_data: list[*]}
+            others_signals_data = {}
 
             if plot_data_query.interpolate_over:
                 # =================== GATHER ALL COORDINATES ===================
@@ -848,6 +852,17 @@ class IMASPythonSource(DataSourceInterface):
                     c["value"] = convert_to_lists(c["value"])
                     original_coord_values.append(sorted(set(flatten(c["value"]))))
                 original_coord_values.reverse()
+
+                store_other_signals_data = False  # used for signal combining after interpolation
+                if any(
+                    [
+                        plot_data_query.signal_addition_addend_uri,
+                        plot_data_query.signal_subtraction_subtrahend_uri,
+                        plot_data_query.signal_multiplication_factor_uri,
+                        plot_data_query.signal_division_divisor_uri,
+                    ]
+                ):
+                    store_other_signals_data = True
 
                 for _uri in plot_data_query.interpolate_over:
                     _uri_obj = IMAS_URI(_uri)
@@ -861,7 +876,17 @@ class IMASPythonSource(DataSourceInterface):
                     new_plot_data_query.uri = _uri
                     new_plot_data_query.interpolate_over = None
                     new_plot_data_query.smoothing_method = None
-                    interpolate_to_coordinates = self.get_plot_data(new_plot_data_query)["data"]["coordinates"]
+                    # interpolate_to will be used later with signal combining
+                    interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
+                    interpolate_to_coordinates = interpolate_to["coordinates"]
+                    if store_other_signals_data:
+                        others_signals_data[_uri] = {
+                            "uri": _uri,
+                            "data": interpolate_to["value"],
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
+                            ],
+                        }
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
                         message = "Interpolation error. Source and target nodes have different number of coordinates."
@@ -910,6 +935,32 @@ class IMASPythonSource(DataSourceInterface):
                     c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
+
+            # ============= BEGIN signal operations =============
+
+            _SIGNAL_URI_FIELDS = [
+                "signal_addition_addend_uri",
+                "signal_subtraction_subtrahend_uri",
+                "signal_multiplication_factor_uri",
+                "signal_division_divisor_uri",
+            ]
+
+            for field in _SIGNAL_URI_FIELDS:
+                signal_uris = getattr(plot_data_query, field)
+                if signal_uris:
+                    for signal_uri in signal_uris:
+                        if "interpolated_data" not in others_signals_data[signal_uri]:
+                            signal_data = pad_to_rectangular(others_signals_data[signal_uri]["data"])
+                            signal_data = resample_data_without_interpolation(
+                                tuple(others_signals_data[signal_uri]["coordinates"]),
+                                signal_data,
+                                tuple(common_coords_values),
+                            )
+                            others_signals_data[uri]["interpolated_data"] = signal_data
+
+            data_to_be_returned = apply_signal_operations(data_to_be_returned, plot_data_query, others_signals_data)
+
+            # ============= END signal operations =============
 
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape
