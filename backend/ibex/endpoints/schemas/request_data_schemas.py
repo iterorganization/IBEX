@@ -81,57 +81,6 @@ class GaussianSmoothingParameters(BaseModel):
     )
 
 
-class SimpleOperationsParameters(BaseModel):
-    addition_addend: float | None = Field(
-        default=None,
-        description="Scalar value added to every data point.",
-    )
-    addition_priority: int | None = Field(
-        default=None,
-        description="Execution order priority for addition. Lower value = earlier execution. Default: 1.",
-    )
-    subtraction_subtrahend: float | None = Field(
-        default=None,
-        description="Scalar value subtracted from every data point.",
-    )
-    subtraction_priority: int | None = Field(
-        default=None,
-        description="Execution order priority for subtraction. Lower value = earlier execution. Default: 2.",
-    )
-    multiplication_factor: float | None = Field(
-        default=None,
-        description="Scalar value used to multiply every data point.",
-    )
-    multiplication_priority: int | None = Field(
-        default=None,
-        description="Execution order priority for multiplication. Lower value = earlier execution. Default: 3.",
-    )
-    division_divisor: float | None = Field(
-        default=None,
-        description="Scalar value used as the divisor for every data point.",
-    )
-    division_priority: int | None = Field(
-        default=None,
-        description="Execution order priority for division. Lower value = earlier execution. Default: 4.",
-    )
-    exponentiation_exponent: float | None = Field(
-        default=None,
-        description="Scalar exponent used to raise the input data to a power.",
-    )
-    exponentiation_priority: int | None = Field(
-        default=None,
-        description="Execution order priority for exponentiation. Lower value = earlier execution. Default: 5.",
-    )
-    root_degree: float | None = Field(
-        default=None,
-        description="Scalar degree used to compute the nth root of the input data.",
-    )
-    root_priority: int | None = Field(
-        default=None,
-        description="Execution order priority for root. Lower value = earlier execution. Default: 6.",
-    )
-
-
 class PlotDataBasicParameters(BaseModel):
     """..."""
 
@@ -143,13 +92,16 @@ class PlotDataBasicParameters(BaseModel):
     downsampling_method: str | None = Field(default=None, description="Downsampling method to be used")
     downsampled_size: int = Field(default=1000, description="Desired size of the data after downsampling")
     smoothing_method: SmoothingMethod | None = Field(default=None, description="Smoothing method to be used")
+    operations: Optional[List[str]] = Field(
+        default=None,
+        description="Ordered list of scalar operations in format 'type:value' e.g. 'add:10'",
+    )
 
 
 class PlotDataRequestModel(
     PlotDataBasicParameters,
     SavgolSmoothingParameters,
     GaussianSmoothingParameters,
-    SimpleOperationsParameters,
 ):
     @model_validator(mode="after")
     def validate_gaussian_smoothing_parameters(self) -> "PlotDataRequestModel":
@@ -166,24 +118,5 @@ class PlotDataRequestModel(
                 raise ValueError(
                     "savgol_smoothing_polyorder is required when smoothing_method is 'savitzky_golay_filter'"
                 )
-
-        return self
-
-    @model_validator(mode="after")
-    def validate_arithmetic_parameters(self) -> "PlotDataRequestModel":
-        if self.division_divisor == 0:
-            raise ValueError("division_divisor cannot be 0")
-
-        priorities = [
-            self.addition_priority,
-            self.subtraction_priority,
-            self.multiplication_priority,
-            self.division_priority,
-            self.exponentiation_priority,
-            self.root_priority,
-        ]
-        defined_priorities = [p for p in priorities if p is not None]
-        if len(defined_priorities) != len(set(defined_priorities)):
-            raise ValueError("operation priorities must be unique")
 
         return self

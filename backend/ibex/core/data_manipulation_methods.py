@@ -46,6 +46,8 @@ class DataManipulationParameter(BaseModel):
     type: str
     default: Optional[str] = None
     possible_values: Optional[list[PossibleValue]] = None
+    group_label: Optional[str] = None
+    fields: Optional[list["DataManipulationParameter"]] = None
 
 
 class DataManipulationOperation(BaseModel):
@@ -62,6 +64,7 @@ class DataManipulationMethodsResponse(BaseModel):
     data_manipulation_methods: list[DataManipulationOperation]
 
 
+DataManipulationParameter.model_rebuild()
 available_methods = DataManipulationMethodsResponse(data_manipulation_methods=[])
 
 # ====================== DATA INTERPOLATION ======================
@@ -181,113 +184,40 @@ available_methods.data_manipulation_methods.append(data_smoothing_description)
 
 simple_data_operations_description = DataManipulationOperation(
     name="Simple Data Operations",
-    description="Sequence of scalar operations applied to the dataset. "
-    "Execution order is determined by the *_priority parameters. "
-    "Defaults: addition=1, subtraction=2, multiplication=3, division=4, exponentiation=5, root=6.",
+    description="Ordered list of scalar operations applied to the dataset. "
+    "Execution order is determined by the order of parameters in the request.",
     method_parameters=[],
 )
 
-data_addition_scalar_parameter = DataManipulationParameter(
-    human_readable_name="Addition",
-    name="addition_addend",
-    description="Scalar value added to every data point.",
-    type="number",
+data_operations_parameter = DataManipulationParameter(
+    human_readable_name="Operations",
+    name="operations",
+    description="Ordered list of scalar operations applied to every data point.",
+    type="list[object]",
+    group_label="Operation",
+    fields=[
+        DataManipulationParameter(
+            human_readable_name="Type",
+            name="operation_type",
+            description="Type of operation",
+            type="string",
+            possible_values=[
+                PossibleValue(value="add", description="Addition"),
+                PossibleValue(value="sub", description="Subtraction"),
+                PossibleValue(value="mul", description="Multiplication"),
+                PossibleValue(value="div", description="Division"),
+                PossibleValue(value="pow", description="Exponentiation"),
+                PossibleValue(value="root", description="Nth root"),
+            ],
+        ),
+        DataManipulationParameter(
+            human_readable_name="Value",
+            name="operation_value",
+            description="Scalar value for the operation",
+            type="number",
+        ),
+    ],
 )
 
-data_subtraction_subtrahend_parameter = DataManipulationParameter(
-    human_readable_name="Subtraction",
-    name="subtraction_subtrahend",
-    description="Scalar value subtracted from every data point.",
-    type="number",
-)
-
-data_multiplication_scalar_parameter = DataManipulationParameter(
-    human_readable_name="Multiplication",
-    name="multiplication_factor",
-    description="Scalar value used to multiply every data point.",
-    type="number",
-)
-
-data_division_scalar_parameter = DataManipulationParameter(
-    human_readable_name="Division",
-    name="division_divisor",
-    description="Scalar value used as the divisor for every data point.",
-    type="number",
-)
-
-data_exponentiation_exponent_parameter = DataManipulationParameter(
-    human_readable_name="Exponentiation",
-    name="exponentiation_exponent",
-    description="Scalar exponent used to raise the input data to a power.",
-    type="number",
-)
-
-data_root_degree_parameter = DataManipulationParameter(
-    human_readable_name="Root",
-    name="root_degree",
-    description="Scalar degree used to compute the nth root of the input data.",
-    type="number",
-)
-
-data_addition_priority_parameter = DataManipulationParameter(
-    human_readable_name="Addition priority",
-    name="addition_priority",
-    description="Execution order priority for addition. Lower value = earlier execution. Default: 1.",
-    type="int",
-    default="1",
-)
-
-data_subtraction_priority_parameter = DataManipulationParameter(
-    human_readable_name="Subtraction priority",
-    name="subtraction_priority",
-    description="Execution order priority for subtraction. Lower value = earlier execution. Default: 2.",
-    type="int",
-    default="2",
-)
-
-data_multiplication_priority_parameter = DataManipulationParameter(
-    human_readable_name="Multiplication priority",
-    name="multiplication_priority",
-    description="Execution order priority for multiplication. Lower value = earlier execution. Default: 3.",
-    type="int",
-    default="3",
-)
-
-data_division_priority_parameter = DataManipulationParameter(
-    human_readable_name="Division priority",
-    name="division_priority",
-    description="Execution order priority for division. Lower value = earlier execution. Default: 4.",
-    type="int",
-    default="4",
-)
-
-data_exponentiation_priority_parameter = DataManipulationParameter(
-    human_readable_name="Exponentiation priority",
-    name="exponentiation_priority",
-    description="Execution order priority for exponentiation. Lower value = earlier execution. Default: 5.",
-    type="int",
-    default="5",
-)
-
-data_root_priority_parameter = DataManipulationParameter(
-    human_readable_name="Root priority",
-    name="root_priority",
-    description="Execution order priority for root. Lower value = earlier execution. Default: 6.",
-    type="int",
-    default="6",
-)
-
-simple_data_operations_description.method_parameters.append(data_addition_scalar_parameter)
-simple_data_operations_description.method_parameters.append(data_addition_priority_parameter)
-simple_data_operations_description.method_parameters.append(data_subtraction_subtrahend_parameter)
-simple_data_operations_description.method_parameters.append(data_subtraction_priority_parameter)
-simple_data_operations_description.method_parameters.append(data_multiplication_scalar_parameter)
-simple_data_operations_description.method_parameters.append(data_multiplication_priority_parameter)
-simple_data_operations_description.method_parameters.append(data_division_scalar_parameter)
-simple_data_operations_description.method_parameters.append(data_division_priority_parameter)
-simple_data_operations_description.method_parameters.append(data_exponentiation_exponent_parameter)
-simple_data_operations_description.method_parameters.append(data_exponentiation_priority_parameter)
-simple_data_operations_description.method_parameters.append(data_root_degree_parameter)
-simple_data_operations_description.method_parameters.append(data_root_priority_parameter)
-
+simple_data_operations_description.method_parameters.append(data_operations_parameter)
 available_methods.data_manipulation_methods.append(simple_data_operations_description)
