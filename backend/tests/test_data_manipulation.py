@@ -68,9 +68,9 @@ def test_apply_simple_operations(operations, data, expected):
 
 def test_apply_simple_operations_recurses_over_lists():
     data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
-    result = apply_simple_operations(data, ["add:1"])
-    assert np.asarray(result[0]) == pytest.approx([2.0, 3.0])
-    assert np.asarray(result[1]) == pytest.approx([4.0, 5.0])
+    result = apply_simple_operations(data, ["add:1", "mul:2", "add:3"])
+    assert np.asarray(result[0]) == pytest.approx([7.0, 9.0])
+    assert np.asarray(result[1]) == pytest.approx([11.0, 13.0])
 
 
 def test_apply_simple_operations_rejects_division_by_zero():

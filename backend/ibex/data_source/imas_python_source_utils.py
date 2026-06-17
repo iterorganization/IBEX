@@ -71,21 +71,24 @@ def _safe_division(data, divisor):
     return data / divisor
 
 
-_OP_FUNCS = {
-    "add": lambda r, v: r + v,
-    "sub": lambda r, v: r - v,
-    "mul": lambda r, v: r * v,
-    "div": lambda r, v: _safe_division(r, v),
-    "pow": lambda r, v: np.power(r, v),
-    "root": lambda r, v: np.power(r, 1 / v),
-}
-
-
 def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
     """
     Apply simple scalar operations to data in the order given.
     Each operation is a string in the format 'type:value', e.g. 'add:10', 'mul:5'.
+    :param data: Input data
+    :param operations: List of operations and operands divided by colon (:)
+    :return: Data after operation
     """
+
+    _OP_FUNCS = {
+        "add": lambda r, v: r + v,
+        "sub": lambda r, v: r - v,
+        "mul": lambda r, v: r * v,
+        "div": lambda r, v: _safe_division(r, v),
+        "pow": lambda r, v: np.power(r, v),
+        "root": lambda r, v: np.power(r, 1 / v),
+    }
+
     if isinstance(data, list):
         return [apply_simple_operations(x, operations) for x in data]
     elif isinstance(data, (np.ndarray, IDSNumericArray)):
