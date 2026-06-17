@@ -1,13 +1,12 @@
 import numpy as np
 import pytest
+from ibex.data_source.exception import InvalidParametersException
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_savgol_filter,
     apply_signal_operations,
     apply_simple_operations,
 )
-from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
-from pydantic_core._pydantic_core import ValidationError
 
 
 def test_apply_signal_operations_addition():
@@ -106,47 +105,37 @@ def test_apply_savitzky_golay_smoothing():
 
 
 @pytest.mark.parametrize(
-    ("request_kwargs", "data", "expected"),
+    ("operations", "data", "expected"),
     [
-        ({"addition_addend": 2}, np.array([1.0, 2.0, 3.0]), np.array([3.0, 4.0, 5.0])),
-        ({"subtraction_subtrahend": 1}, np.array([3.0, 4.0, 5.0]), np.array([2.0, 3.0, 4.0])),
-        ({"multiplication_factor": 3}, np.array([1.0, 2.0, 3.0]), np.array([3.0, 6.0, 9.0])),
-        ({"division_divisor": 2}, np.array([2.0, 4.0, 6.0]), np.array([1.0, 2.0, 3.0])),
-        ({"exponentiation_exponent": 2}, np.array([2.0, 3.0, 4.0]), np.array([4.0, 9.0, 16.0])),
-        ({"root_degree": 2}, np.array([1.0, 4.0, 9.0]), np.array([1.0, 2.0, 3.0])),
+        (["add:2"], np.array([1.0, 2.0, 3.0]), np.array([3.0, 4.0, 5.0])),
+        (["sub:1"], np.array([3.0, 4.0, 5.0]), np.array([2.0, 3.0, 4.0])),
+        (["mul:3"], np.array([1.0, 2.0, 3.0]), np.array([3.0, 6.0, 9.0])),
+        (["div:2"], np.array([2.0, 4.0, 6.0]), np.array([1.0, 2.0, 3.0])),
+        (["pow:2"], np.array([2.0, 3.0, 4.0]), np.array([4.0, 9.0, 16.0])),
+        (["root:2"], np.array([1.0, 4.0, 9.0]), np.array([1.0, 2.0, 3.0])),
     ],
 )
-def test_apply_simple_operations(request_kwargs, data, expected):
-    request = PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", **request_kwargs)
-
-    assert np.asarray(expected) == pytest.approx(apply_simple_operations(data, request))
+def test_apply_simple_operations(operations, data, expected):
+    assert np.asarray(expected) == pytest.approx(apply_simple_operations(data, operations))
 
 
 def test_apply_simple_operations_recurses_over_lists():
-    request = PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", addition_addend=1)
     data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
-
-    result = apply_simple_operations(data, request)
-
-    assert np.asarray(result[0]) == pytest.approx([2.0, 3.0])
-    assert np.asarray(result[1]) == pytest.approx([4.0, 5.0])
+    result = apply_simple_operations(data, ["add:1", "mul:2", "add:3"])
+    assert np.asarray(result[0]) == pytest.approx([7.0, 9.0])
+    assert np.asarray(result[1]) == pytest.approx([11.0, 13.0])
 
 
 def test_apply_simple_operations_rejects_division_by_zero():
-    with pytest.raises(ValidationError, match="division_divisor cannot be 0"):
-        PlotDataRequestModel(uri="imas:hdf5?path=/dummy#dummy", division_divisor=0)
+    with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
+        apply_simple_operations(np.array([1.0]), ["div:0"])
 
 
-def test_apply_simple_operations_uses_priority_order():
-    request = PlotDataRequestModel(
-        uri="imas:hdf5?path=/dummy#dummy",
-        addition_addend=1,
-        multiplication_factor=2,
-        addition_priority=2,
-        multiplication_priority=1,
-    )
+def test_apply_simple_operations_uses_order():
     data = np.array([5.0])
-    # default order: add then multiply -> (5+1)*2 = 12
-    # priority order: multiply then add -> (5*2)+1 = 11
-    result = apply_simple_operations(data, request)
+    # mul then add -> (5*2)+1 = 11
+    result = apply_simple_operations(data, ["mul:2", "add:1"])
     assert result == pytest.approx([11.0])
+    # add then mul -> (5+1)*2 = 12
+    result = apply_simple_operations(data, ["add:1", "mul:2"])
+    assert result == pytest.approx([12.0])

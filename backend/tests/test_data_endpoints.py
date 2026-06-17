@@ -100,23 +100,23 @@ def test_plot_data_with_simple_operations(entry_path):
     # core_profiles.time = [1,2,3,4,5] (float)
     cases = [
         (
-            {"addition_addend": 2, "multiplication_factor": 3},
+            {"operations": ["add:2", "mul:3"]},
             [9.0, 12.0, 15.0, 18.0, 21.0],
         ),
         (
-            {"addition_addend": 2, "multiplication_factor": 3, "addition_priority": 6, "multiplication_priority": 1},
+            {"operations": ["mul:3", "add:2"]},
             [5.0, 8.0, 11.0, 14.0, 17.0],
         ),
         (
-            {"division_divisor": 2},
+            {"operations": ["div:2"]},
             [0.5, 1.0, 1.5, 2.0, 2.5],
         ),
         (
-            {"exponentiation_exponent": 2},
+            {"operations": ["pow:2"]},
             [1.0, 4.0, 9.0, 16.0, 25.0],
         ),
         (
-            {"root_degree": 2},
+            {"operations": ["root:2"]},
             [1.0, 1.41421356237, 1.73205080757, 2.0, 2.2360679775],
         ),
     ]

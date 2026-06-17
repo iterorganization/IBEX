@@ -1,5 +1,4 @@
 from functools import reduce
-from typing import Any
 
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
@@ -75,67 +74,35 @@ def _safe_division(data, divisor):
     return data / divisor
 
 
-def apply_simple_operations(data: list | np.ndarray, plot_data_query: Any):
+def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
     """
-    Apply simple scalar operations to data.
-    Execution order is determined by the *_priority parameters from the request.
-    Defaults: addition=1, subtraction=2, multiplication=3, division=4, exponentiation=5, root=6.
+    Apply simple scalar operations to data in the order given.
+    Each operation is a string in the format 'type:value', e.g. 'add:10', 'mul:5'.
+    :param data: Input data
+    :param operations: List of operations and operands divided by colon (:)
+    :return: Data after operation
     """
 
-    _SIMPLE_OPERATION_DEFS = [
-        {
-            "value_field": "addition_addend",
-            "priority_field": "addition_priority",
-            "default_priority": 1,
-            "func": lambda r, v: r + v,
-        },
-        {
-            "value_field": "subtraction_subtrahend",
-            "priority_field": "subtraction_priority",
-            "default_priority": 2,
-            "func": lambda r, v: r - v,
-        },
-        {
-            "value_field": "multiplication_factor",
-            "priority_field": "multiplication_priority",
-            "default_priority": 3,
-            "func": lambda r, v: r * v,
-        },
-        {
-            "value_field": "division_divisor",
-            "priority_field": "division_priority",
-            "default_priority": 4,
-            "func": lambda r, v: _safe_division(r, v),
-        },
-        {
-            "value_field": "exponentiation_exponent",
-            "priority_field": "exponentiation_priority",
-            "default_priority": 5,
-            "func": lambda r, v: np.power(r, v),
-        },
-        {
-            "value_field": "root_degree",
-            "priority_field": "root_priority",
-            "default_priority": 6,
-            "func": lambda r, v: np.power(r, 1 / v),
-        },
-    ]
+    _OP_FUNCS = {
+        "add": lambda r, v: r + v,
+        "sub": lambda r, v: r - v,
+        "mul": lambda r, v: r * v,
+        "div": lambda r, v: _safe_division(r, v),
+        "pow": lambda r, v: np.power(r, v),
+        "root": lambda r, v: np.power(r, 1 / v),
+    }
 
     if isinstance(data, list):
-        return [apply_simple_operations(x, plot_data_query) for x in data]
+        return [apply_simple_operations(x, operations) for x in data]
     elif isinstance(data, (np.ndarray, IDSNumericArray)):
         result = data
-
-        operations = []
-        for op in _SIMPLE_OPERATION_DEFS:
-            value = getattr(plot_data_query, op["value_field"])
-            if value is not None:
-                priority = getattr(plot_data_query, op["priority_field"]) or op["default_priority"]
-                operations.append({"priority": priority, "func": op["func"], "value": value})
-
-        for op in sorted(operations, key=lambda x: x["priority"]):
-            result = op["func"](result, op["value"])
-
+        for op_str in operations:
+            op_type, value_str = op_str.split(":", 1)
+            value = float(value_str)
+            func = _OP_FUNCS.get(op_type)
+            if func is None:
+                raise InvalidParametersException(f"Unknown operation type: {op_type}")
+            result = func(result, value)
         return result
     else:
         msg = "Simple operations can be executed only on numeric arrays, not single values or strings."
