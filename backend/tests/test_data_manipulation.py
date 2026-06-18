@@ -149,5 +149,5 @@ def test_apply_signal_operations_recurses_over_lists():
 
 def test_apply_signal_operations_rejects_division_by_zero():
     uri = "some/uri"
-    with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
+    with pytest.raises(InvalidParametersException, match="Division by zero is not allowed"):
         apply_signal_operations(np.array([1.0]), [f"div:{uri}"], {uri: np.array([0.0])})

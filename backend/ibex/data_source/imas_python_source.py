@@ -926,7 +926,7 @@ class IMASPythonSource(DataSourceInterface):
             if plot_data_query.signal_operations:
                 # Collect set of signal URIs that will be used in signal operations
                 signal_op_uris = set()
-                for op_str in (plot_data_query.signal_operations or []):
+                for op_str in plot_data_query.signal_operations or []:
                     _, op_uri = op_str.split(":", 1)
                     signal_op_uris.add(op_uri)
 

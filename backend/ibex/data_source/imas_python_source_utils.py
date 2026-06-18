@@ -68,9 +68,9 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
 def _safe_division(data, divisor):
     if isinstance(divisor, np.ndarray):
         if np.any(divisor == 0):
-            raise InvalidParametersException("division_divisor cannot be 0")
+            raise InvalidParametersException("Division by zero is not allowed")
     elif divisor == 0:
-        raise InvalidParametersException("division_divisor cannot be 0")
+        raise InvalidParametersException("Division by zero is not allowed")
     return data / divisor
 
 
