@@ -95,48 +95,70 @@ Savitzky-Golay smoothing:
      -H 'accept: application/json'
 
 
-Simple scalar operations
+Simple data operations
 ------------------------
 
-IBEX also supports a sequence of scalar operations that can be applied to the returned dataset:
+IBEX supports a sequence of scalar operations that can be applied element-wise to every data point in the returned dataset.
+Simple data operations use fixed numeric values.
 
-* addition
-* subtraction
-* multiplication
-* division
-* exponentiation
-* root
+The following operation types are supported:
 
-These operations are executed in that order. In practice, the backend applies them sequentially to the numerical data before any smoothing or resampling step.
+* ``add`` — addition
+* ``sub`` — subtraction
+* ``mul`` — multiplication
+* ``div`` — division
+* ``pow`` — exponentiation
+* ``root`` — Nth root
 
-The corresponding request parameters are:
+Operations are applied **in the order they appear** in the request.
+The backend executes them sequentially on the numerical data **before** smoothing, interpolation, or downsampling.
 
-* ``addition_addend``
-* ``subtraction_subtrahend``
-* ``multiplication_factor``
-* ``division_divisor``
-* ``exponentiation_exponent``
-* ``root_degree``
+Configuration
+~~~~~~~~~~~~~~
 
-Division by zero is rejected by the backend.
+Simple data operations are configured through the ``operations`` parameter of the ``/data/plot_data/`` endpoint.
+It accepts a list of strings in the format ``type:value``, for example ``add:10`` or ``mul:2.5``.
+
+The full list of available operations can be retrieved from the ``/info/data_manipulation_methods/`` endpoint.
+
+Division by zero is rejected by the backend with an ``InvalidParametersException`` ("Division by zero is not allowed").
+
+Implementation
+~~~~~~~~~~~~~~~
+
+Simple data operations are applied in ``apply_simple_operations()`` in
+``backend/ibex/data_source/imas_python_source_utils.py``.
+
+The function iterates over the list of operation strings in order, splitting each on the colon to extract the operation type and the scalar value.
+For each operation the corresponding arithmetic lambda is applied element-wise to the data array.
+
+The implementation handles both flat arrays and nested lists of arrays (higher-dimensional data) recursively.
 
 Example usage
 ~~~~~~~~~~~~~~
 
 The following examples demonstrate how simple data operations can be enabled for testing purposes.
 
-Single operation:
+Single operation (addition by 2):
 
 .. code-block:: bash
 
    curl -X 'GET' \
-     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&addition_addend=2' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=add:2' \
      -H 'accept: application/json'
 
-Two operations:
+Two chained operations (add then multiply):
 
 .. code-block:: bash
 
    curl -X 'GET' \
-     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&addition_addend=2&multiplication_factor=3' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=add:2&operations=mul:3' \
+     -H 'accept: application/json'
+
+Order matters (multiply then add yields different result):
+
+.. code-block:: bash
+
+   curl -X 'GET' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=mul:3&operations=add:2' \
      -H 'accept: application/json'

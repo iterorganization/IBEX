@@ -74,7 +74,7 @@ def test_apply_simple_operations_recurses_over_lists():
 
 
 def test_apply_simple_operations_rejects_division_by_zero():
-    with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
+    with pytest.raises(InvalidParametersException, match="Division by zero is not allowed"):
         apply_simple_operations(np.array([1.0]), ["div:0"])
 
 
