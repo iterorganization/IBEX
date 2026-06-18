@@ -68,9 +68,9 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
 def _safe_division(data, divisor):
     if isinstance(divisor, np.ndarray):
         if np.any(divisor == 0):
-            raise InvalidParametersException("Division by zero is not allowed")
+            raise InvalidParametersException("division_divisor cannot be 0")
     elif divisor == 0:
-        raise InvalidParametersException("Division by zero is not allowed")
+        raise InvalidParametersException("division_divisor cannot be 0")
     return data / divisor
 
 
@@ -82,6 +82,7 @@ def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
     :param operations: List of operations and operands divided by colon (:)
     :return: Data after operation
     """
+
     _OP_FUNCS = {
         "add": lambda r, v: r + v,
         "sub": lambda r, v: r - v,
