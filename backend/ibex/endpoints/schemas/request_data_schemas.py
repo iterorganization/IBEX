@@ -96,6 +96,10 @@ class PlotDataBasicParameters(BaseModel):
         default=None,
         description="Ordered list of scalar operations in format 'type:value' e.g. 'add:10'",
     )
+    signal_operations: Optional[List[str]] = Field(
+        default=None,
+        description="Ordered list of signal operations in format 'type:uri' e.g. 'add:some/imas/uri'",
+    )
 
 
 class PlotDataRequestModel(

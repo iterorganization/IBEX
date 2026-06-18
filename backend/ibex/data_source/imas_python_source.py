@@ -845,14 +845,7 @@ class IMASPythonSource(DataSourceInterface):
                 original_coord_values.reverse()
 
                 store_other_signals_data = False  # used for signal combining after interpolation
-                if any(
-                    [
-                        plot_data_query.signal_addition_addend_uri,
-                        plot_data_query.signal_subtraction_subtrahend_uri,
-                        plot_data_query.signal_multiplication_factor_uri,
-                        plot_data_query.signal_division_divisor_uri,
-                    ]
-                ):
+                if plot_data_query.signal_operations:
                     store_other_signals_data = True
 
                 for _uri in plot_data_query.interpolate_over:
@@ -867,6 +860,7 @@ class IMASPythonSource(DataSourceInterface):
                     new_plot_data_query.uri = _uri
                     new_plot_data_query.interpolate_over = None
                     new_plot_data_query.smoothing_method = None
+                    new_plot_data_query.signal_operations = None
                     # interpolate_to will be used later with signal combining
                     interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
                     interpolate_to_coordinates = interpolate_to["coordinates"]
@@ -929,27 +923,30 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= BEGIN signal operations =============
 
-            _SIGNAL_URI_FIELDS = [
-                "signal_addition_addend_uri",
-                "signal_subtraction_subtrahend_uri",
-                "signal_multiplication_factor_uri",
-                "signal_division_divisor_uri",
-            ]
+            if plot_data_query.signal_operations:
+                # Collect set of signal URIs that will be used in signal operations
+                signal_op_uris = set()
+                for op_str in (plot_data_query.signal_operations or []):
+                    _, op_uri = op_str.split(":", 1)
+                    signal_op_uris.add(op_uri)
 
-            for field in _SIGNAL_URI_FIELDS:
-                signal_uris = getattr(plot_data_query, field)
-                if signal_uris:
-                    for signal_uri in signal_uris:
-                        if "interpolated_data" not in others_signals_data[signal_uri]:
-                            signal_data = pad_to_rectangular(others_signals_data[signal_uri]["data"])
-                            signal_data = resample_data_without_interpolation(
-                                tuple(others_signals_data[signal_uri]["coordinates"]),
-                                signal_data,
-                                tuple(common_coords_values),
-                            )
-                            others_signals_data[uri]["interpolated_data"] = signal_data
+                # For each signal not yet interpolated — interpolate it onto the common coordinate grid
+                for signal_uri in signal_op_uris:
+                    if signal_uri not in others_signals_data:
+                        continue
+                    if "interpolated_data" not in others_signals_data[signal_uri]:
+                        signal_data = pad_to_rectangular(others_signals_data[signal_uri]["data"])
+                        signal_data = resample_data_without_interpolation(
+                            tuple(others_signals_data[signal_uri]["coordinates"]),
+                            signal_data,
+                            tuple(common_coords_values),
+                        )
+                        others_signals_data[signal_uri]["interpolated_data"] = signal_data
 
-            data_to_be_returned = apply_signal_operations(data_to_be_returned, plot_data_query, others_signals_data)
+                # Apply signal operations (addition, subtraction, multiplication, etc.)
+                data_to_be_returned = apply_signal_operations(
+                    data_to_be_returned, plot_data_query.signal_operations, others_signals_data
+                )
 
             # ============= END signal operations =============
 

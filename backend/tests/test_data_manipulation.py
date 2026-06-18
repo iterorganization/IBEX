@@ -12,52 +12,36 @@ from ibex.data_source.imas_python_source_utils import (
 def test_apply_signal_operations_addition():
     addend_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
     data = np.array([1.0, 2.0, 3.0])
-    request = PlotDataRequestModel(
-        uri="imas:hdf5?path=/dummy#dummy",
-        interpolate_over=[addend_uri],
-        signal_addition_addend_uri=[addend_uri],
-    )
+    operations = [f"add:{addend_uri}"]
     signal_data_by_uri = {addend_uri: np.array([10.0, 20.0, 30.0])}
-    result = apply_signal_operations(data, request, signal_data_by_uri)
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
     assert np.allclose(result, [11.0, 22.0, 33.0])
 
 
 def test_apply_signal_operations_subtraction():
     subtrahend_uri = "imas:hdf5?path=/dummy/interpolation_db_2#equilibrium/time_slice[:]/profiles_2d[:]/psi"
     data = np.array([10.0, 20.0, 30.0])
-    request = PlotDataRequestModel(
-        uri="imas:hdf5?path=/dummy#dummy",
-        interpolate_over=[subtrahend_uri],
-        signal_subtraction_subtrahend_uri=[subtrahend_uri],
-    )
+    operations = [f"sub:{subtrahend_uri}"]
     signal_data_by_uri = {subtrahend_uri: np.array([1.0, 2.0, 3.0])}
-    result = apply_signal_operations(data, request, signal_data_by_uri)
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
     assert np.allclose(result, [9.0, 18.0, 27.0])
 
 
 def test_apply_signal_operations_multiplication():
     factor_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
     data = np.array([1.0, 2.0, 3.0])
-    request = PlotDataRequestModel(
-        uri="imas:hdf5?path=/dummy#dummy",
-        interpolate_over=[factor_uri],
-        signal_multiplication_factor_uri=[factor_uri],
-    )
+    operations = [f"mul:{factor_uri}"]
     signal_data_by_uri = {factor_uri: np.array([2.0, 3.0, 4.0])}
-    result = apply_signal_operations(data, request, signal_data_by_uri)
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
     assert np.allclose(result, [2.0, 6.0, 12.0])
 
 
 def test_apply_signal_operations_division():
     divisor_uri = "imas:hdf5?path=/dummy/interpolation_db_2#equilibrium/time_slice[:]/profiles_2d[:]/psi"
     data = np.array([10.0, 20.0, 30.0])
-    request = PlotDataRequestModel(
-        uri="imas:hdf5?path=/dummy#dummy",
-        interpolate_over=[divisor_uri],
-        signal_division_divisor_uri=[divisor_uri],
-    )
+    operations = [f"div:{divisor_uri}"]
     signal_data_by_uri = {divisor_uri: np.array([2.0, 5.0, 6.0])}
-    result = apply_signal_operations(data, request, signal_data_by_uri)
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
     assert np.allclose(result, [5.0, 4.0, 5.0])
 
 
@@ -139,3 +123,31 @@ def test_apply_simple_operations_uses_order():
     # add then mul -> (5+1)*2 = 12
     result = apply_simple_operations(data, ["add:1", "mul:2"])
     assert result == pytest.approx([12.0])
+
+
+def test_apply_signal_operations_uses_order():
+    uri_a = "some/uri/a"
+    uri_b = "some/uri/b"
+    data = np.array([5.0])
+    signal_data_by_uri = {uri_a: np.array([2.0]), uri_b: np.array([1.0])}
+    # mul then add -> (5*2)+1 = 11
+    result = apply_signal_operations(data, [f"mul:{uri_a}", f"add:{uri_b}"], signal_data_by_uri)
+    assert result == pytest.approx([11.0])
+    # add then mul -> (5+1)*2 = 12
+    result = apply_signal_operations(data, [f"add:{uri_b}", f"mul:{uri_a}"], signal_data_by_uri)
+    assert result == pytest.approx([12.0])
+
+
+def test_apply_signal_operations_recurses_over_lists():
+    uri = "some/uri"
+    data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
+    signal_data_by_uri = {uri: np.array([2.0, 3.0])}
+    result = apply_signal_operations(data, [f"add:{uri}", f"mul:{uri}"], signal_data_by_uri)
+    assert np.asarray(result[0]) == pytest.approx([6.0, 15.0])
+    assert np.asarray(result[1]) == pytest.approx([10.0, 21.0])
+
+
+def test_apply_signal_operations_rejects_division_by_zero():
+    uri = "some/uri"
+    with pytest.raises(InvalidParametersException, match="division_divisor cannot be 0"):
+        apply_signal_operations(np.array([1.0]), [f"div:{uri}"], {uri: np.array([0.0])})
