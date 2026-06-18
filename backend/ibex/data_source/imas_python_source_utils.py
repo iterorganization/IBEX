@@ -108,39 +108,39 @@ def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
         raise InvalidParametersException(msg)
 
 
-def apply_signal_operations(data: list | np.ndarray, plot_data_query: Any, signal_data_by_uri: dict):
+def apply_signal_operations(data: list | np.ndarray, operations: list[str], signal_data_by_uri: dict):
     """
-    Apply signal operations to data.
-
-    :param data: The input data array.
-    :param plot_data_query: Request model with signal URI fields.
+    Apply signal operations to data in the order given.
+    Each operation is a string in the format 'type:uri', e.g. 'add:some/imas/uri', 'mul:other/uri'.
+    :param data: Input data
+    :param operations: List of operations and URIs divided by colon (:)
     :param signal_data_by_uri: Dict mapping signal URIs to their interpolated data arrays.
+    :return: Data after operation
     """
-    # signal_data_by_uri: {
-    #   uri : <uri>
-    #   data : <ids_data>
-    #   interpolated_data : <data with shape of argument "data">
-    # }
+    _OP_FUNCS = {
+        "add": lambda r, v: r + v,
+        "sub": lambda r, v: r - v,
+        "mul": lambda r, v: r * v,
+        "div": lambda r, v: _safe_division(r, v),
+        "pow": lambda r, v: np.power(r, v),
+        "root": lambda r, v: np.power(r, 1 / v),
+    }
 
-    _SIGNAL_OPERATION_DEFS = [
-        ("signal_addition_addend_uri", "signal_addition_priority", 1, lambda r, v: r + v),
-        ("signal_subtraction_subtrahend_uri", "signal_subtraction_priority", 2, lambda r, v: r - v),
-        ("signal_multiplication_factor_uri", "signal_multiplication_priority", 3, lambda r, v: r * v),
-        ("signal_division_divisor_uri", "signal_division_priority", 4, lambda r, v: _safe_division(r, v)),
-    ]
-
-    operations = []
-    for uri_field, priority_field, default_priority, func in _SIGNAL_OPERATION_DEFS:
-        uris = getattr(plot_data_query, uri_field)
-        if uris:
-            for uri in uris:
-                priority = getattr(plot_data_query, priority_field) or default_priority
-                signal_data = signal_data_by_uri[uri]
-                operations.append({"priority": priority, "func": func, "value": signal_data})
-
-    for op in sorted(operations, key=lambda x: x["priority"]):
-        data = op["func"](data, op["value"])
-    return data
+    if isinstance(data, list):
+        return [apply_signal_operations(x, operations, signal_data_by_uri) for x in data]
+    elif isinstance(data, (np.ndarray, IDSNumericArray)):
+        result = data
+        for op_str in operations:
+            op_type, uri = op_str.split(":", 1)
+            value = signal_data_by_uri[uri]
+            func = _OP_FUNCS.get(op_type)
+            if func is None:
+                raise InvalidParametersException(f"Unknown operation type: {op_type}")
+            result = func(result, value)
+        return result
+    else:
+        msg = "Signal operations can be executed only on numeric arrays, not single values or strings."
+        raise InvalidParametersException(msg)
 
 
 def union_arrays(data: list):
