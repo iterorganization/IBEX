@@ -822,6 +822,11 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END data smoothing =============
 
+            try:
+                original_data_shape = np.asarray(data_to_be_returned).shape
+            except ValueError:
+                original_data_shape = "irregular"
+
             # ============= BEGIN resample data onto new time vector =============
             def convert_to_lists(data):
                 if isinstance(data, list):
@@ -867,10 +872,11 @@ class IMASPythonSource(DataSourceInterface):
                     if store_other_signals_data:
                         others_signals_data[_uri] = {
                             "uri": _uri,
-                            "data": interpolate_to["value"],
+                            "data": pad_to_rectangular(interpolate_to["value"]),
                             "coordinates": [
                                 sorted(set(flatten(convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
                             ],
+                            "shape": interpolate_to["shape"],
                         }
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
@@ -922,38 +928,76 @@ class IMASPythonSource(DataSourceInterface):
             # ============= END resample data onto new time vector =============
 
             # ============= BEGIN signal operations =============
+            #
+            # Steps performed in this block:
+            # 1. Collect all signal URIs referenced in signal_operations
+            # 2. Pad data to rectangular if shape is irregular
+            # 3. For each signal URI, fetch and prepare data:
+            #    a. If the signal was already interpolated (stored during
+            #       interpolation phase), skip fetching
+            #    b. Otherwise fetch the signal and check shape compatibility
+            # 4. Prepare interpolated_data for each signal:
+            #    a. If interpolation was requested, resample onto common coords
+            #    b. Otherwise use raw signal data directly (same shape path)
+            # 5. Build a flat uri->array dict and apply all signal operations
 
             if plot_data_query.signal_operations:
-                # Collect set of signal URIs that will be used in signal operations
+                # Step 1: extract unique signal URIs from operation strings
                 signal_op_uris = set()
                 for op_str in plot_data_query.signal_operations or []:
                     _, op_uri = op_str.split(":", 1)
                     signal_op_uris.add(op_uri)
 
-                # For each signal not yet interpolated — interpolate it onto the common coordinate grid
+                # Step 2: ensure rectangular data for downstream processing
+                if original_data_shape == "irregular":
+                    data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+                # Step 3: fetch and prepare each signal referenced in operations
                 for signal_uri in signal_op_uris:
                     if signal_uri not in others_signals_data:
-                        continue
-                    if "interpolated_data" not in others_signals_data[signal_uri]:
-                        signal_data = pad_to_rectangular(others_signals_data[signal_uri]["data"])
-                        signal_data = resample_data_without_interpolation(
-                            tuple(others_signals_data[signal_uri]["coordinates"]),
-                            signal_data,
-                            tuple(common_coords_values),
-                        )
-                        others_signals_data[signal_uri]["interpolated_data"] = signal_data
+                        # Signal was not pre-loaded during interpolation phase.
+                        # Fetch it now and verify shape compatibility.
+                        request = PlotDataRequestModel(uri=signal_uri)
+                        other_signal = self.get_plot_data(request)
+                        if (
+                            other_signal["data"]["shape"] != "irregular"
+                            and other_signal["data"]["shape"] == original_data_shape
+                        ):
+                            others_signals_data[signal_uri] = {
+                                "uri": request.uri,
+                                "data": other_signal["data"]["value"],
+                                "coordinates": [
+                                    sorted(set(flatten(convert_to_lists(c["value"]))))
+                                    for c in other_signal["data"]["coordinates"]
+                                ],
+                                "shape": other_signal["data"]["shape"],
+                            }
+                        else:
+                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
+                            raise InvalidParametersException(msg)
 
-                # Apply signal operations (addition, subtraction, multiplication, etc.)
+                    # Step 4: prepare interpolated_data (resampled or raw)
+                    if "interpolated_data" not in others_signals_data[signal_uri]:
+                        if plot_data_query.interpolate_over:
+                            # Resample signal data onto the common coordinate grid
+                            signal_data = resample_data_without_interpolation(
+                                tuple(reversed(others_signals_data[signal_uri]["coordinates"])),
+                                others_signals_data[signal_uri]["data"],
+                                tuple(common_coords_values),
+                            )
+                        else:
+                            # No interpolation needed — use signal data as-is
+                            signal_data = others_signals_data[signal_uri]["data"]
+                        others_signals_data[signal_uri]["interpolated_data"] = np.array(signal_data)
+
+                # Step 5: flatten dict and apply operations in order
+                signal_data_by_uri = {uri: info["interpolated_data"] for uri, info in others_signals_data.items()}
                 data_to_be_returned = apply_signal_operations(
-                    data_to_be_returned, plot_data_query.signal_operations, others_signals_data
+                    data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
                 )
 
             # ============= END signal operations =============
 
-            try:
-                original_data_shape = np.asarray(data_to_be_returned).shape
-            except ValueError:
-                original_data_shape = "irregular"
             # Downsample only 1D data
             if first_value.metadata.ndim == 1:
                 if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":

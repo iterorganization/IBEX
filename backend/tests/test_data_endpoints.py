@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 
 def test_status_codes(entry_path):
@@ -128,6 +129,112 @@ def test_plot_data_with_simple_operations(entry_path):
 
         response_body = response.json()
         assert response_body["data"]["value"] == pytest.approx(expected)
+
+
+def test_plot_data_with_signal_operations(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
+        "signal_operations": [f"add:imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, 8.0, 10.0])
+
+
+def test_plot_data_with_signal_operations_same_shape_different_uris(interpolation_entry_path_directory):
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2",
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == [[2.0, 4.0, 6.0], [2.0, 4.0, 6.0]]
+
+
+def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_path_directory):
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/time",
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/time"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/time"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    # time1: [1, 2, 3, 4]
+    # time2: [1, 2, 3]
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, 4.0])
+
+    # reversed order
+    parameters = {
+        "uri": f"{db_names[1]}#equilibrium/time",
+        "signal_operations": [f"add:{db_names[0]}#equilibrium/time"],
+        "interpolate_over": [f"{db_names[0]}#equilibrium/time"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    # time1: [1, 2, 3]
+    # time2: [1, 2, 3, 4]
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, None])
+
+
+def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_entry_path_directory):
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    # ---- db_1 primary, db_2 operand ----
+    # common coords: time=[1,2,3,4] (4), profiles_2d=[0,1,2,3] (4),
+    #                dim2=[1,2,3] (3), dim1=12 values (union of both)
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    response_body = response.json()
+
+    data = np.array(response_body["data"]["value"], dtype=float)
+    # data shape reflects common coordinates (reversed): [time, profiles_2d, dim2, dim1]
+    assert data.shape == (4, 4, 3, 12)
+    # db_1 has data at time=[1,2,3,4], profiles_2d=[0,1], dim2=[1,2,3], dim1=[1,2,3]
+    # Common dim1 has 1,2,3 at indices 3,7,11 → 4×2×3×3 = 72 non-NaN values
+    # Operand NaN replaced with 0, result = db_1 primary values
+    assert np.count_nonzero(~np.isnan(data)) == 72
+
+    # ---- reversed: db_2 primary, db_1 operand ----
+    parameters = {
+        "uri": f"{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
+        "signal_operations": [f"add:{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+        "interpolate_over": [f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    response_body = response.json()
+
+    data = np.array(response_body["data"]["value"], dtype=float)
+    assert data.shape == (4, 4, 3, 12)
+    # db_2 has data at time=[1,2,3], profiles_2d=[0,1,2,3], dim2=[1,2,3], dim1 has 9 values
+    # Common dim1 has db_2's 9 values at indices [0,1,2,4,5,6,8,9,10] → 3×4×3×9 = 324
+    assert np.count_nonzero(~np.isnan(data)) == 324
 
 
 def test_plot_data_smoothing_with_wrong_target_node(entry_path):

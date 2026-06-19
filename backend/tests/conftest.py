@@ -11,6 +11,7 @@ pytest.test_client = TestClient(app)
 @pytest.fixture(scope="session")
 def interpolation_entry_path_directory(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("interpolation_testdb")
+    rand_generator = np.random.default_rng(2137)
 
     with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_1", mode="w") as entry:
         eq = entry.factory.equilibrium()
@@ -21,7 +22,7 @@ def interpolation_entry_path_directory(tmp_path_factory):
         for ts in eq.time_slice:
             ts.profiles_2d.resize(2)
             for p2d in ts.profiles_2d:
-                p2d.psi = np.asarray(np.random.rand(3, 3))
+                p2d.psi = np.asarray(rand_generator.random((3, 3)))
                 p2d.grid.dim1 = np.asarray([1.0, 2.0, 3.0])
                 p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0])
         entry.put(eq)
@@ -35,7 +36,7 @@ def interpolation_entry_path_directory(tmp_path_factory):
         for ts in eq.time_slice:
             ts.profiles_2d.resize(4)
             for p2d in ts.profiles_2d:
-                p2d.psi = np.asarray(np.random.rand(9, 3))
+                p2d.psi = np.asarray(rand_generator.random((9, 3)))
                 p2d.grid.dim1 = np.asarray([0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7])
                 p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0])
         entry.put(eq)
