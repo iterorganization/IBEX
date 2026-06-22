@@ -169,6 +169,8 @@ def resample_data_with_interpolation(
         interpolator = RegularGridInterpolator(original_coords, data, bounds_error=False, method=interpolation_method)
     except ValueError as e:
         message = f"Invalid parameter passed to interpolator: {e}"
+        if "could not convert string to float" in str(e):
+            message += ". Use 'exact_value' interpolation method for non-numeric coordinates"
         raise InvalidParametersException(message) from None
 
     # build mesh grid (manipulate coordinates to be list of coordinates e.g. [[x1,y1,z1,h1...], [x2,y2,z2,h3...]])
