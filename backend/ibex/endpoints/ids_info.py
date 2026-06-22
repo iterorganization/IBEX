@@ -3,7 +3,7 @@
 from fastapi import APIRouter  # type: ignore
 
 from ibex.core import ibex_service
-from ibex.endpoints.schemas.ids_info_schemas import NodeInfoResponse, FindPathsResponse, ArraySummaryResponse
+from ibex.endpoints.schemas.response_ids_info_schemas import NodeInfoResponse, FindPathsResponse, ArraySummaryResponse
 
 router = APIRouter()
 

@@ -5,6 +5,7 @@ from typing import Optional, Sequence, List
 import imas  # type: ignore
 import numpy as np  # type: ignore
 import re  # type: ignore
+from copy import copy  # type: ignore
 from idstools.database import DBMaster  # type: ignore
 from imas.ids_metadata import IDSMetadata  # type: ignore
 from imas.ids_primitive import (
@@ -47,7 +48,11 @@ from ibex.data_source.imas_python_source_utils import (
     flatten,
     expand,
     calculate_coordinate_shapes,
+    apply_savgol_filter,
+    apply_gaussian_filter,
 )
+from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -628,30 +633,36 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
-    def get_plot_data(
-        self,
-        uri: str,
-        ids: str,
-        node_path: str,
-        occurrence: int = 0,
-        interpolate_over: List[str] | None = None,
-        interpolation_method: str | None = None,
-        downsampling_method: str | None = None,
-        downsampled_size: int = 1000,
-    ) -> dict:
+    def _leaf_node_coordinates_contain_time(self, leaf_node_path: str, coordinates_to_be_returned: list[dict]) -> bool:
+        """
+        Returns True when the leaf-node coordinates contain a time coordinate.
+
+        :param loaf_node_path: path to tested_node
+        :param coordinates_to_be_returned: list of dicts of coordinates from get_plot_data() method
+        :return: True or False
+        """
+        if not coordinates_to_be_returned:
+            return False
+        for coordinate in coordinates_to_be_returned:
+            if coordinate["name"] == "time" and coordinate["target"] == leaf_node_path:
+                return True
+
+        return False
+
+    def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 
-        :param uri: imas URI
-        :param ids: name of ids e.g. core_profiles
-        :param node_path: path to ids node e.g. ids_properties/version_put
-        :param occurrence: ids occurrence number
-        :param interpolate_over: list of uris used in interpolation
-        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
-        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-        :param downsampled_size: target size of downsampled data
+        :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+        :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
         :return: Dictionary containing data values, metadata and coordinates.
         """
+
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
+        uri = uri_obj.uri_entry_identifiers
+        ids = uri_obj.ids_name
+        node_path = uri_obj.node_path
+        occurrence = uri_obj.occurrence
 
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
@@ -671,8 +682,8 @@ class IMASPythonSource(DataSourceInterface):
             for _node_path, _coordinate_path_list in coordinates_dict.items():
                 _new_coordinate_path_list = []
                 for _coordinate_path in _coordinate_path_list:
-                    if _coordinate_path == "1...N":
-                        _new_coordinate_path_list.append("1...N")
+                    if _coordinate_path.startswith("1..."):  # 1...N, 1...2, 1...3 etc.
+                        _new_coordinate_path_list.append(_coordinate_path)
                         continue
 
                     _new_coordinate_path = ""
@@ -705,10 +716,8 @@ class IMASPythonSource(DataSourceInterface):
                 shapes_dimension = not bool(re.search(r"\[\d+\]$", str(target)))
 
                 for coord in coord_list:
-                    if coord == "1...N":
-                        # 1...N coords are targeting AoS
+                    if coord.startswith("1..."):
                         # remove last array operator ([<number or colon>]) from path and save it as target_str
-
                         splitted_target = str(target).split("/")
                         splitted_target[-1] = re.sub(r"[\[\(](.*?)[\]\)]", "", splitted_target[-1])
                         target_str = "/".join([x for x in splitted_target])
@@ -719,7 +728,7 @@ class IMASPythonSource(DataSourceInterface):
                         coord_target_objects = self._get_raw_data(ids_obj, path_elements)
                         self._check_data_is_leaf_node(coord_target_objects)
 
-                        # collect labels for 1...N coordinates
+                        # collect labels for 1... coordinates
                         labels = []
                         try:
                             for element in coord_target_objects:
@@ -758,7 +767,7 @@ class IMASPythonSource(DataSourceInterface):
                         # (otherwise coordinate name would be the same as target node name)
                         coordinate_name = splitted_target[-1]
                         if f"{target}" == f"{node_path}":
-                            coordinate_name = "1...N"
+                            coordinate_name = coord
 
                         try:
                             coord_data_shape = np.asarray(coord_values).shape
@@ -820,11 +829,40 @@ class IMASPythonSource(DataSourceInterface):
             first_value = find_first_value_in_list(ids_data)
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
-            if first_value.metadata.ndim == 2:
-                # Transform 2D arrays.
-                # By default first dimension of 2D has coordinate that is second on the list
-                # FE expects data's first dimension to be connected with second dimension, thus this transformation
-                data_to_be_returned = transform_2D_data(data_to_be_returned)
+            # ============= BEGIN data smoothing ============
+            if plot_data_query.smoothing_method is not None:
+                if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
+                    raise InvalidParametersException(
+                        "Data smoothing is only supported when leaf-node coordinates contain time"
+                    )
+
+                if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+                    if first_value.metadata.ndim != 1:
+                        message = f"Savitzky-Golay filter supports only 1D smoothing. Selected data node is {first_value.metadata.ndim}D."
+                        raise InvalidParametersException(message)
+                    data_to_be_returned = apply_savgol_filter(
+                        data_to_be_returned,
+                        window_length=plot_data_query.savgol_smoothing_window_length,
+                        polyorder=plot_data_query.savgol_smoothing_polyorder,
+                        deriv=plot_data_query.savgol_smoothing_deriv,
+                        delta=plot_data_query.savgol_smoothing_delta,
+                        mode=plot_data_query.savgol_smoothing_mode,
+                        cval=plot_data_query.savgol_smoothing_cval,
+                    )
+
+                elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
+                    time_coordinate_axis = None
+                    if first_value.metadata.ndim == 2:
+                        time_coordinate_axis = next(
+                            (i for i, d in enumerate(coordinates_to_be_returned) if d.get("name") == "time"), None
+                        )
+                    data_to_be_returned = apply_gaussian_filter(
+                        data_to_be_returned,
+                        sigma=plot_data_query.gaussian_smoothing_sigma,
+                        axis=time_coordinate_axis,
+                    )
+
+            # ============= END data smoothing =============
 
             # ============= BEGIN resample data onto new time vector =============
 
@@ -836,7 +874,7 @@ class IMASPythonSource(DataSourceInterface):
                 else:
                     return data
 
-            if interpolate_over:
+            if plot_data_query.interpolate_over:
                 # =================== GATHER ALL COORDINATES ===================
                 original_coord_values = []
                 new_common_coords = coordinates_to_be_returned
@@ -845,7 +883,7 @@ class IMASPythonSource(DataSourceInterface):
                     original_coord_values.append(sorted(set(flatten(c["value"]))))
                 original_coord_values.reverse()
 
-                for _uri in interpolate_over:
+                for _uri in plot_data_query.interpolate_over:
                     _uri_obj = IMAS_URI(_uri)
 
                     if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
@@ -857,14 +895,11 @@ class IMASPythonSource(DataSourceInterface):
                                 "IDS name and node path should be the same for source and target URI when interpolating data"
                             )
 
-                    interpolate_to_coordinates = self.get_plot_data(
-                        uri=_uri_obj.uri_entry_identifiers,
-                        ids=_uri_obj.ids_name,
-                        node_path=_uri_obj.node_path,
-                        occurrence=_uri_obj.occurrence,
-                        downsampling_method=downsampling_method,
-                        downsampled_size=downsampled_size,
-                    )["data"]["coordinates"]
+                    new_plot_data_query = copy(plot_data_query)
+                    new_plot_data_query.uri = _uri
+                    new_plot_data_query.interpolate_over = None
+                    new_plot_data_query.smoothing_method = None
+                    interpolate_to_coordinates = self.get_plot_data(new_plot_data_query)["data"]["coordinates"]
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
                         message = "Interpolation error. Source and target nodes have different number of coordinates."
@@ -886,7 +921,10 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
                 # === run interpolation ===
-                if interpolation_method == "exact_value" or not interpolation_method:
+                if (
+                    plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE
+                    or not plot_data_query.interpolation_method
+                ):
                     data_to_be_returned = resample_data_without_interpolation(
                         tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                     )
@@ -895,7 +933,7 @@ class IMASPythonSource(DataSourceInterface):
                         tuple(original_coord_values),
                         data_to_be_returned,
                         tuple(common_coords_values),
-                        interpolation_method=interpolation_method,
+                        interpolation_method=plot_data_query.interpolation_method,
                     )
 
                 new_coordinate_shapes = calculate_coordinate_shapes(
@@ -911,6 +949,13 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END resample data onto new time vector =============
 
+            if first_value.metadata.ndim == 2:
+                # Transform 2D arrays.
+                # By default first dimension of 2D has coordinate that is second on the list
+                # FE expects data's first dimension to be connected with second dimension, thus this transformation
+
+                data_to_be_returned = transform_2D_data(data_to_be_returned)
+
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape
             except ValueError:
@@ -921,15 +966,17 @@ class IMASPythonSource(DataSourceInterface):
                     # If coordinate targets node -> downsample coordinate as well
                     coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
                         data_to_be_returned,
-                        target_size=downsampled_size,
-                        method=downsampling_method,
+                        target_size=plot_data_query.downsampled_size,
+                        method=plot_data_query.downsampling_method,
                         x=coordinates_to_be_returned[0]["value"],
                         single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
                     )
 
                 else:
                     _, data_to_be_returned = downsample_data(
-                        data_to_be_returned, target_size=downsampled_size, method=downsampling_method
+                        data_to_be_returned,
+                        target_size=plot_data_query.downsampled_size,
+                        method=plot_data_query.downsampling_method,
                     )
             # serialize coordinates and update shapes (they could be changed by downsampling)
             for c in coordinates_to_be_returned:
