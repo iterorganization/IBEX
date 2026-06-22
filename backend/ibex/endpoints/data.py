@@ -1,13 +1,14 @@
 """Endpoints extracting data from data source"""
 
 import orjson
-from typing import List, Any, Optional
+from typing import Any, Annotated
 
 from fastapi import APIRouter, Query  # type: ignore
 from fastapi.responses import ORJSONResponse  # type: ignore
 
 from ibex.core import ibex_service
-from ibex.endpoints.schemas.data_schemas import FieldValueResponse, PlotDataResponse
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
+from ibex.endpoints.schemas.response_data_schemas import FieldValueResponse, PlotDataResponse
 
 router = APIRouter()
 
@@ -69,17 +70,12 @@ def field_value(
         200: {"description": "Plot data returned successfully"},
         404: {"description": "Data node not found"},
         464: {"description": "Given data node is empty"},
+        466: {"description": "Invalid parameters for requested data manipulation"},
     },
     description="Returns single (or tensorized) data node value with detailed parameters used to plot the data",
 )
 @ibex_service.measure_execution_time
-def plot_data(
-    uri: str,
-    interpolate_over: Optional[List[str]] = Query(None),
-    interpolation_method: Optional[str] = Query(None),
-    downsampling_method: str | None = Query(None),
-    downsampled_size: int = 1000,
-) -> Any:
+def plot_data(plot_data_query: Annotated[PlotDataRequestModel, Query()]) -> CustomORJSONResponse:
     """
     IBEX endpoint. Prepares and returns full information about data node and it's coordinates.
 
@@ -113,20 +109,12 @@ def plot_data(
     |   }
     | }
 
-    :param uri: IMAS URI with the path to leaf node
-    :param interpolate_over: list of IMAS URIs used in interpolation. E.g. imas:hdf5?path=/home/ITER/wasikj/Desktop/work/IBEX/testdb2#equilibrium/time_slice[:]/profiles_2d[:]/psi
-    :param interpolation_method: method of interpolation; one of the possible parameters provided from /info/data_manipulation_methods
-    :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-    :param downsampled_size: target size of downsampled data
+    :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+    :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
+
     """
-    return CustomORJSONResponse(
-        ibex_service.get_plot_data(
-            uri=uri.strip(),
-            interpolate_over=interpolate_over,
-            interpolation_method=interpolation_method,
-            downsampling_method=downsampling_method,
-            downsampled_size=downsampled_size,
-        )
-    )
+
+    return CustomORJSONResponse(ibex_service.get_plot_data(plot_data_query))

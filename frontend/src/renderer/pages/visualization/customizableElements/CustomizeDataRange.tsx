@@ -180,6 +180,7 @@ export const CustomizeDataRange = ({
             updatedDataPlot?.downsampled_size,
             updatedDataPlot?.dataType,
             urisToInterpolate,
+            updatedDataPlot?.interpolated_method,
           );
 
           if (plot?.error_bands?.length > 0) {

@@ -378,7 +378,7 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 2 - Enter the data range, apply a range, confirm the change, and check the values
-    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('visual-customization-access-button');
     await findCssElementAndClickIt('customization-Axis range-accordion');
     await writeTextInCssElement('data-range-min-input', '0.2', true);
     await writeTextInCssElement('data-range-max-input', '0.8', true);
@@ -419,7 +419,7 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 3 - Enter the data range, apply a second range, confirm the change, and check the values
-    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('visual-customization-access-button');
     await findCssElementAndClickIt('customization-Axis range-accordion');
     await writeTextInCssElement('data-range-min-input', '0.4', true);
     await writeTextInCssElement('data-range-max-input', '0.6', true);
@@ -460,7 +460,7 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 4 - Enter the data range, apply a third, wider range, confirm the change, and check the values
-    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('visual-customization-access-button');
     await findCssElementAndClickIt('customization-Axis range-accordion');
     await writeTextInCssElement('data-range-min-input', '0.2', true);
     await writeTextInCssElement('data-range-max-input', '0.8', true);
@@ -509,7 +509,7 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 5 - Enter the data range, restore the range, confirm the change, and check if the values have returned to their original state
-    await findCssElementAndClickIt('customization-access-button');
+    await findCssElementAndClickIt('visual-customization-access-button');
     await findCssElementAndClickIt('customization-Axis range-accordion');
     await findCssElementAndClickIt('data-range-restore-input');
     await waitForValue(
