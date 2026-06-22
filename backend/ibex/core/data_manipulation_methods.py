@@ -249,8 +249,6 @@ signal_data_operations_parameter = DataManipulationParameter(
                 PossibleValue(value="sub", description="Subtraction"),
                 PossibleValue(value="mul", description="Multiplication"),
                 PossibleValue(value="div", description="Division"),
-                PossibleValue(value="pow", description="Exponentiation"),
-                PossibleValue(value="root", description="Nth root"),
             ],
         ),
         DataManipulationParameter(

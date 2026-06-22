@@ -123,8 +123,6 @@ def apply_signal_operations(data: list | np.ndarray, operations: list[str], sign
         "sub": lambda r, v: r - v,
         "mul": lambda r, v: r * v,
         "div": lambda r, v: _safe_division(r, v),
-        "pow": lambda r, v: np.power(r, v),
-        "root": lambda r, v: np.power(r, 1 / v),
     }
 
     _NULL_REPLACEMENT = {
@@ -132,8 +130,6 @@ def apply_signal_operations(data: list | np.ndarray, operations: list[str], sign
         "sub": 0,
         "mul": 1,
         "div": 1,
-        "pow": 1,
-        "root": 1,
     }
 
     if isinstance(data, list):
