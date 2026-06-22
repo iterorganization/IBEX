@@ -138,7 +138,7 @@ def test_apply_signal_operations_uses_order():
     assert result == pytest.approx([12.0])
 
 
-def test_apply_signal_operations_recurses_over_lists():
+def test_apply_signal_operations_2D():
     uri = "some/uri"
     data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
     signal_data_by_uri = {uri: np.array([2.0, 3.0])}

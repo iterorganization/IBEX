@@ -5,7 +5,6 @@ from typing import Optional, Sequence, List
 import imas  # type: ignore
 import numpy as np  # type: ignore
 import re  # type: ignore
-from copy import copy  # type: ignore
 from idstools.database import DBMaster  # type: ignore
 from imas.ids_metadata import IDSMetadata  # type: ignore
 from imas.ids_primitive import (
@@ -861,11 +860,7 @@ class IMASPythonSource(DataSourceInterface):
                             "IDS name and node path should be the same for source and target URI when interpolating data"
                         )
 
-                    new_plot_data_query = copy(plot_data_query)
-                    new_plot_data_query.uri = _uri
-                    new_plot_data_query.interpolate_over = None
-                    new_plot_data_query.smoothing_method = None
-                    new_plot_data_query.signal_operations = None
+                    new_plot_data_query = PlotDataRequestModel(uri=_uri)
                     # interpolate_to will be used later with signal combining
                     interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
                     interpolate_to_coordinates = interpolate_to["coordinates"]

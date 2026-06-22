@@ -200,9 +200,6 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
         f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
     ]
 
-    # ---- db_1 primary, db_2 operand ----
-    # common coords: time=[1,2,3,4] (4), profiles_2d=[0,1,2,3] (4),
-    #                dim2=[1,2,3] (3), dim1=12 values (union of both)
     parameters = {
         "uri": f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
         "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
@@ -239,7 +236,7 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
 
 def test_plot_data_smoothing_with_wrong_target_node(entry_path):
     parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targetet quantity must be time-based
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targeted quantity must be time-based
         "smoothing_method": "gaussian_filter",
         "gaussian_smoothing_sigma": 1,
     }
@@ -311,6 +308,56 @@ def test_plot_data_requires_gaussian_sigma(entry_path):
 
     assert response.status_code == 422
     assert "gaussian_smoothing_sigma is required" in response.text
+
+
+def test_combined_features(entry_path, interpolation_entry_path_directory):
+    """
+    Single test exercising all data manipulation features:
+    simple operations, smoothing, interpolation (exact_value), and signal operations.
+    """
+    # --- Part 1: simple ops + gaussian smoothing + signal ops (entry_path) ---
+    db = f"imas:hdf5?path={entry_path}"
+    parameters = {
+        "uri": f"{db}#core_profiles/global_quantities/ip",
+        "operations": ["add:2", "mul:3"],
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+        "signal_operations": [f"add:{db}#core_profiles/time"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([11.28, 14.20, 18.0, 21.80, 24.72], 0.1)
+
+    # --- Part 2: different simple ops + savgol smoothing + exact_value interpolation + signal ops ---
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/vacuum_toroidal_field/b0",
+        "operations": ["mul:10", "pow:2"],
+        "smoothing_method": "savitzky-golay_filter",
+        "savgol_smoothing_window_length": 3,
+        "savgol_smoothing_polyorder": 1,
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
+        "interpolation_method": "exact_value",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    # db_1 b0: [0.1,0.2,0.3,0.4], mul:10+pow:2 -> [1,4,9,16]
+    # savgol wl=3 po=1 -> [0.6667,4.6667,9.6667,15.6667]
+    # exact_value interpolation on union [1,2,3,4] -> no change
+    # db_2 b0: [0.1,0.2,0.3]
+    # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None->0]
+    # signal add: [0.6667+0.1, 4.6667+0.2, 9.6667+0.3, 15.6667+0]
+    # Result: [0.7667,4.8667,9.9667,15.6667]
+    assert response_body["data"]["value"] == pytest.approx([0.76, 4.86, 9.96, 15.66], 0.01)
 
 
 def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
