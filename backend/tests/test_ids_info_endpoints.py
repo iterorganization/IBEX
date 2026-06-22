@@ -197,7 +197,7 @@ def test_geometry_overlay_nodes(entry_path):
         "outline_nodes": unordered(
             [
                 {
-                    "geometry_node": "imas:hdf5?path=/home/ITER/wasikj/Desktop/work/IBEX/testdb_pytest#wall:0/description_2d[:]/limiter/unit[:]/outline",
+                    "geometry_node": f"{entry_uri}#wall:0/description_2d[:]/limiter/unit[:]/outline",
                     "parameters": unordered(["r", "z"]),
                 }
             ]
