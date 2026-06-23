@@ -93,7 +93,7 @@ def test_node_info_filled_paths(entry_path):
         "ids_properties": True,
         "profiles_1d": True,
         "profiles_2d": True,
-        "global_quantities": False,
+        "global_quantities": True,
         "time": True,
     }
 
@@ -197,9 +197,16 @@ def test_geometry_overlay_nodes(entry_path):
         "outline_nodes": unordered(
             [
                 {
+                    "geometry_node": f"{entry_uri}#equilibrium:0/time_slice[:]/boundary/outline",
+                    "parameters": [
+                        "r",
+                        "z",
+                    ],
+                },
+                {
                     "geometry_node": f"{entry_uri}#wall:0/description_2d[:]/limiter/unit[:]/outline",
                     "parameters": unordered(["r", "z"]),
-                }
+                },
             ]
         )
     }
