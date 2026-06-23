@@ -119,3 +119,10 @@ def get_multiple_node_data(uri: str) -> dict:
 
 def get_plot_data(plot_data_query: PlotDataRequestModel) -> dict:
     return data_source.get_plot_data(plot_data_query)
+
+
+def get_geometry_overlay_nodes(uri: str, show_empty_nodes: bool = False, show_error_bars: bool = False) -> dict:
+    uri_obj = IMAS_URI(uri)
+    return data_source.get_geometry_overlay_nodes(
+        uri=uri_obj.uri_entry_identifiers, show_empty_nodes=show_empty_nodes, show_error_bars=show_error_bars
+    )

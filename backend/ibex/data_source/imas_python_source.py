@@ -165,17 +165,41 @@ class IMASPythonSource(DataSourceInterface):
         result["type"] = metadata.data_type or "structure"
         result["ndim"] = metadata.ndim
         result["shape"] = []  # empty for 0D data
+        result["is_geometry_node"] = self._is_geometry_node(metadata)
 
         if recursive:
             result["children"] = [self._jsonify_metadata(child, recursive) for child in metadata]
         else:
             result["children"] = [
-                {"name": child.name, "type": child.data_type, "ndim": child.ndim}
+                {
+                    "name": child.name,
+                    "type": child.data_type,
+                    "ndim": child.ndim,
+                    "is_geometry_node": self._is_geometry_node(child),
+                }
                 for child in metadata
                 if show_error_bars or not any(x in child.name for x in ["_error_upper", "_error_lower", "_error_index"])
             ]
 
         return result
+
+    def _is_geometry_node(self, metadata: IDSMetadata):
+        """
+        Checks if node lies inside geometry structure
+        :param metadata: metadata of ids node
+        :return:
+        """
+        if metadata is None:
+            return False
+
+        node_type = getattr(metadata, "structure_reference", None)
+        is_outline_static = node_type == "outline_2d_geometry_static"
+        is_outline_rz = "outline" in metadata.name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+
+        if is_outline_rz or is_outline_static:
+            return True
+
+        return self._is_geometry_node(metadata._parent)
 
     def get_node_info(
         self,
@@ -517,12 +541,17 @@ class IMASPythonSource(DataSourceInterface):
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
                             path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
+                            is_geometry_node = self._is_geometry_node(ids_obj.metadata[path])
                             if not filled_paths:
                                 # every ids has at least one filled path. If not, it means functionality is not available.
-                                found_paths.append({"path": path_name, "has_data": None})
+                                found_paths.append(
+                                    {"path": path_name, "has_data": None, "is_geometry_node": is_geometry_node}
+                                )
                             else:
                                 path_has_data = path_in_filled_paths(path, filled_paths)
-                                found_paths.append({"path": path_name, "has_data": path_has_data})
+                                found_paths.append(
+                                    {"path": path_name, "has_data": path_has_data, "is_geometry_node": is_geometry_node}
+                                )
 
                 except imas.exception.DataEntryException:
                     continue
@@ -648,6 +677,147 @@ class IMASPythonSource(DataSourceInterface):
                 return True
 
         return False
+
+    def get_geometry_overlay_nodes(
+        self,
+        uri: str,
+        show_empty_nodes: bool = False,
+        show_error_bars: bool = False,
+    ) -> dict:
+        """
+        Returns paths to metadata nodes that describe geometry overlays.
+
+        A node is included when:
+        - its type is ``outline_2d_geometry_static``, or
+        - its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+        Error bar nodes are filtered out by default and can be included with ``show_error_bars=True``.
+
+        :param uri: imas URI
+        :param show_empty_nodes: whether empty nodes should be returned, or not
+        :param show_error_bars: whether error bar nodes should be returned, or not
+        :return: dictionary {'outline_nodes': [{'geometry_node': '...', 'parameters': [...]}, ...]}
+        """
+
+        # ============ HELPER FUNCTION ============
+        def _get_descendant_node_names(metadata: IDSMetadata):
+
+            res = []
+            if metadata.data_type == IDSDataType.STRUCTURE:
+                for child in metadata:
+                    res.extend([f"{metadata.name}/{x}" for x in _get_descendant_node_names(child)])
+            else:
+                res.append(f"{metadata.name}")
+            return res
+
+        def _walk_outline_nodes(
+            uri: str,
+            ids: str,
+            occurrence: int,
+            root_metadata: IDSMetadata,
+            metadata: IDSMetadata,
+            results: list[dict[str, list[str]]],
+            show_error_bars: bool = False,
+            filled_paths: list[str] | None = None,
+        ) -> None:
+            """
+            Recursively traverses IDS metadata tree and collects nodes describing geometry overlays.
+
+            A node is collected when its type is ``outline_2d_geometry_static``
+            or when its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+
+            :param uri: imas URI
+            :param ids: name of IDS (e.g. core_profiles)
+            :param occurrence: IDS occurrence number
+            :param root_metadata: root metadata of the IDS (used to resolve tensorized paths)
+            :param metadata: current metadata node to inspect
+            :param results: list to which collected geometry overlay entries are appended
+            :param show_error_bars: whether to include error bar parameter names (e.g. ``_error_upper``)
+            :param filled_paths: optional list of filled paths; when given, only nodes with filled parameters are collected
+            """
+            node_name = metadata.name
+            node_type = getattr(metadata, "structure_reference", None)
+
+            is_outline_static = node_type == "outline_2d_geometry_static"
+            is_outline_rz = "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+
+            if is_outline_static or is_outline_rz:
+                tensorized_path = self._add_index_to_aos_in_path(root_metadata, metadata.path_string)
+                full_uri_with_path = f"{uri}#{ids}:{occurrence}/{tensorized_path}"
+                parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
+
+                params = []
+                for child in metadata:
+                    params.extend(_get_descendant_node_names(child))
+
+                for param in params:
+                    is_error_node = any(
+                        error_node in param for error_node in ["_error_upper", "_error_lower", "_error_index"]
+                    )
+                    if show_error_bars or not is_error_node:
+                        parameters_entry["parameters"].append(param)
+
+                if filled_paths is not None:
+                    node_filled = any(
+                        f"{metadata.path_string}/{parameter}" in filled_paths
+                        for parameter in parameters_entry["parameters"]
+                    )
+
+                    if node_filled and parameters_entry["parameters"]:  # don't put structures with empty "parameters"
+                        results.append(parameters_entry)
+                elif parameters_entry["parameters"]:  # don't put structures with empty "parameters"
+                    results.append(parameters_entry)
+
+            else:
+                for child in metadata:
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids,
+                        occurrence=occurrence,
+                        root_metadata=root_metadata,
+                        metadata=child,
+                        results=results,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
+
+        # ============ END HELPER FUNCTION ============
+
+        # Iterate over all filled IDSes and their occurrences to collect geometry overlay nodes
+        filled_idses = self.list_idses(uri)["idses"]
+
+        with self._open_entry(uri) as entry:
+            result = []
+
+            for ids_dict in filled_idses:
+                # ids_dict = {'name': < name >, 'occurrences': [ < 0 >, < 1 >, ...]}
+                for occurrence in ids_dict["occurrences"]:
+                    ids_obj = self._get_ids_from_entry(entry, ids_dict["name"], occurrence)
+                    outline_nodes = []
+
+                    filled_paths = None
+                    if not show_empty_nodes:
+                        try:
+                            filled_paths = entry.list_filled_paths(ids_dict["name"], int(occurrence))
+                        except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                            # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                            # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                            # proceed without filtering empty nodes
+                            ...
+
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids_dict["name"],
+                        occurrence=occurrence,
+                        root_metadata=ids_obj.metadata,
+                        metadata=ids_obj.metadata,
+                        results=outline_nodes,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
+
+                    result.extend(outline_nodes)
+
+        return {"outline_nodes": result}
 
     def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """

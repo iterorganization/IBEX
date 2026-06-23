@@ -97,6 +97,7 @@ def entry_path(tmp_path_factory):
 
     entry.put(core_profiles)
 
+    # ===== for geometry overlay =====
     # ===== for data smoothing 2D (one of coordinates is time) =====
 
     wall = entry.factory.wall()
@@ -110,7 +111,20 @@ def entry_path(tmp_path_factory):
             [1, 1, 1, 1, 1],
         ]
     )
+
+    wall.description_2d.resize(1)
+    wall.description_2d[0].limiter.unit.resize(1)
+    wall.description_2d[0].limiter.unit[0].outline.r = [1.0]
+    wall.description_2d[0].limiter.unit[0].outline.z = [1.0]
     entry.put(wall)
+
+    equilibrium = entry.factory.equilibrium()
+    equilibrium.ids_properties.homogeneous_time = 1
+    equilibrium.time = np.array([1.0], dtype=float)
+    equilibrium.time_slice.resize(1)
+    equilibrium.time_slice[0].boundary.outline.r = np.array([1.0], dtype=float)
+    equilibrium.time_slice[0].boundary.outline.z = np.array([2.0], dtype=float)
+    entry.put(equilibrium)
 
     entry.close()
     return tmp_path

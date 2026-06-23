@@ -133,3 +133,25 @@ class DataSourceInterface(ABC):
         :return: Dictionary containing data values, metadata and coordinates.
         """
         ...
+
+    @abstractmethod
+    def get_geometry_overlay_nodes(
+        self,
+        uri: str,
+        show_empty_nodes: bool = False,
+        show_error_bars: bool = False,
+    ) -> dict:
+        """
+        Returns paths to metadata nodes that describe geometry overlays.
+
+        A node is included when:
+        - its type is ``outline_2d_geometry_static``, or
+        - its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+        Error bar nodes are filtered out by default and can be included with ``show_error_bars=True``.
+
+        :param uri: imas URI
+        :param show_empty_nodes: whether empty nodes should be returned, or not
+        :param show_error_bars: whether error bar nodes should be returned, or not
+        :return: dictionary {'outline_nodes': [{'geometry_node': '...', 'parameters': [...]}, ...]}
+        """
+        ...
