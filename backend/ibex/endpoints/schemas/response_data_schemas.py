@@ -17,12 +17,10 @@ class PlotDataCoordinateModel(BaseModel):
     """Intermediate model for /data/plot_data endpoint"""
 
     name: str = Field(description="Node name", examples=["dim1"])
-    alias: str = Field(description="Node name alias", examples=["Height"])
     target: str = Field(
         description="Which node coordinate is it", examples=["#equilibrium/time_slice[0]/profiles_2d[0]/psi"]
     )
     unit: str = Field(description="Data units", examples=["m", "mixed"])
-    unit_alias: str = Field(description="Data units alias", examples=["m"])
     shape: list[int] | str = Field(description="Shape of the data", examples=[[129]])
     downsampled_shape: list[int] | str = Field(description="Shape of the data after downsampling", examples=[[129]])
     ndim: int = Field(description="Number of data dimensions stored in node", examples=[1])
