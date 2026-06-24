@@ -135,7 +135,7 @@ data_smoothing_method_parameter = DataManipulationParameter(
                 AdditionalParameter(
                     name="savgol_smoothing_window_length",
                     human_readable_name="Window length",
-                    description="The length of the filter window (i.e., the number of coefficients). If mode is ‘interp’, window_length must be less than or equal to the size of x.",
+                    description="The length of the filter window (i.e., the number of coefficients). If mode is `interp`, window_length must be less than or equal to the size of x.",
                 ),
                 AdditionalParameter(
                     name="savgol_smoothing_polyorder",
@@ -161,7 +161,7 @@ data_smoothing_method_parameter = DataManipulationParameter(
                 AdditionalParameter(
                     name="savgol_smoothing_cval",
                     human_readable_name="C-Val",
-                    description="Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.",
+                    description="Value to fill past the edges of the input if mode is `constant`. Default is 0.0.",
                 ),
             ],
         ),
