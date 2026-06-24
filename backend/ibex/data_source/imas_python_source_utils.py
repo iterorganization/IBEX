@@ -46,12 +46,12 @@ def apply_savgol_filter(
     """
     Apply Savitzky-Golay filer to data
     :param data: The input array.
-    :param window_length: The length of the filter window (i.e., the number of coefficients). If mode is ‘interp’, window_length must be less than or equal to the size of x.
+    :param window_length: The length of the filter window (i.e., the number of coefficients). If mode is `interp`, window_length must be less than or equal to the size of x.
     :param polyorder: The order of the polynomial used to fit the samples. polyorder must be less than window_length.
     :param deriv: The order of the derivative to compute. This must be a nonnegative integer. The default is 0, which means to filter the data without differentiating.
     :param delta: The spacing of the samples to which the filter will be applied. This is only used if deriv > 0. Default is 1.0.
-    :param mode: Must be ‘mirror’, ‘constant’, ‘nearest’, ‘wrap’ or ‘interp’.
-    :param cval: Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.
+    :param mode: Must be `mirror`, `constant`, `nearest`, `wrap` or `interp`.
+    :param cval: Value to fill past the edges of the input if mode is `constant`. Default is 0.0.
 
     :return: Data with filter applied
     """
