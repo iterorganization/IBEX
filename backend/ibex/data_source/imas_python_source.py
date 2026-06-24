@@ -40,6 +40,7 @@ from ibex.data_source.exception import (
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
 from ibex.core.utils import IMAS_URI
 from ibex.data_source.imas_python_source_utils import (
+    path_in_filled_paths,
     convert_ids_data_into_numpy_array,
     resample_data_with_interpolation,
     resample_data_without_interpolation,
@@ -165,17 +166,41 @@ class IMASPythonSource(DataSourceInterface):
         result["type"] = metadata.data_type or "structure"
         result["ndim"] = metadata.ndim
         result["shape"] = []  # empty for 0D data
+        result["is_geometry_node"] = self._is_geometry_node(metadata)
 
         if recursive:
             result["children"] = [self._jsonify_metadata(child, recursive) for child in metadata]
         else:
             result["children"] = [
-                {"name": child.name, "type": child.data_type, "ndim": child.ndim}
+                {
+                    "name": child.name,
+                    "type": child.data_type,
+                    "ndim": child.ndim,
+                    "is_geometry_node": self._is_geometry_node(child),
+                }
                 for child in metadata
                 if show_error_bars or not any(x in child.name for x in ["_error_upper", "_error_lower", "_error_index"])
             ]
 
         return result
+
+    def _is_geometry_node(self, metadata: IDSMetadata):
+        """
+        Checks if node lies inside geometry structure
+        :param metadata: metadata of ids node
+        :return:
+        """
+        if metadata is None:
+            return False
+
+        node_type = getattr(metadata, "structure_reference", None)
+        is_outline_static = node_type == "outline_2d_geometry_static"
+        is_outline_rz = "outline" in metadata.name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+
+        if is_outline_rz or is_outline_static:
+            return True
+
+        return self._is_geometry_node(metadata._parent)
 
     def get_node_info(
         self,
@@ -206,6 +231,27 @@ class IMASPythonSource(DataSourceInterface):
             metadata_dict["coordinates"] = list(coordinates.values())
             # flatten list
             metadata_dict["coordinates"] = list(chain.from_iterable(metadata_dict["coordinates"]))
+
+            # ========== check if node and it's children have data ==========
+            try:
+                filled_paths = entry.list_filled_paths(ids, int(occurrence))
+            except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                ...  # proceed
+            else:
+                metadata_dict["has_data"] = path_in_filled_paths(metadata.path_string, filled_paths)
+
+                if metadata.path_string == "":
+                    # ids roots always have data (otherwise they cannot be obtained)
+                    metadata_dict["has_data"] = True
+
+                # update metadata dict
+                for child_dict in metadata_dict["children"]:
+                    child_metadata = metadata[child_dict["name"]]
+                    child_dict["has_data"] = path_in_filled_paths(child_metadata.path_string, filled_paths)
+
+            # ========== END check if node and it's children have data ==========
 
             # fill 'shape', but omit it if path points to more than one node
             if metadata_dict["ndim"] > 0 and ":" not in node_path:
@@ -411,10 +457,11 @@ class IMASPythonSource(DataSourceInterface):
         :param downsampled_size: target size for downsampling
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
-
         with self._open_entry(uri) as entry:
-            ids_root = self._get_ids_from_entry(entry, ids, occurrence)
-
+            try:
+                ids_root = self._get_ids_from_entry(entry, ids, occurrence)
+            except imas.exception.DataEntryException as e:
+                raise IdsNotFoundException(str(e)) from None
             ids_path = IDSPath(node_path)
             path_elements = list(ids_path.items())
             ids_data = self._get_raw_data(ids_root, path_elements)
@@ -476,6 +523,13 @@ class IMASPythonSource(DataSourceInterface):
 
             for ids in ids_list:
                 try:
+                    try:
+                        filled_paths = entry.list_filled_paths(ids, occurrence=0)
+                    except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                        # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                        # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                        # proceed
+                        filled_paths = []
                     ids_obj = entry.get(ids, occurrence=0, autoconvert=False, lazy=True)
                     paths = [node for node in imas.util.find_paths(ids_obj, searched_node)]
                     for path in paths:
@@ -487,7 +541,18 @@ class IMASPythonSource(DataSourceInterface):
                         # collect only leaf nodes
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
-                            found_paths.append(f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}")
+                            path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
+                            is_geometry_node = self._is_geometry_node(ids_obj.metadata[path])
+                            if not filled_paths:
+                                # every ids has at least one filled path. If not, it means functionality is not available.
+                                found_paths.append(
+                                    {"path": path_name, "has_data": None, "is_geometry_node": is_geometry_node}
+                                )
+                            else:
+                                path_has_data = path_in_filled_paths(path, filled_paths)
+                                found_paths.append(
+                                    {"path": path_name, "has_data": path_has_data, "is_geometry_node": is_geometry_node}
+                                )
 
                 except imas.exception.DataEntryException:
                     continue
@@ -598,6 +663,163 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
+    def _leaf_node_coordinates_contain_time(self, leaf_node_path: str, coordinates_to_be_returned: list[dict]) -> bool:
+        """
+        Returns True when the leaf-node coordinates contain a time coordinate.
+
+        :param loaf_node_path: path to tested_node
+        :param coordinates_to_be_returned: list of dicts of coordinates from get_plot_data() method
+        :return: True or False
+        """
+        if not coordinates_to_be_returned:
+            return False
+        for coordinate in coordinates_to_be_returned:
+            if coordinate["name"] == "time" and coordinate["target"] == leaf_node_path:
+                return True
+
+        return False
+
+    def get_geometry_overlay_nodes(
+        self,
+        uri: str,
+        show_empty_nodes: bool = False,
+        show_error_bars: bool = False,
+    ) -> dict:
+        """
+        Returns paths to metadata nodes that describe geometry overlays.
+
+        A node is included when:
+        - its type is ``outline_2d_geometry_static``, or
+        - its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+        Error bar nodes are filtered out by default and can be included with ``show_error_bars=True``.
+
+        :param uri: imas URI
+        :param show_empty_nodes: whether empty nodes should be returned, or not
+        :param show_error_bars: whether error bar nodes should be returned, or not
+        :return: dictionary {'outline_nodes': [{'geometry_node': '...', 'parameters': [...]}, ...]}
+        """
+
+        # ============ HELPER FUNCTION ============
+        def _get_descendant_node_names(metadata: IDSMetadata):
+
+            res = []
+            if metadata.data_type == IDSDataType.STRUCTURE:
+                for child in metadata:
+                    res.extend([f"{metadata.name}/{x}" for x in _get_descendant_node_names(child)])
+            else:
+                res.append(f"{metadata.name}")
+            return res
+
+        def _walk_outline_nodes(
+            uri: str,
+            ids: str,
+            occurrence: int,
+            root_metadata: IDSMetadata,
+            metadata: IDSMetadata,
+            results: list[dict[str, list[str]]],
+            show_error_bars: bool = False,
+            filled_paths: list[str] | None = None,
+        ) -> None:
+            """
+            Recursively traverses IDS metadata tree and collects nodes describing geometry overlays.
+
+            A node is collected when its type is ``outline_2d_geometry_static``
+            or when its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+
+            :param uri: imas URI
+            :param ids: name of IDS (e.g. core_profiles)
+            :param occurrence: IDS occurrence number
+            :param root_metadata: root metadata of the IDS (used to resolve tensorized paths)
+            :param metadata: current metadata node to inspect
+            :param results: list to which collected geometry overlay entries are appended
+            :param show_error_bars: whether to include error bar parameter names (e.g. ``_error_upper``)
+            :param filled_paths: optional list of filled paths; when given, only nodes with filled parameters are collected
+            """
+            node_name = metadata.name
+            node_type = getattr(metadata, "structure_reference", None)
+
+            is_outline_static = node_type == "outline_2d_geometry_static"
+            is_outline_rz = "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+
+            if is_outline_static or is_outline_rz:
+                tensorized_path = self._add_index_to_aos_in_path(root_metadata, metadata.path_string)
+                full_uri_with_path = f"{uri}#{ids}:{occurrence}/{tensorized_path}"
+                parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
+
+                params = []
+                for child in metadata:
+                    params.extend(_get_descendant_node_names(child))
+
+                for param in params:
+                    is_error_node = any(
+                        error_node in param for error_node in ["_error_upper", "_error_lower", "_error_index"]
+                    )
+                    if show_error_bars or not is_error_node:
+                        parameters_entry["parameters"].append(param)
+
+                if filled_paths is not None:
+                    node_filled = any(
+                        f"{metadata.path_string}/{parameter}" in filled_paths
+                        for parameter in parameters_entry["parameters"]
+                    )
+
+                    if node_filled and parameters_entry["parameters"]:  # don't put structures with empty "parameters"
+                        results.append(parameters_entry)
+                elif parameters_entry["parameters"]:  # don't put structures with empty "parameters"
+                    results.append(parameters_entry)
+
+            else:
+                for child in metadata:
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids,
+                        occurrence=occurrence,
+                        root_metadata=root_metadata,
+                        metadata=child,
+                        results=results,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
+
+        # ============ END HELPER FUNCTION ============
+
+        # Iterate over all filled IDSes and their occurrences to collect geometry overlay nodes
+        filled_idses = self.list_idses(uri)["idses"]
+
+        with self._open_entry(uri) as entry:
+            result = []
+
+            for ids_dict in filled_idses:
+                # ids_dict = {'name': < name >, 'occurrences': [ < 0 >, < 1 >, ...]}
+                for occurrence in ids_dict["occurrences"]:
+                    ids_obj = self._get_ids_from_entry(entry, ids_dict["name"], occurrence)
+                    outline_nodes = []
+
+                    filled_paths = None
+                    if not show_empty_nodes:
+                        try:
+                            filled_paths = entry.list_filled_paths(ids_dict["name"], int(occurrence))
+                        except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                            # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                            # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                            # proceed without filtering empty nodes
+                            ...
+
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids_dict["name"],
+                        occurrence=occurrence,
+                        root_metadata=ids_obj.metadata,
+                        metadata=ids_obj.metadata,
+                        results=outline_nodes,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
+
+                    result.extend(outline_nodes)
+
+        return {"outline_nodes": result}
+
     def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
@@ -607,7 +829,7 @@ class IMASPythonSource(DataSourceInterface):
         :return: Dictionary containing data values, metadata and coordinates.
         """
 
-        uri_obj = IMAS_URI(plot_data_query.uri)
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
         uri = uri_obj.uri_entry_identifiers
         ids = uri_obj.ids_name
         node_path = uri_obj.node_path
@@ -622,7 +844,7 @@ class IMASPythonSource(DataSourceInterface):
             self._check_data_is_leaf_node(ids_data)
 
             if self._is_empty(ids_data):
-                raise NoDataException(f"No data for {node_path}")
+                raise NoDataException(f"No data for {uri}#{ids}/{node_path}")
             coordinates_to_be_returned = []
 
             # =================================
@@ -631,8 +853,8 @@ class IMASPythonSource(DataSourceInterface):
             for _node_path, _coordinate_path_list in coordinates_dict.items():
                 _new_coordinate_path_list = []
                 for _coordinate_path in _coordinate_path_list:
-                    if _coordinate_path == "1...N":
-                        _new_coordinate_path_list.append("1...N")
+                    if _coordinate_path.startswith("1..."):  # 1...N, 1...2, 1...3 etc.
+                        _new_coordinate_path_list.append(_coordinate_path)
                         continue
 
                     _new_coordinate_path = ""
@@ -640,7 +862,7 @@ class IMASPythonSource(DataSourceInterface):
                     # iterate over path elements. X stands target node path element, while Y stands for coordinate path elements
                     # we do this in order to fill dummy indexes with indexes extracted from target node path
                     for x, y in zip_longest(_node_path.items(), IDSPath(_coordinate_path).items()):
-                        # x[0] is node name in path eg. profiles_1d
+                        # x[0] is node name in path e.g. profiles_1d
                         # x[1] is indices or single index. For instance x=profiles_1d[123] -> x[0]=profiles_1d & x[1]=123
                         # the same applies to y
 
@@ -665,10 +887,8 @@ class IMASPythonSource(DataSourceInterface):
                 shapes_dimension = not bool(re.search(r"\[\d+\]$", str(target)))
 
                 for coord in coord_list:
-                    if coord == "1...N":
-                        # 1...N coords are targeting AoS
+                    if coord.startswith("1..."):
                         # remove last array operator ([<number or colon>]) from path and save it as target_str
-
                         splitted_target = str(target).split("/")
                         splitted_target[-1] = re.sub(r"[\[\(](.*?)[\]\)]", "", splitted_target[-1])
                         target_str = "/".join([x for x in splitted_target])
@@ -679,7 +899,7 @@ class IMASPythonSource(DataSourceInterface):
                         coord_target_objects = self._get_raw_data(ids_obj, path_elements)
                         self._check_data_is_leaf_node(coord_target_objects)
 
-                        # collect labels for 1...N coordinates
+                        # collect labels for 1... coordinates
                         labels = []
                         try:
                             for element in coord_target_objects:
@@ -718,7 +938,7 @@ class IMASPythonSource(DataSourceInterface):
                         # (otherwise coordinate name would be the same as target node name)
                         coordinate_name = splitted_target[-1]
                         if f"{target}" == f"{node_path}":
-                            coordinate_name = "1...N"
+                            coordinate_name = coord
 
                         try:
                             coord_data_shape = np.asarray(coord_values).shape
@@ -780,12 +1000,6 @@ class IMASPythonSource(DataSourceInterface):
             first_value = find_first_value_in_list(ids_data)
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
-            if first_value.metadata.ndim == 2:
-                # Transform 2D arrays.
-                # By default first dimension of 2D has coordinate that is second on the list
-                # FE expects data's first dimension to be connected with second dimension, thus this transformation
-                data_to_be_returned = transform_2D_data(data_to_be_returned)
-
             # ============= BEGIN simple operations ============
 
             if plot_data_query.operations is not None:
@@ -794,16 +1008,16 @@ class IMASPythonSource(DataSourceInterface):
             # ============= END simple operations =============
 
             # ============= BEGIN data smoothing ============
-
             if plot_data_query.smoothing_method is not None:
-                if first_value.metadata.ndim != 1:
-                    raise InvalidParametersException("Data smoothing is only supported for 1D data")
-                if not coordinates_to_be_returned or coordinates_to_be_returned[0]["name"] != "time":
+                if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
                     raise InvalidParametersException(
-                        "Data smoothing is only supported when the first coordinate is time"
+                        "Data smoothing is only supported when leaf-node coordinates contain time"
                     )
 
                 if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+                    if first_value.metadata.ndim != 1:
+                        message = f"Savitzky-Golay filter supports only 1D smoothing. Selected data node is {first_value.metadata.ndim}D."
+                        raise InvalidParametersException(message)
                     data_to_be_returned = apply_savgol_filter(
                         data_to_be_returned,
                         window_length=plot_data_query.savgol_smoothing_window_length,
@@ -815,8 +1029,15 @@ class IMASPythonSource(DataSourceInterface):
                     )
 
                 elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
+                    time_coordinate_axis = None
+                    if first_value.metadata.ndim == 2:
+                        time_coordinate_axis = next(
+                            (i for i, d in enumerate(coordinates_to_be_returned) if d.get("name") == "time"), None
+                        )
                     data_to_be_returned = apply_gaussian_filter(
-                        data_to_be_returned, sigma=plot_data_query.gaussian_smoothing_sigma
+                        data_to_be_returned,
+                        sigma=plot_data_query.gaussian_smoothing_sigma,
+                        axis=time_coordinate_axis,
                     )
 
             # ============= END data smoothing =============
@@ -844,9 +1065,13 @@ class IMASPythonSource(DataSourceInterface):
                     _uri_obj = IMAS_URI(_uri)
 
                     if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
-                        raise InvalidParametersException(
-                            "IDS name and node path should be the same for source and target URI when interpolating data"
-                        )
+                        if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
+                            # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
+                            ...
+                        else:
+                            raise InvalidParametersException(
+                                "IDS name and node path should be the same for source and target URI when interpolating data"
+                            )
 
                     new_plot_data_query = copy(plot_data_query)
                     new_plot_data_query.uri = _uri
@@ -901,6 +1126,13 @@ class IMASPythonSource(DataSourceInterface):
                     c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
+
+            if first_value.metadata.ndim == 2:
+                # Transform 2D arrays.
+                # By default first dimension of 2D has coordinate that is second on the list
+                # FE expects data's first dimension to be connected with second dimension, thus this transformation
+
+                data_to_be_returned = transform_2D_data(data_to_be_returned)
 
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape

@@ -1,11 +1,37 @@
+from typing import List
 from functools import reduce
 
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from ibex.data_source.exception import InvalidParametersException
+
+
+def path_in_filled_paths(node_path: str, filled_paths: List[str]):
+    """
+    Returns true if node path is in filled paths.
+    Checks also for intermediate paths e.g. node_path = 'profiles_2d' filled_paths = ['profiles_2d/t_i_average'] should also return True.
+    :param node_path: single node path e.g 'time', 'ids_properties/comment'
+    :param filled_paths: list of filled paths extracted from imas.DBEntry.list_filled_paths()
+    :return: True or False
+    """
+
+    node_path = node_path.rstrip("/")
+
+    for path in filled_paths:
+        path = path.rstrip("/")
+
+        # exact match
+        if path == node_path:
+            return True
+
+        # node_path is a prefix for full path
+        if path.startswith(node_path + "/"):
+            return True
+
+    return False
 
 
 def apply_savgol_filter(
@@ -49,7 +75,7 @@ def apply_savgol_filter(
         raise InvalidParametersException(msg)
 
 
-def apply_gaussian_filter(data: list | np.ndarray, sigma):
+def apply_gaussian_filter(data: list | np.ndarray, sigma, axis: int | None = None):
     """
     Apply Gaussian filer to data
     :param data: The input array.
@@ -59,7 +85,10 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
     if isinstance(data, list):
         return [apply_gaussian_filter(x, sigma) for x in data]
     elif isinstance(data, (np.ndarray, IDSNumericArray)):
-        return gaussian_filter(data, sigma=sigma)
+        if axis is None:
+            return gaussian_filter1d(data, sigma=sigma)
+        else:
+            return gaussian_filter1d(data, sigma=sigma, axis=axis)
     else:
         msg = "Smoothing can be executed only on numeric arrays, not single values or strings."
         raise InvalidParametersException(msg)
