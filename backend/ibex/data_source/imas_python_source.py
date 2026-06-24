@@ -684,7 +684,7 @@ class IMASPythonSource(DataSourceInterface):
         :param grid_node: IDSNode (named dimX, X = [1...N])
         :return:
         """
-        result = {"alias": None, "unit_alias": None}
+        result = {"axis_label": None, "unit": None}
         if grid_node._parent is None or grid_node._parent._parent is None:
             return result
         if not re.search(r"dim[1-9]", grid_node.metadata.name):
@@ -699,19 +699,19 @@ class IMASPythonSource(DataSourceInterface):
         # Extract units
         try:
             units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
-            result["unit_alias"] = units[dim_index]
+            result["unit"] = units[dim_index]
         except (ValueError, KeyError, AttributeError):
-            result["unit_alias"] = None
+            result["unit"] = None
 
         # Extract axis labels
         try:
             axis_labels = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).axis_labels.split(",")
-            result["alias"] = axis_labels[dim_index]
+            result["axis_label"] = axis_labels[dim_index]
         except AttributeError:
             description = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).description
             match = re.findall(r"(\w+)=(dim[1-9])", description)
             axis_labels = {v: k for k, v in match}
-            result["alias"] = axis_labels.get(grid_node.metadata.name, None)
+            result["axis_label"] = axis_labels.get(grid_node.metadata.name, None)
 
         return result
 
@@ -1020,15 +1020,15 @@ class IMASPythonSource(DataSourceInterface):
                             coord_data_shape = "irregular"
 
                         coord_name = coord.split("/")[-1]
-                        alias = None
-                        alias_unit = None
+                        axis_label = None
+                        unit = None
                         if re.search(r"dim[1-9]", coord_name):
-                            alias_dict = self._generate_grid_quantity_alias(first_value)
-                            alias = alias_dict["alias"]
-                            alias_unit = alias_dict["unit_alias"]
+                            labels_dict = self._generate_grid_quantity_alias(first_value)
+                            axis_label = labels_dict["axis_label"]
+                            unit = labels_dict["unit"]
 
-                        coord_name = alias if alias else coord_name
-                        units = alias_unit if alias_unit else first_value.metadata.units
+                        coord_name = axis_label if axis_label else coord_name
+                        units = unit if unit else first_value.metadata.units
                         c = {
                             "name": coord_name,
                             "target": f"#{ids}/{target}",
