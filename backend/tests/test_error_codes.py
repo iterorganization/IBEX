@@ -53,6 +53,18 @@ def test_node_is_not_leaf_array_summary(entry_path):
     assert response.status_code == 461, "field_value endpoint should return 461 when trying to get non leaf node"
 
 
+def test_uri_with_non_numeric_occurrence(entry_path):
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles:abc/profiles_1d[:]/time"}
+    response = pytest.test_client.get("/data/field_value", params=parameters)
+    assert response.status_code == 466
+
+
+def test_uri_with_invalid_fragment(entry_path):
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#:1/path"}
+    response = pytest.test_client.get("/data/field_value", params=parameters)
+    assert response.status_code == 466
+
+
 def test_node_is_not_array(entry_path):
     parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/ids_properties/version_put/access_layer"}
     response = pytest.test_client.get("/ids_info/array_summary", params=parameters)

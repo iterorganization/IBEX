@@ -703,7 +703,7 @@ class IMASPythonSource(DataSourceInterface):
         def _get_descendant_node_names(metadata: IDSMetadata):
 
             res = []
-            if metadata.data_type == IDSDataType.STRUCTURE:
+            if metadata.data_type in (IDSDataType.STRUCTURE, IDSDataType.STRUCT_ARRAY):
                 for child in metadata:
                     res.extend([f"{metadata.name}/{x}" for x in _get_descendant_node_names(child)])
             else:
@@ -759,7 +759,7 @@ class IMASPythonSource(DataSourceInterface):
 
                 if filled_paths is not None:
                     node_filled = any(
-                        f"{metadata.path_string}/{parameter}" in filled_paths
+                        path_in_filled_paths(f"{metadata.path_string}/{parameter}", filled_paths)
                         for parameter in parameters_entry["parameters"]
                     )
 
@@ -1117,7 +1117,6 @@ class IMASPythonSource(DataSourceInterface):
                 new_coordinate_shapes = calculate_coordinate_shapes(
                     list(np.asarray(data_to_be_returned).shape),
                     first_value.metadata.ndim,
-                    len(coordinates_to_be_returned),
                 )
 
                 # expand flattened coordinates
