@@ -95,7 +95,7 @@ def test_plot_data_with_gaussian_smoothing_2d(entry_path):
     response_body = response.json()
 
     assert np.array(response_body["data"]["value"]) == pytest.approx(
-        np.array([[1.6, 1.0, 1.0], [2.2, 1.0, 1.0], [2.7, 1.0, 1.0], [3.1, 1.0, 1.0], [3.2, 1.0, 1.0]]), 0.1
+        np.array([[1.0, 1.0, 1.0], [2.28, 1.59, 1.12], [1.64, 1.29, 1.06], [2.92, 1.88, 1.18], [2.28, 1.59, 1.12]]), 0.1
     )
 
 

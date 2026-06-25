@@ -834,6 +834,9 @@ class IMASPythonSource(DataSourceInterface):
         node_path = uri_obj.node_path
         occurrence = uri_obj.occurrence
 
+        if not plot_data_query.interpolation_method:
+            plot_data_query.interpolation_method = InterpolationMethod.EXACT_VALUE
+
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
 
@@ -892,6 +895,11 @@ class IMASPythonSource(DataSourceInterface):
                         splitted_target[-1] = re.sub(r"[\[\(](.*?)[\]\)]", "", splitted_target[-1])
                         target_str = "/".join([x for x in splitted_target])
                         # ====================================
+
+                        # not returned, only used internally for interpolation check
+                        _is_aos = (
+                            IDSPath(target_str).goto_metadata(ids_obj.metadata).data_type == IDSDataType.STRUCT_ARRAY
+                        )
 
                         ids_path = IDSPath(str(target_str))
                         path_elements = list(ids_path.items())
@@ -955,6 +963,7 @@ class IMASPythonSource(DataSourceInterface):
                             "description": "1...N",
                             "coordinates": shape_factors,
                             "shapes_dimension": shapes_dimension,
+                            "_is_aos": _is_aos,  # not returned, only used internally for interpolation validation
                             "value": labels if labels else coord_values,
                         }
                         coordinates_to_be_returned.append(c)
@@ -998,6 +1007,13 @@ class IMASPythonSource(DataSourceInterface):
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
+
+            if first_value.metadata.ndim == 2:
+                # Transform 2D arrays.
+                # By default first dimension of 2D has coordinate that is second on the list
+                # FE expects data's first dimension to be connected with second dimension, thus this transformation
+
+                data_to_be_returned = transform_2D_data(data_to_be_returned)
 
             # ============= BEGIN data smoothing ============
             if plot_data_query.smoothing_method is not None:
@@ -1045,6 +1061,15 @@ class IMASPythonSource(DataSourceInterface):
                     return data
 
             if plot_data_query.interpolate_over:
+                # check for non-interpolatable coordinates
+                if plot_data_query.interpolation_method != InterpolationMethod.EXACT_VALUE:
+                    for _coord in coordinates_to_be_returned:
+                        if _coord.get("description") == "1...N" and _coord.get("_is_aos"):
+                            raise InvalidParametersException(
+                                f"Interpolation is not supported for coordinate '{_coord['name']}' "
+                                "which is a STRUCT_ARRAY (AoS) coordinate. Try using exact_value method."
+                            )
+
                 # =================== GATHER ALL COORDINATES ===================
                 original_coord_values = []
                 new_common_coords = coordinates_to_be_returned
@@ -1091,10 +1116,7 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
                 # === run interpolation ===
-                if (
-                    plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE
-                    or not plot_data_query.interpolation_method
-                ):
+                if plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE:
                     data_to_be_returned = resample_data_without_interpolation(
                         tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                     )
@@ -1118,13 +1140,6 @@ class IMASPythonSource(DataSourceInterface):
                     c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
-
-            if first_value.metadata.ndim == 2:
-                # Transform 2D arrays.
-                # By default first dimension of 2D has coordinate that is second on the list
-                # FE expects data's first dimension to be connected with second dimension, thus this transformation
-
-                data_to_be_returned = transform_2D_data(data_to_be_returned)
 
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape
