@@ -146,48 +146,47 @@ def test_plot_data_with_simple_operations(entry_path):
         response_body = response.json()
         assert response_body["data"]["value"] == pytest.approx(expected)
 
+
 def test_plot_data_with_simple_operations_errors(entry_path):
     operations = "root:0"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 466
 
     operations = "div:0"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 466
 
     operations = "dummy:0"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 422
 
     operations = "add:string"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 422
 
     operations = ":0"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 422
 
     operations = "string:"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 422
 
     operations = "string"
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 422
 
     operations = ""
-    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations":operations}
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 422
-
-
 
 
 def test_plot_data_smoothing_with_wrong_target_node(entry_path):

@@ -113,7 +113,9 @@ class PlotDataRequestModel(
                     raise ValueError(f"Invalid operation format: '{op}'. Expected 'operation:value'")
                 op_type, value_str = op.split(":", 1)
                 if op_type not in valid_operations:
-                    raise ValueError(f"Unknown operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}")
+                    raise ValueError(
+                        f"Unknown operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
+                    )
                 try:
                     float(value_str.replace(",", "."))
                 except ValueError:

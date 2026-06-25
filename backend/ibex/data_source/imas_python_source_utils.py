@@ -100,6 +100,7 @@ def _safe_division(data, divisor):
         raise InvalidParametersException("Division by zero is not allowed")
     return data / divisor
 
+
 def _safe_root(data, exponent):
     if exponent == 0:
         raise InvalidParametersException("Root by zero is not allowed")

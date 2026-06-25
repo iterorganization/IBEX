@@ -4,7 +4,7 @@ from enum import Enum  # type: ignore
 from tsdownsample import MinMaxDownsampler, M4Downsampler, LTTBDownsampler, MinMaxLTTBDownsampler  # type: ignore
 from ibex.data_source.exception import InvalidParametersException
 from imas.ids_primitive import IDSNumericArray
-from ibex.data_source.exception import NotAnArrayException, InvalidParametersException
+from ibex.data_source.exception import NotAnArrayException
 
 import numpy as np  # type: ignore
 from dataclasses import dataclass
@@ -266,9 +266,7 @@ class IMAS_URI:
         self.node_path = match.group("node_path") if match.group("node_path") else ""
 
         if not self.ids_name:
-            raise InvalidParametersException(
-                f"Missing ids name in IMAS URI fragment: '{self.uri_fragment}'"
-            )
+            raise InvalidParametersException(f"Missing ids name in IMAS URI fragment: '{self.uri_fragment}'")
 
     def __str__(self):
         return (

@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from ibex.data_source.exception import InvalidParametersException
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_savgol_filter,
