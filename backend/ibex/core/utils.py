@@ -265,9 +265,6 @@ class IMAS_URI:
         self.occurrence = int(match.group("occurrence")) if match.group("occurrence") else 0
         self.node_path = match.group("node_path") if match.group("node_path") else ""
 
-        if not self.ids_name:
-            raise InvalidParametersException(f"Missing ids name in IMAS URI fragment: '{self.uri_fragment}'")
-
     def __str__(self):
         return (
             f"FULL URI   : {self.full_uri}\n"
