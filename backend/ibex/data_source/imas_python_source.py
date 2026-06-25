@@ -678,6 +678,43 @@ class IMASPythonSource(DataSourceInterface):
 
         return False
 
+    def _generate_grid_quantity_alias(self, grid_node: IDSNumericArray):
+        """
+        Generates alias and unit for selected grid node. Assumes grid_node.name == "dimX" X=(1...N)
+        :param grid_node: IDSNode (named dimX, X = [1...N])
+        :return:
+        """
+        result = {"axis_label": None, "unit": None}
+        if grid_node._parent is None or grid_node._parent._parent is None:
+            return result
+        if not re.search(r"dim[1-9]", grid_node.metadata.name):
+            return result
+
+        # assume grid_node is located inside XXX/grid/<node> and grid_type is located in XXX/grid_type
+        grid_type_index = grid_node._parent._parent.grid_type.index
+        if grid_type_index == imas.ids_defs.EMPTY_INT:
+            return result
+
+        dim_index = int(grid_node.metadata.name[-1]) - 1  # dim1->0, dim2->1 etc...
+        # Extract units
+        try:
+            units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
+            result["unit"] = units[dim_index]
+        except (ValueError, KeyError, AttributeError):
+            result["unit"] = None
+
+        # Extract axis labels
+        try:
+            axis_labels = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).axis_labels.split(",")
+            result["axis_label"] = axis_labels[dim_index]
+        except AttributeError:
+            description = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).description
+            match = re.findall(r"(\w+)=(dim[1-9])", description)
+            axis_labels = {v: k for k, v in match}
+            result["axis_label"] = axis_labels.get(grid_node.metadata.name, None)
+
+        return result
+
     def get_geometry_overlay_nodes(
         self,
         uri: str,
@@ -982,10 +1019,20 @@ class IMASPythonSource(DataSourceInterface):
                         except ValueError:
                             coord_data_shape = "irregular"
 
+                        coord_name = coord.split("/")[-1]
+                        axis_label = None
+                        unit = None
+                        if re.search(r"dim[1-9]", coord_name):
+                            labels_dict = self._generate_grid_quantity_alias(first_value)
+                            axis_label = labels_dict["axis_label"]
+                            unit = labels_dict["unit"]
+
+                        coord_name = axis_label if axis_label else coord_name
+                        units = unit if unit else first_value.metadata.units
                         c = {
-                            "name": coord.split("/")[-1],
+                            "name": coord_name,
                             "target": f"#{ids}/{target}",
-                            "unit": first_value.metadata.units,
+                            "unit": units,
                             "shape": coord_data_shape,  # coord_data could be np.ndarray or list[np.ndarray]
                             "downsampled_shape": coord_data_shape,
                             "ndim": first_value.metadata.ndim,

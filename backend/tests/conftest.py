@@ -90,10 +90,15 @@ def entry_path(tmp_path_factory):
             )
         profiles_2d.grid.dim1 = np.array([0, 1, 2], dtype=float)
         profiles_2d.grid.dim2 = np.array([0, 1, 2], dtype=float)
+        profiles_2d.grid.volume_element = np.array([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], dtype=float)
         i += 10
 
     # ===== for data smoothing (must be time-based) =====
     core_profiles.global_quantities.ip = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+
+    # for coordinate aliases/units
+    core_profiles.profiles_2d[0].grid_type = 1
+    core_profiles.profiles_2d[1].grid_type = 2
 
     entry.put(core_profiles)
 
