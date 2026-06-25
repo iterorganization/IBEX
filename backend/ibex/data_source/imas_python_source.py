@@ -1067,7 +1067,7 @@ class IMASPythonSource(DataSourceInterface):
                         if _coord.get("description") == "1...N" and _coord.get("_is_aos"):
                             raise InvalidParametersException(
                                 f"Interpolation is not supported for coordinate '{_coord['name']}' "
-                                "which is a STRUCT_ARRAY (AoS) coordinate. Try using exact_value method."
+                                "which is a Array of Structures coordinate and cannot be used to generate new values. Try using exact_value method."
                             )
 
                 # =================== GATHER ALL COORDINATES ===================
