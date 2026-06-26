@@ -23,6 +23,10 @@ def interpolation_entry_path_directory(tmp_path_factory):
             ts.profiles_1d.psi_error_upper = np.asarray([2.0, 2.0, 2.0, 2.0, 2.0, 2.0])
             ts.profiles_1d.psi_error_lower = np.asarray([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
 
+            ts.coordinate_system.grid.dim1 = np.array([1.1, 1.2, 1.5, 1.7], dtype=float)
+            ts.coordinate_system.grid.dim2 = np.array([1.1, 1.2, 1.5], dtype=float)
+            ts.coordinate_system.z = np.array(np.random.rand(4, 3), dtype=float)
+
             ts.profiles_2d.resize(2)
             for p2d in ts.profiles_2d:
                 p2d.psi = np.asarray(np.random.rand(3, 3))
@@ -40,6 +44,10 @@ def interpolation_entry_path_directory(tmp_path_factory):
             ts.profiles_1d.psi = np.asarray([1.8, 1.9, 2.0, 2.1])
             ts.profiles_1d.psi_error_upper = np.asarray([2.5, 2.5, 2.5, 2.5])
             # ts.profiles_1d.psi_error_lower = np.asarray([1.5,1.5,1.5,1.5])
+
+            ts.coordinate_system.grid.dim1 = np.array([1.0, 1.3, 1.6], dtype=float)
+            ts.coordinate_system.grid.dim2 = np.array([1.0, 1.3, 1.6], dtype=float)
+            ts.coordinate_system.z = np.array(np.random.rand(3, 3), dtype=float)
 
             ts.profiles_2d.resize(4)
             for p2d in ts.profiles_2d:
@@ -90,10 +98,15 @@ def entry_path(tmp_path_factory):
             )
         profiles_2d.grid.dim1 = np.array([0, 1, 2], dtype=float)
         profiles_2d.grid.dim2 = np.array([0, 1, 2], dtype=float)
+        profiles_2d.grid.volume_element = np.array([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], dtype=float)
         i += 10
 
     # ===== for data smoothing (must be time-based) =====
     core_profiles.global_quantities.ip = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+
+    # for coordinate aliases/units
+    core_profiles.profiles_2d[0].grid_type = 1
+    core_profiles.profiles_2d[1].grid_type = 2
 
     entry.put(core_profiles)
 

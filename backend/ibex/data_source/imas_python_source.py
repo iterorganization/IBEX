@@ -679,6 +679,43 @@ class IMASPythonSource(DataSourceInterface):
 
         return False
 
+    def _generate_grid_quantity_alias(self, grid_node: IDSNumericArray):
+        """
+        Generates alias and unit for selected grid node. Assumes grid_node.name == "dimX" X=(1...N)
+        :param grid_node: IDSNode (named dimX, X = [1...N])
+        :return:
+        """
+        result = {"axis_label": None, "unit": None}
+        if grid_node._parent is None or grid_node._parent._parent is None:
+            return result
+        if not re.search(r"dim[1-9]", grid_node.metadata.name):
+            return result
+
+        # assume grid_node is located inside XXX/grid/<node> and grid_type is located in XXX/grid_type
+        grid_type_index = grid_node._parent._parent.grid_type.index
+        if grid_type_index == imas.ids_defs.EMPTY_INT:
+            return result
+
+        dim_index = int(grid_node.metadata.name[-1]) - 1  # dim1->0, dim2->1 etc...
+        # Extract units
+        try:
+            units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
+            result["unit"] = units[dim_index]
+        except (ValueError, KeyError, AttributeError):
+            result["unit"] = None
+
+        # Extract axis labels
+        try:
+            axis_labels = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).axis_labels.split(",")
+            result["axis_label"] = axis_labels[dim_index]
+        except AttributeError:
+            description = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).description
+            match = re.findall(r"(\w+)=(dim[1-9])", description)
+            axis_labels = {v: k for k, v in match}
+            result["axis_label"] = axis_labels.get(grid_node.metadata.name, None)
+
+        return result
+
     def get_geometry_overlay_nodes(
         self,
         uri: str,
@@ -835,6 +872,9 @@ class IMASPythonSource(DataSourceInterface):
         node_path = uri_obj.node_path
         occurrence = uri_obj.occurrence
 
+        if not plot_data_query.interpolation_method:
+            plot_data_query.interpolation_method = InterpolationMethod.EXACT_VALUE
+
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
 
@@ -893,6 +933,11 @@ class IMASPythonSource(DataSourceInterface):
                         splitted_target[-1] = re.sub(r"[\[\(](.*?)[\]\)]", "", splitted_target[-1])
                         target_str = "/".join([x for x in splitted_target])
                         # ====================================
+
+                        # not returned, only used internally for interpolation check
+                        _is_aos = (
+                            IDSPath(target_str).goto_metadata(ids_obj.metadata).data_type == IDSDataType.STRUCT_ARRAY
+                        )
 
                         ids_path = IDSPath(str(target_str))
                         path_elements = list(ids_path.items())
@@ -956,6 +1001,7 @@ class IMASPythonSource(DataSourceInterface):
                             "description": "1...N",
                             "coordinates": shape_factors,
                             "shapes_dimension": shapes_dimension,
+                            "_is_aos": _is_aos,  # not returned, only used internally for interpolation validation
                             "value": labels if labels else coord_values,
                         }
                         coordinates_to_be_returned.append(c)
@@ -983,10 +1029,20 @@ class IMASPythonSource(DataSourceInterface):
                         except ValueError:
                             coord_data_shape = "irregular"
 
+                        coord_name = coord.split("/")[-1]
+                        axis_label = None
+                        unit = None
+                        if re.search(r"dim[1-9]", coord_name):
+                            labels_dict = self._generate_grid_quantity_alias(first_value)
+                            axis_label = labels_dict["axis_label"]
+                            unit = labels_dict["unit"]
+
+                        coord_name = axis_label if axis_label else coord_name
+                        units = unit if unit else first_value.metadata.units
                         c = {
-                            "name": coord.split("/")[-1],
+                            "name": coord_name,
                             "target": f"#{ids}/{target}",
-                            "unit": first_value.metadata.units,
+                            "unit": units,
                             "shape": coord_data_shape,  # coord_data could be np.ndarray or list[np.ndarray]
                             "downsampled_shape": coord_data_shape,
                             "ndim": first_value.metadata.ndim,
@@ -999,6 +1055,13 @@ class IMASPythonSource(DataSourceInterface):
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
+
+            if first_value.metadata.ndim == 2:
+                # Transform 2D arrays.
+                # By default first dimension of 2D has coordinate that is second on the list
+                # FE expects data's first dimension to be connected with second dimension, thus this transformation
+
+                data_to_be_returned = transform_2D_data(data_to_be_returned)
 
             # ============= BEGIN simple operations ============
 
@@ -1053,6 +1116,15 @@ class IMASPythonSource(DataSourceInterface):
                     return data
 
             if plot_data_query.interpolate_over:
+                # check for non-interpolatable coordinates
+                if plot_data_query.interpolation_method != InterpolationMethod.EXACT_VALUE:
+                    for _coord in coordinates_to_be_returned:
+                        if _coord.get("description") == "1...N" and _coord.get("_is_aos"):
+                            raise InvalidParametersException(
+                                f"Interpolation is not supported for coordinate '{_coord['name']}' "
+                                "which is a Array of Structures coordinate and cannot be used to generate new values. Try using exact_value method."
+                            )
+
                 # =================== GATHER ALL COORDINATES ===================
                 original_coord_values = []
                 new_common_coords = coordinates_to_be_returned
@@ -1099,10 +1171,7 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
                 # === run interpolation ===
-                if (
-                    plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE
-                    or not plot_data_query.interpolation_method
-                ):
+                if plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE:
                     data_to_be_returned = resample_data_without_interpolation(
                         tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
                     )
@@ -1125,13 +1194,6 @@ class IMASPythonSource(DataSourceInterface):
                     c["value"] = expand(c["value"], c["shape"][:-1])
 
             # ============= END resample data onto new time vector =============
-
-            if first_value.metadata.ndim == 2:
-                # Transform 2D arrays.
-                # By default first dimension of 2D has coordinate that is second on the list
-                # FE expects data's first dimension to be connected with second dimension, thus this transformation
-
-                data_to_be_returned = transform_2D_data(data_to_be_returned)
 
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape

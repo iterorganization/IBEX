@@ -1,5 +1,9 @@
 import pytest
 import numpy as np
+from packaging.version import Version
+import imas
+
+_IMAS_GE_2_3 = Version(imas.__version__) >= Version("2.3.0")
 
 
 def test_status_codes(entry_path):
@@ -95,7 +99,7 @@ def test_plot_data_with_gaussian_smoothing_2d(entry_path):
     response_body = response.json()
 
     assert np.array(response_body["data"]["value"]) == pytest.approx(
-        np.array([[1.6, 1.0, 1.0], [2.2, 1.0, 1.0], [2.7, 1.0, 1.0], [3.1, 1.0, 1.0], [3.2, 1.0, 1.0]]), 0.1
+        np.array([[1.0, 1.0, 1.0], [2.28, 1.59, 1.12], [1.64, 1.29, 1.06], [2.92, 1.88, 1.18], [2.28, 1.59, 1.12]]), 0.1
     )
 
 
@@ -199,7 +203,8 @@ def test_plot_data_smoothing_with_wrong_target_node(entry_path):
     assert response.status_code == 466
 
 
-def test_plot_data_2d(entry_path):
+@pytest.mark.parametrize("expected_unit", ["m"] if _IMAS_GE_2_3 else ["mixed"])
+def test_plot_data_2d(entry_path, expected_unit):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[:]/ion[:]/temperature",
     }
@@ -223,13 +228,15 @@ def test_plot_data_2d(entry_path):
     assert time_coordinate["description"] == "Generic time"
 
     dim1_coordinate = response_body["data"]["coordinates"][0]
-    assert dim1_coordinate["name"] == "dim1"
+    assert dim1_coordinate["name"] == "R"  # alias for dim1
+    assert dim1_coordinate["unit"] == expected_unit
     assert dim1_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
     assert dim1_coordinate["shape"] == [5, 3]
     assert dim1_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim1"
 
     dim2_coordinate = response_body["data"]["coordinates"][1]
-    assert dim2_coordinate["name"] == "dim2"
+    assert dim2_coordinate["name"] == "Z"  # alias for dim2
+    assert dim2_coordinate["unit"] == expected_unit
     assert dim2_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
     assert dim2_coordinate["shape"] == [5, 3]
     assert dim2_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim2"
@@ -281,3 +288,35 @@ def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
     )
     assert response.status_code == 422
     assert "savgol_smoothing_polyorder is required" in response.text
+
+
+@pytest.mark.parametrize("expected_unit", [("m", "rad")] if _IMAS_GE_2_3 else [("mixed", "mixed")])
+def test_plot_data_coordinate_aliases(entry_path, expected_unit):
+
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[0]/grid/volume_element",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    assert dim1_coordinate["name"].lower() == "r"
+    assert dim1_coordinate["unit"].lower() == expected_unit[0]
+
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[1]/grid/volume_element",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    dim2_coordinate = response_body["data"]["coordinates"][1]
+    assert dim1_coordinate["name"].lower() == "rho"
+    assert dim1_coordinate["unit"].lower() == expected_unit[0]
+
+    assert dim2_coordinate["name"].lower() == "theta"
+    assert dim2_coordinate["unit"].lower() == expected_unit[1]
