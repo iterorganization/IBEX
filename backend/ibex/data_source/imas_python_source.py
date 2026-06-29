@@ -50,6 +50,7 @@ from ibex.data_source.imas_python_source_utils import (
     calculate_coordinate_shapes,
     apply_savgol_filter,
     apply_gaussian_filter,
+    apply_simple_operations,
 )
 from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
@@ -739,7 +740,7 @@ class IMASPythonSource(DataSourceInterface):
         def _get_descendant_node_names(metadata: IDSMetadata):
 
             res = []
-            if metadata.data_type == IDSDataType.STRUCTURE:
+            if metadata.data_type in (IDSDataType.STRUCTURE, IDSDataType.STRUCT_ARRAY):
                 for child in metadata:
                     res.extend([f"{metadata.name}/{x}" for x in _get_descendant_node_names(child)])
             else:
@@ -795,7 +796,7 @@ class IMASPythonSource(DataSourceInterface):
 
                 if filled_paths is not None:
                     node_filled = any(
-                        f"{metadata.path_string}/{parameter}" in filled_paths
+                        path_in_filled_paths(f"{metadata.path_string}/{parameter}", filled_paths)
                         for parameter in parameters_entry["parameters"]
                     )
 
@@ -1062,6 +1063,13 @@ class IMASPythonSource(DataSourceInterface):
 
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
 
+            # ============= BEGIN simple operations ============
+
+            if plot_data_query.operations is not None:
+                data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query.operations)
+
+            # ============= END simple operations =============
+
             # ============= BEGIN data smoothing ============
             if plot_data_query.smoothing_method is not None:
                 if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
@@ -1178,7 +1186,6 @@ class IMASPythonSource(DataSourceInterface):
                 new_coordinate_shapes = calculate_coordinate_shapes(
                     list(np.asarray(data_to_be_returned).shape),
                     first_value.metadata.ndim,
-                    len(coordinates_to_be_returned),
                 )
 
                 # expand flattened coordinates

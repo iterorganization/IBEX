@@ -9,6 +9,14 @@ Introduction
 
 The IBEX backend provides a range of data manipulation techniques that directly affect the shape and appearance of the resulting plots.
 These operations are applied as part of the ``/data/plot_data/`` request flow and allow the backend to transform datasets before they are returned to the frontend.
+The backend applies the manipulation stages in this order:
+
+1. simple data operations
+2. data smoothing
+3. data interpolation
+4. downsampling
+
+This means later stages operate on the output of earlier ones when the corresponding request parameters are enabled.
 
 Data smoothing
 ---------------
@@ -84,4 +92,73 @@ Savitzky-Golay smoothing:
 
    curl -X 'GET' \
      '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&smoothing_method=savitzky_golay_filter&savgol_smoothing_window_length=5&savgol_smoothing_polyorder=2' \
+     -H 'accept: application/json'
+
+
+Simple data operations
+------------------------
+
+IBEX supports a sequence of scalar operations that can be applied element-wise to every data point in the returned dataset.
+Simple data operations use fixed numeric values.
+
+The following operation types are supported:
+
+* ``add`` — addition
+* ``sub`` — subtraction
+* ``mul`` — multiplication
+* ``div`` — division
+* ``pow`` — exponentiation
+* ``root`` — Nth root
+
+Operations are applied **in the order they appear** in the request.
+The backend executes them sequentially on the numerical data **before** smoothing, interpolation, or downsampling.
+
+Configuration
+~~~~~~~~~~~~~~
+
+Simple data operations are configured through the ``operations`` parameter of the ``/data/plot_data/`` endpoint.
+It accepts a list of strings in the format ``type:value``, for example ``add:10`` or ``mul:2.5``.
+
+The full list of available operations can be retrieved from the ``/info/data_manipulation_methods/`` endpoint.
+
+Division by zero is rejected by the backend with an ``InvalidParametersException`` ("Division by zero is not allowed").
+
+Implementation
+~~~~~~~~~~~~~~~
+
+Simple data operations are applied in ``apply_simple_operations()`` in
+``backend/ibex/data_source/imas_python_source_utils.py``.
+
+The function iterates over the list of operation strings in order, splitting each on the colon to extract the operation type and the scalar value.
+For each operation the corresponding arithmetic lambda is applied element-wise to the data array.
+
+The implementation handles both flat arrays and nested lists of arrays (higher-dimensional data) recursively.
+
+Example usage
+~~~~~~~~~~~~~~
+
+The following examples demonstrate how simple data operations can be enabled for testing purposes.
+
+Single operation (addition by 2):
+
+.. code-block:: bash
+
+   curl -X 'GET' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=add:2' \
+     -H 'accept: application/json'
+
+Two chained operations (add then multiply):
+
+.. code-block:: bash
+
+   curl -X 'GET' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=add:2&operations=mul:3' \
+     -H 'accept: application/json'
+
+Order matters (multiply then add yields different result):
+
+.. code-block:: bash
+
+   curl -X 'GET' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=mul:3&operations=add:2' \
      -H 'accept: application/json'

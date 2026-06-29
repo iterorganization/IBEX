@@ -43,7 +43,11 @@ class DataManipulationParameter(BaseModel):
     human_readable_name: str
     name: str
     description: str
+    type: str
+    default: Optional[str] = None
     possible_values: Optional[list[PossibleValue]] = None
+    group_label: Optional[str] = None
+    fields: Optional[list["DataManipulationParameter"]] = None
 
 
 class DataManipulationOperation(BaseModel):
@@ -60,6 +64,7 @@ class DataManipulationMethodsResponse(BaseModel):
     data_manipulation_methods: list[DataManipulationOperation]
 
 
+DataManipulationParameter.model_rebuild()
 available_methods = DataManipulationMethodsResponse(data_manipulation_methods=[])
 
 # ====================== DATA INTERPOLATION ======================
@@ -76,12 +81,15 @@ data_interpolation_interpolate_over_parameter = DataManipulationParameter(
     human_readable_name="Interpolate over",
     name="interpolate_over",
     description="List of URIs to gather coordinates from, for interpolation",
+    type="list[string]",
 )
 
 data_interpolation_method_parameter = DataManipulationParameter(
     human_readable_name="Interpolation method",
     name="interpolation_method",
-    description="List of URIs to gather coordinates from, for interpolation",
+    description="Method used during data interpolation",
+    type="string",
+    default=InterpolationMethod.EXACT_VALUE,
     possible_values=[
         PossibleValue(
             value=InterpolationMethod.EXACT_VALUE,
@@ -116,6 +124,7 @@ data_smoothing_method_parameter = DataManipulationParameter(
     human_readable_name="Smoothing method",
     name="smoothing_method",
     description="Method to be used in data smoothing process",
+    type="string",
     possible_values=[
         PossibleValue(
             value=SmoothingMethod.GAUSSIAN_FILTER,
@@ -170,3 +179,45 @@ data_smoothing_method_parameter = DataManipulationParameter(
 
 data_smoothing_description.method_parameters.append(data_smoothing_method_parameter)
 available_methods.data_manipulation_methods.append(data_smoothing_description)
+
+# ====================== SIMPLE DATA OPERATIONS ======================
+
+simple_data_operations_description = DataManipulationOperation(
+    name="Simple Data Operations",
+    description="Ordered list of scalar operations applied to the dataset. "
+    "Execution order is determined by the order of parameters in the request.",
+    method_parameters=[],
+)
+
+data_operations_parameter = DataManipulationParameter(
+    human_readable_name="Operations",
+    name="operations",
+    description="Ordered list of scalar operations applied to every data point.",
+    type="list[object]",
+    group_label="Operation",
+    fields=[
+        DataManipulationParameter(
+            human_readable_name="Type",
+            name="operation_type",
+            description="Type of operation",
+            type="string",
+            possible_values=[
+                PossibleValue(value="add", description="Addition"),
+                PossibleValue(value="sub", description="Subtraction"),
+                PossibleValue(value="mul", description="Multiplication"),
+                PossibleValue(value="div", description="Division"),
+                PossibleValue(value="pow", description="Exponentiation"),
+                PossibleValue(value="root", description="Nth root"),
+            ],
+        ),
+        DataManipulationParameter(
+            human_readable_name="Value",
+            name="operation_value",
+            description="Scalar value for the operation",
+            type="number",
+        ),
+    ],
+)
+
+simple_data_operations_description.method_parameters.append(data_operations_parameter)
+available_methods.data_manipulation_methods.append(simple_data_operations_description)

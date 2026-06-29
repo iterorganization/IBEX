@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from ibex.core.data_manipulation_methods import available_methods, SmoothingMethod
+from ibex.data_source.imas_python_source_utils import _SIMPLE_OPERATIONS_FUNCTIONS
 from enum import Enum
 
 
@@ -92,9 +93,35 @@ class PlotDataBasicParameters(BaseModel):
     downsampling_method: str | None = Field(default=None, description="Downsampling method to be used")
     downsampled_size: int = Field(default=1000, description="Desired size of the data after downsampling")
     smoothing_method: SmoothingMethod | None = Field(default=None, description="Smoothing method to be used")
+    operations: Optional[List[str]] = Field(
+        default=None,
+        description="Ordered list of scalar operations in format 'type:value' e.g. 'add:10'",
+    )
 
 
-class PlotDataRequestModel(PlotDataBasicParameters, SavgolSmoothingParameters, GaussianSmoothingParameters):
+class PlotDataRequestModel(
+    PlotDataBasicParameters,
+    SavgolSmoothingParameters,
+    GaussianSmoothingParameters,
+):
+    @model_validator(mode="after")
+    def validate_operations_format(self) -> "PlotDataRequestModel":
+        if self.operations:
+            valid_operations = set(_SIMPLE_OPERATIONS_FUNCTIONS.keys())
+            for op in self.operations:
+                if ":" not in op:
+                    raise ValueError(f"Invalid operation format: '{op}'. Expected 'operation:value'")
+                op_type, value_str = op.split(":", 1)
+                if op_type not in valid_operations:
+                    raise ValueError(
+                        f"Unknown operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
+                    )
+                try:
+                    float(value_str.replace(",", "."))
+                except ValueError:
+                    raise ValueError(f"Invalid operation value: '{value_str}' in '{op}'. Value must be a number.")
+        return self
+
     @model_validator(mode="after")
     def validate_gaussian_smoothing_parameters(self) -> "PlotDataRequestModel":
         if self.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER and self.gaussian_smoothing_sigma is None:

@@ -3,6 +3,7 @@ import pytest
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_savgol_filter,
+    apply_simple_operations,
 )
 
 
@@ -47,3 +48,35 @@ def test_apply_savitzky_golay_smoothing():
         ),
         0.1,
     )
+
+
+@pytest.mark.parametrize(
+    ("operations", "data", "expected"),
+    [
+        (["add:2"], np.array([1.0, 2.0, 3.0]), np.array([3.0, 4.0, 5.0])),
+        (["sub:1"], np.array([3.0, 4.0, 5.0]), np.array([2.0, 3.0, 4.0])),
+        (["mul:3"], np.array([1.0, 2.0, 3.0]), np.array([3.0, 6.0, 9.0])),
+        (["div:2"], np.array([2.0, 4.0, 6.0]), np.array([1.0, 2.0, 3.0])),
+        (["pow:2"], np.array([2.0, 3.0, 4.0]), np.array([4.0, 9.0, 16.0])),
+        (["root:2"], np.array([1.0, 4.0, 9.0]), np.array([1.0, 2.0, 3.0])),
+    ],
+)
+def test_apply_simple_operations(operations, data, expected):
+    assert np.asarray(expected) == pytest.approx(apply_simple_operations(data, operations))
+
+
+def test_apply_simple_operations_recurses_over_lists():
+    data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
+    result = apply_simple_operations(data, ["add:1", "mul:2", "add:3"])
+    assert np.asarray(result[0]) == pytest.approx([7.0, 9.0])
+    assert np.asarray(result[1]) == pytest.approx([11.0, 13.0])
+
+
+def test_apply_simple_operations_uses_order():
+    data = np.array([5.0])
+    # mul then add -> (5*2)+1 = 11
+    result = apply_simple_operations(data, ["mul:2", "add:1"])
+    assert result == pytest.approx([11.0])
+    # add then mul -> (5+1)*2 = 12
+    result = apply_simple_operations(data, ["add:1", "mul:2"])
+    assert result == pytest.approx([12.0])
