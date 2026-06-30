@@ -95,16 +95,19 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma, axis: int | None = Non
         raise InvalidParametersException(msg)
 
 
-def _safe_division(data, divisor):
-    if divisor == 0:
-        raise InvalidParametersException("Division by zero is not allowed")
-    return data / divisor
-
-
 def _safe_root(data, exponent):
     if exponent == 0:
         raise InvalidParametersException("Root by zero is not allowed")
     return np.power(data, 1 / exponent)
+
+
+def _safe_division(data, divisor):
+    if isinstance(divisor, np.ndarray):
+        if np.any(divisor == 0):
+            raise InvalidParametersException("Division by zero is not allowed")
+    elif divisor == 0:
+        raise InvalidParametersException("Division by zero is not allowed")
+    return data / divisor
 
 
 _SIMPLE_OPERATIONS_FUNCTIONS = {
@@ -114,6 +117,20 @@ _SIMPLE_OPERATIONS_FUNCTIONS = {
     "div": _safe_division,
     "pow": np.power,
     "root": _safe_root,
+}
+
+_SIGNAL_OPERATIONS_FUNCTIONS = {
+    "add": _op.add,
+    "sub": _op.sub,
+    "mul": _op.mul,
+    "div": _safe_division,
+}
+
+_SIGNAL_NULL_REPLACEMENT = {
+    "add": 0,
+    "sub": 0,
+    "mul": 1,
+    "div": 1,
 }
 
 
@@ -142,50 +159,6 @@ def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
         raise InvalidParametersException(msg)
 
 
-def _safe_division(data, divisor):
-    if isinstance(divisor, np.ndarray):
-        if np.any(divisor == 0):
-            raise InvalidParametersException("Division by zero is not allowed")
-    elif divisor == 0:
-        raise InvalidParametersException("Division by zero is not allowed")
-    return data / divisor
-
-
-def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
-    """
-    Apply simple scalar operations to data in the order given.
-    Each operation is a string in the format 'type:value', e.g. 'add:10', 'mul:5'.
-    :param data: Input data
-    :param operations: List of operations and operands divided by colon (:)
-    :return: Data after operation
-    """
-
-    _OP_FUNCS = {
-        "add": lambda r, v: r + v,
-        "sub": lambda r, v: r - v,
-        "mul": lambda r, v: r * v,
-        "div": lambda r, v: _safe_division(r, v),
-        "pow": lambda r, v: np.power(r, v),
-        "root": lambda r, v: np.power(r, 1 / v),
-    }
-
-    if isinstance(data, list):
-        return [apply_simple_operations(x, operations) for x in data]
-    elif isinstance(data, (np.ndarray, IDSNumericArray)):
-        result = data
-        for op_str in operations:
-            op_type, value_str = op_str.split(":", 1)
-            value = float(value_str)
-            func = _OP_FUNCS.get(op_type)
-            if func is None:
-                raise InvalidParametersException(f"Unknown operation type: {op_type}")
-            result = func(result, value)
-        return result
-    else:
-        msg = "Simple operations can be executed only on numeric arrays, not single values or strings."
-        raise InvalidParametersException(msg)
-
-
 def apply_signal_operations(data: list | np.ndarray, operations: list[str], signal_data_by_uri: dict):
     """
     Apply signal operations to data in the order given.
@@ -195,19 +168,6 @@ def apply_signal_operations(data: list | np.ndarray, operations: list[str], sign
     :param signal_data_by_uri: Dict mapping signal URIs to their interpolated data arrays.
     :return: Data after operation
     """
-    _OP_FUNCS = {
-        "add": lambda r, v: r + v,
-        "sub": lambda r, v: r - v,
-        "mul": lambda r, v: r * v,
-        "div": lambda r, v: _safe_division(r, v),
-    }
-
-    _NULL_REPLACEMENT = {
-        "add": 0,
-        "sub": 0,
-        "mul": 1,
-        "div": 1,
-    }
 
     if isinstance(data, list):
         data = np.array(data)
@@ -216,7 +176,7 @@ def apply_signal_operations(data: list | np.ndarray, operations: list[str], sign
         for op_str in operations:
             op_type, uri = op_str.split(":", 1)
             value = signal_data_by_uri[uri]
-            func = _OP_FUNCS.get(op_type)
+            func = _SIGNAL_OPERATIONS_FUNCTIONS.get(op_type)
             if func is None:
                 raise InvalidParametersException(f"Unknown operation type: {op_type}")
 
@@ -224,9 +184,9 @@ def apply_signal_operations(data: list | np.ndarray, operations: list[str], sign
             if isinstance(value, np.ndarray):
                 mask = np.isnan(value)
                 if np.any(mask):
-                    value = np.where(mask, _NULL_REPLACEMENT.get(op_type, 0), value)
+                    value = np.where(mask, _SIGNAL_NULL_REPLACEMENT.get(op_type, 0), value)
             elif isinstance(value, float) and np.isnan(value):
-                value = _NULL_REPLACEMENT.get(op_type, 0)
+                value = _SIGNAL_NULL_REPLACEMENT.get(op_type, 0)
 
             result = func(result, value)
         return result

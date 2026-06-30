@@ -371,6 +371,7 @@ def test_plot_data_coordinate_aliases(entry_path, expected_unit):
     assert dim2_coordinate["name"].lower() == "theta"
     assert dim2_coordinate["unit"].lower() == expected_unit[1]
 
+
 def test_plot_data_with_signal_operations(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
@@ -453,7 +454,7 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
     # data shape reflects common coordinates (reversed): [time, profiles_2d, dim2, dim1]
     assert data.shape == (4, 4, 3, 12)
     # db_1 has data at time=[1,2,3,4], profiles_2d=[0,1], dim2=[1,2,3], dim1=[1,2,3]
-    # Common dim1 has 1,2,3 at indices 3,7,11 → 4×2×3×3 = 72 non-NaN values
+    # Common dim1 has 1,2,3 at indices 3,7,11 → 4*2*3*3 = 72 non-NaN values
     # Operand NaN replaced with 0, result = db_1 primary values
     assert np.count_nonzero(~np.isnan(data)) == 72
 
@@ -470,6 +471,5 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
     data = np.array(response_body["data"]["value"], dtype=float)
     assert data.shape == (4, 4, 3, 12)
     # db_2 has data at time=[1,2,3], profiles_2d=[0,1,2,3], dim2=[1,2,3], dim1 has 9 values
-    # Common dim1 has db_2's 9 values at indices [0,1,2,4,5,6,8,9,10] → 3×4×3×9 = 324
+    # Common dim1 has db_2's 9 values at indices [0,1,2,4,5,6,8,9,10] → 3*4*3*9 = 324
     assert np.count_nonzero(~np.isnan(data)) == 324
-
