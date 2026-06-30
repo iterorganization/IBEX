@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from ibex.core.data_manipulation_methods import available_methods, SmoothingMethod
-from ibex.data_source.imas_python_source_utils import _SIMPLE_OPERATIONS_FUNCTIONS
+from ibex.data_source.imas_python_source_utils import _SIMPLE_OPERATIONS_FUNCTIONS, _SIGNAL_OPERATIONS_FUNCTIONS
 from enum import Enum
 
 
@@ -124,6 +124,22 @@ class PlotDataRequestModel(
                     float(value_str.replace(",", "."))
                 except ValueError:
                     raise ValueError(f"Invalid operation value: '{value_str}' in '{op}'. Value must be a number.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_signal_operations_format(self) -> "PlotDataRequestModel":
+        if self.signal_operations:
+            valid_operations = set(_SIGNAL_OPERATIONS_FUNCTIONS.keys())
+            for op in self.signal_operations:
+                if ":" not in op:
+                    raise ValueError(f"Invalid signal operation format: '{op}'. Expected 'operation:uri'")
+                op_type, uri = op.split(":", 1)
+                if op_type not in valid_operations:
+                    raise ValueError(
+                        f"Unknown signal operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
+                    )
+                if not uri.strip():
+                    raise ValueError(f"Invalid signal operation: '{op}'. URI must not be empty.")
         return self
 
     @model_validator(mode="after")
