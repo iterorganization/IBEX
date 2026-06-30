@@ -14,7 +14,8 @@ The backend applies the manipulation stages in this order:
 1. simple data operations
 2. data smoothing
 3. data interpolation
-4. downsampling
+4. signal operations
+5. downsampling
 
 This means later stages operate on the output of earlier ones when the corresponding request parameters are enabled.
 
@@ -167,7 +168,6 @@ Order matters (multiply then add yields different result):
    curl -X 'GET' \
      '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=mul:3&operations=add:2' \
      -H 'accept: application/json'
-
 
 Signal operations
 ------------------

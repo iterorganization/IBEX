@@ -2,41 +2,40 @@ import { useEffect, useState } from 'react';
 import { DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
-  fetchDownsamplingMethods,
   fetchErrorBands,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
-  getUrisToInterpolate,
   getVectorData,
   normalizeIndices,
+  getInterpolationMethods,
+  getUrisToInterpolate,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
-import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
+import { Group, Loader, Select, Stack } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { OptionWithTooltip } from '../../../types/components/select';
 import { RenderSelectOption } from '../../../components/select';
 
-interface CustomizeDownsamplingProps {
+interface CustomizeInterpolationProps {
   customizedDataGrid: DataGridPlot;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
 }
-export const CustomizeDownsampling = ({
+export const CustomizeInterpolation = ({
   customizedDataGrid,
   setCustomizedDataGrid,
-}: CustomizeDownsamplingProps) => {
-  const [downsamplingList, setDownsamplingList] = useState<OptionWithTooltip[]>(
-    [],
-  );
-  const [downsamplingSize, setDownsamplingSize] = useState<number>(1000);
-  const [downsamplingMethod, setDownsamplingMethod] = useState<string | null>(
-    null,
+}: CustomizeInterpolationProps) => {
+  const [interpolationMethods, setInterpolationMethods] = useState<
+    OptionWithTooltip[]
+  >([]);
+  const [selectedInterpolation, setSelectedInterpolation] = useState<string>(
+    customizedDataGrid.interpolated_method,
   );
   const [loading, { open, close }] = useDisclosure();
 
   /**
-   * Update configuration with downsampled data (changes coordinates, plots & error bands)
+   * Update configuration with interpolated data (changes coordinates, plots & error bands)
    */
-  const getDownSampledData = async () => {
+  const getInterpolatedData = async () => {
     try {
       open();
       const updatedDataPlot = structuredClone(
@@ -45,42 +44,43 @@ export const CustomizeDownsampling = ({
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
-        // Downsample data
+        // Interpolated data
         const urisToInterpolate = getUrisToInterpolate(
           plot.nodeUri,
           updatedDataPlot.plot,
         );
-        const dataPlotDownsampled = await fetchDataPlot(
+        const dataPlotInterpolated = await fetchDataPlot(
           normalizeIndices(plot.nodeUri),
-          downsamplingMethod,
-          downsamplingSize,
+          customizedDataGrid?.downsampled_method,
+          customizedDataGrid?.downsampled_size,
           updatedDataPlot?.dataType,
           urisToInterpolate,
-          updatedDataPlot?.interpolated_method,
+          selectedInterpolation,
         );
 
         if (plot?.error_bands?.length) {
-          // Downsample error bands with provided parameters if error bands exists for this plot
+          // Interpolate error bands with provided parameters if error bands exists for this plot
           await fetchErrorBands(
             updatedDataPlot,
             plot.nodeUri,
-            downsamplingMethod,
-            downsamplingSize,
+            undefined,
+            undefined,
+            selectedInterpolation,
           );
         }
 
         if (plotIndex === 0) {
-          // Update coordinates with downsampled data only once because each plots have same coordinates
+          // Update coordinates with interpolated data only once because each plots have same coordinates
           let coordinateIndex = 0;
           for (const coordinate of updatedDataPlot.coordinates) {
             // Apply new shape
             coordinate.shape =
-              dataPlotDownsampled.data.coordinates[
+              dataPlotInterpolated.data.coordinates[
                 coordinateIndex
               ].downsampled_shape;
             // Apply new data
             coordinate.data =
-              dataPlotDownsampled.data.coordinates[coordinateIndex].value;
+              dataPlotInterpolated.data.coordinates[coordinateIndex].value;
             coordinateIndex++;
             // Apply new range
             coordinate.range = [
@@ -98,16 +98,16 @@ export const CustomizeDownsampling = ({
             ];
           }
 
-          // Update downsampled method
-          updatedDataPlot.downsampled_method =
-            dataPlotDownsampled.data.downsampled_method;
+          // Update interpolated method
+          updatedDataPlot.interpolated_method =
+            dataPlotInterpolated.data.interpolated_method;
         }
 
-        // Update plot with downsampled data
-        plot.shape = dataPlotDownsampled.data.downsampled_shape;
+        // Update plot with interpolated data
+        plot.shape = dataPlotInterpolated.data.downsampled_shape;
         // Get x axis switch coordinates dependances
         plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-        plot.yData = dataPlotDownsampled.data.value;
+        plot.yData = dataPlotInterpolated.data.value;
         // Get y axis
         const vectorData = getVectorData(
           updatedDataPlot.coordinates,
@@ -118,19 +118,18 @@ export const CustomizeDownsampling = ({
         plotIndex++;
       }
 
-      // Save new configuration with downsampled data
+      // Save new configuration with interpolated data
       setCustomizedDataGrid({
         ...customizedDataGrid,
         coordinates: updatedDataPlot.coordinates,
-        downsampled_method: updatedDataPlot.downsampled_method,
-        downsampled_size: downsamplingSize,
+        interpolated_method: updatedDataPlot.interpolated_method,
         plot: updatedDataPlot.plot,
       });
     } catch (error) {
-      console.error('Error getting downsampled data: ', error);
+      console.error('Error getting interpolated data: ', error);
       showNotification({
         title: 'Error',
-        message: `Unable to get downsampled data.`,
+        message: `Unable to get interpolated data.`,
         color: 'red',
       });
     } finally {
@@ -139,35 +138,21 @@ export const CustomizeDownsampling = ({
   };
 
   /*
-   * Get downsampling methods to show in select
+   * Get interpolated methods to show in select
    */
   useEffect(() => {
-    const getDownsamplingList = async () => {
-      const methodsRes = await fetchDownsamplingMethods();
-      const options: OptionWithTooltip[] = methodsRes.downsampling_methods.map(
-        (item) => ({
-          value: item.name,
-          tooltip: item.description,
-        }),
-      );
-      setDownsamplingList(options);
+    const getInterpolationOptions = async () => {
+      const options = await getInterpolationMethods();
+      setInterpolationMethods(options);
     };
-    getDownsamplingList();
+    getInterpolationOptions();
   }, []);
 
   useEffect(() => {
-    // Update downsampled method after a timeout
-    if (customizedDataGrid.downsampled_method) {
-      setDownsamplingMethod(customizedDataGrid.downsampled_method);
+    if (selectedInterpolation !== customizedDataGrid?.interpolated_method) {
+      getInterpolatedData();
     }
-  }, [customizedDataGrid.downsampled_method]);
-
-  useEffect(() => {
-    // Update downsampled size after a timeout
-    if (customizedDataGrid.downsampled_size) {
-      setDownsamplingSize(customizedDataGrid.downsampled_size);
-    }
-  }, [customizedDataGrid.downsampled_size]);
+  }, [selectedInterpolation]);
 
   return (
     <Stack w="fit-content">
@@ -176,11 +161,16 @@ export const CustomizeDownsampling = ({
           label="Method"
           description="Select the method"
           placeholder="Select the method"
-          value={downsamplingMethod || 'None'}
-          data={downsamplingList.map((meth) => meth.value)}
-          onChange={setDownsamplingMethod}
+          value={selectedInterpolation}
+          data={interpolationMethods.map((meth) => meth.value)}
+          rightSection={loading ? <Loader size={16} /> : null}
+          onChange={(selectedMethod) => {
+            if (selectedMethod !== selectedInterpolation) {
+              setSelectedInterpolation(selectedMethod || selectedInterpolation);
+            }
+          }}
           renderOption={(option) => {
-            const selectedOption = downsamplingList.find(
+            const selectedOption = interpolationMethods.find(
               (meth) => option.option.value === meth.value,
             );
             return (
@@ -190,25 +180,7 @@ export const CustomizeDownsampling = ({
               />
             );
           }}
-          w="45%"
-          maw={200}
         />
-        <NumberInput
-          label="Size"
-          description="Update the size"
-          placeholder="Update the size"
-          value={downsamplingSize}
-          onChange={(value: number) => setDownsamplingSize(value)}
-          w="45%"
-          maw={200}
-          min={0}
-        />
-      </Group>
-
-      <Group justify="center">
-        <Button onClick={getDownSampledData} loading={loading}>
-          Get downsampled data
-        </Button>
       </Group>
     </Stack>
   );

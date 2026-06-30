@@ -12,12 +12,13 @@ import {
 import {
   IconBrandDatabricks,
   IconCheck,
+  IconDatabaseEdit,
   IconEdit,
-  IconPalette,
+  IconEyeEdit,
   IconTrash,
 } from '@tabler/icons-react';
 import { useHover } from '@mantine/hooks';
-import { Configuration, DataGridPlot } from '../../types';
+import { Configuration, CustomizedGridType, DataGridPlot } from '../../types';
 import {
   applyRange,
   containsFloat,
@@ -30,7 +31,7 @@ interface HoverButtonsProps {
   shouldDisplayMetadata: boolean;
   handleEditGrid: (id: string) => void;
   handleInspectMetadata: (id: string) => void;
-  handleCustomization: (id: string) => void;
+  handleCustomization: (id: string, typeOfEdition: CustomizedGridType) => void;
   handleDeleteGrid: (id: string) => void;
   is3DView: boolean;
   active3DTab: string;
@@ -73,9 +74,7 @@ export const HoverButtons = React.memo(
 
     const updateDisplayErrorBands = useCallback(
       (newValue: boolean) => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         const selectedDataPlot = updatedActive.dataPlot.find(
           (dataPlot) => dataPlot.i === data.i,
         );
@@ -105,9 +104,7 @@ export const HoverButtons = React.memo(
 
     useEffect(() => {
       const updateErrorBands = async () => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         if (data.displayErrorBand) {
           if (
             (previousValueDisplayErrorBands.current === false ||
@@ -164,9 +161,7 @@ export const HoverButtons = React.memo(
       is3DView: boolean,
       active: Configuration,
     ) => {
-      const updatedDataPlot: DataGridPlot[] = JSON.parse(
-        JSON.stringify(active.dataPlot),
-      );
+      const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
       const selectedDataPlot = updatedDataPlot.find(
         (dataPlot) => dataPlot.i === data.i,
       );
@@ -243,6 +238,7 @@ export const HoverButtons = React.memo(
               {data.coordinates.length >= 2 && !shouldDisplayMetadata && (
                 <Tooltip label="Toggle 1D/Heatmap view">
                   <ActionIcon
+                    data-testid="toggle-plot-mode-button"
                     variant="filled"
                     aria-label="Toggle 1D/Heatmap view"
                     onClick={() =>
@@ -279,16 +275,34 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
-                // Show customization button only if plottable
-                <Tooltip label="Customize the grid">
+                // Show data manipulation button only if plottable
+                <Tooltip label="Data manipulation">
                   <ActionIcon
                     variant="filled"
-                    aria-label="Metadatas"
-                    data-testid="customization-access-button"
-                    onClick={() => handleCustomization(data.i)}
+                    aria-label="Data manipulation"
+                    data-testid="data-customization-access-button"
+                    onClick={() => handleCustomization(data.i, 'data')}
                     className={classes.actionButton}
                   >
-                    <IconPalette
+                    <IconDatabaseEdit
+                      style={{ width: '70%', height: '70%' }}
+                      stroke={1.5}
+                    />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+
+              {data.coordinates.length && !shouldDisplayMetadata && (
+                // Show visual customization button only if plottable
+                <Tooltip label="Visual customization">
+                  <ActionIcon
+                    variant="filled"
+                    aria-label="Visual customization"
+                    data-testid="visual-customization-access-button"
+                    onClick={() => handleCustomization(data.i, 'visual')}
+                    className={classes.actionButton}
+                  >
+                    <IconEyeEdit
                       style={{ width: '70%', height: '70%' }}
                       stroke={1.5}
                     />

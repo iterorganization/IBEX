@@ -1,5 +1,9 @@
 import pytest
 import numpy as np
+from packaging.version import Version
+import imas
+
+_IMAS_GE_2_3 = Version(imas.__version__) >= Version("2.3.0")
 
 
 def test_status_codes(entry_path):
@@ -83,6 +87,22 @@ def test_plot_data_with_gaussian_smoothing(entry_path):
     assert response_body["data"]["value"] == pytest.approx([1.42, 2.06, 3.0, 3.93, 4.57], 0.1)
 
 
+def test_plot_data_with_gaussian_smoothing_2d(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#wall/global_quantities/electrons/particle_flux_from_wall",
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+
+    assert np.array(response_body["data"]["value"]) == pytest.approx(
+        np.array([[1.0, 1.0, 1.0], [2.28, 1.59, 1.12], [1.64, 1.29, 1.06], [2.92, 1.88, 1.18], [2.28, 1.59, 1.12]]), 0.1
+    )
+
+
 def test_plot_data_with_savgol_smoothing(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip",
@@ -130,6 +150,226 @@ def test_plot_data_with_simple_operations(entry_path):
         response_body = response.json()
         assert response_body["data"]["value"] == pytest.approx(expected)
 
+
+def test_plot_data_with_simple_operations_errors(entry_path):
+    operations = "root:0"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 466
+
+    operations = "div:0"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 466
+
+    operations = "dummy:0"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 422
+
+    operations = "add:string"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 422
+
+    operations = ":0"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 422
+
+    operations = "string:"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 422
+
+    operations = "string"
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 422
+
+    operations = ""
+    parameters = {"uri": f"imas:hdf5?path={entry_path}#core_profiles/time", "operations": operations}
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 422
+
+
+def test_plot_data_smoothing_with_wrong_target_node(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targeted quantity must be time-based
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 466
+
+
+@pytest.mark.parametrize("expected_unit", ["m"] if _IMAS_GE_2_3 else ["mixed"])
+def test_plot_data_2d(entry_path, expected_unit):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[:]/ion[:]/temperature",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+    assert response.status_code == 200
+
+    assert response_body["data"]["name"] == "temperature"
+    assert response_body["data"]["unit"] == "eV"
+    assert response_body["data"]["shape"] == [5, 2, 3, 3]
+    assert response_body["data"]["path"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
+
+    assert len(response_body["data"]["coordinates"]) == 4
+
+    time_coordinate = response_body["data"]["coordinates"][3]
+    assert time_coordinate["name"] == "time"
+    assert time_coordinate["target"] == "#core_profiles/profiles_2d[:]"
+    assert time_coordinate["unit"] == "s"
+    assert time_coordinate["shape"] == [5]
+    assert time_coordinate["path"] == "#core_profiles/time"
+    assert time_coordinate["description"] == "Generic time"
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    assert dim1_coordinate["name"] == "R"  # alias for dim1
+    assert dim1_coordinate["unit"] == expected_unit
+    assert dim1_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
+    assert dim1_coordinate["shape"] == [5, 3]
+    assert dim1_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim1"
+
+    dim2_coordinate = response_body["data"]["coordinates"][1]
+    assert dim2_coordinate["name"] == "Z"  # alias for dim2
+    assert dim2_coordinate["unit"] == expected_unit
+    assert dim2_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
+    assert dim2_coordinate["shape"] == [5, 3]
+    assert dim2_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim2"
+
+
+def test_plot_data_1_N_coord(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/ion[:]/z_ion",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    numeric_coordinate = response_body["data"]["coordinates"][0]
+    assert numeric_coordinate["name"] == "ion"
+    assert numeric_coordinate["target"] == "#core_profiles/profiles_1d[:]/ion[:]"
+    assert numeric_coordinate["unit"] == ""
+    assert numeric_coordinate["shape"] == [5, 3]
+    assert numeric_coordinate["ndim"] == 1
+    assert numeric_coordinate["path"] == ""
+    assert numeric_coordinate["description"] == "1...N"
+
+
+def test_plot_data_requires_gaussian_sigma(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
+        "smoothing_method": "gaussian_filter",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+
+    assert response.status_code == 422
+    assert "gaussian_smoothing_sigma is required" in response.text
+
+
+def test_combined_features(entry_path, interpolation_entry_path_directory):
+    """
+    Single test exercising all data manipulation features:
+    simple operations, smoothing, interpolation (exact_value), and signal operations.
+    """
+    # --- Part 1: simple ops + gaussian smoothing + signal ops (entry_path) ---
+    db = f"imas:hdf5?path={entry_path}"
+    parameters = {
+        "uri": f"{db}#core_profiles/global_quantities/ip",
+        "operations": ["add:2", "mul:3"],
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+        "signal_operations": [f"add:{db}#core_profiles/time"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([11.28, 14.20, 18.0, 21.80, 24.72], 0.1)
+
+    # --- Part 2: different simple ops + savgol smoothing + exact_value interpolation + signal ops ---
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/vacuum_toroidal_field/b0",
+        "operations": ["mul:10", "pow:2"],
+        "smoothing_method": "savitzky-golay_filter",
+        "savgol_smoothing_window_length": 3,
+        "savgol_smoothing_polyorder": 1,
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
+        "interpolation_method": "exact_value",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    # db_1 b0: [0.1,0.2,0.3,0.4], mul:10+pow:2 -> [1,4,9,16]
+    # savgol wl=3 po=1 -> [0.6667,4.6667,9.6667,15.6667]
+    # exact_value interpolation on union [1,2,3,4] -> no change
+    # db_2 b0: [0.1,0.2,0.3]
+    # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None->0]
+    # signal add: [0.6667+0.1, 4.6667+0.2, 9.6667+0.3, 15.6667+0]
+    # Result: [0.7667,4.8667,9.9667,15.6667]
+    assert response_body["data"]["value"] == pytest.approx([0.76, 4.86, 9.96, 15.66], 0.01)
+
+
+def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
+    base_parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
+        "smoothing_method": "savitzky-golay_filter",
+    }
+
+    response = pytest.test_client.get("/data/plot_data", params=base_parameters)
+    assert response.status_code == 422
+    assert "savgol_smoothing_window_length is required" in response.text
+
+    response = pytest.test_client.get(
+        "/data/plot_data",
+        params={**base_parameters, "savgol_smoothing_window_length": 5},
+    )
+    assert response.status_code == 422
+    assert "savgol_smoothing_polyorder is required" in response.text
+
+
+@pytest.mark.parametrize("expected_unit", [("m", "rad")] if _IMAS_GE_2_3 else [("mixed", "mixed")])
+def test_plot_data_coordinate_aliases(entry_path, expected_unit):
+
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[0]/grid/volume_element",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    assert dim1_coordinate["name"].lower() == "r"
+    assert dim1_coordinate["unit"].lower() == expected_unit[0]
+
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[1]/grid/volume_element",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    response_body = response.json()
+
+    assert response.status_code == 200
+
+    dim1_coordinate = response_body["data"]["coordinates"][0]
+    dim2_coordinate = response_body["data"]["coordinates"][1]
+    assert dim1_coordinate["name"].lower() == "rho"
+    assert dim1_coordinate["unit"].lower() == expected_unit[0]
+
+    assert dim2_coordinate["name"].lower() == "theta"
+    assert dim2_coordinate["unit"].lower() == expected_unit[1]
 
 def test_plot_data_with_signal_operations(entry_path):
     parameters = {
@@ -233,146 +473,3 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
     # Common dim1 has db_2's 9 values at indices [0,1,2,4,5,6,8,9,10] → 3×4×3×9 = 324
     assert np.count_nonzero(~np.isnan(data)) == 324
 
-
-def test_plot_data_smoothing_with_wrong_target_node(entry_path):
-    parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targeted quantity must be time-based
-        "smoothing_method": "gaussian_filter",
-        "gaussian_smoothing_sigma": 1,
-    }
-    response = pytest.test_client.get("/data/plot_data", params=parameters)
-    assert response.status_code == 466
-
-
-def test_plot_data_2d(entry_path):
-    parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_2d[:]/ion[:]/temperature",
-    }
-    response = pytest.test_client.get("/data/plot_data", params=parameters)
-    response_body = response.json()
-    assert response.status_code == 200
-
-    assert response_body["data"]["name"] == "temperature"
-    assert response_body["data"]["unit"] == "eV"
-    assert response_body["data"]["shape"] == [5, 2, 3, 3]
-    assert response_body["data"]["path"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
-
-    assert len(response_body["data"]["coordinates"]) == 4
-
-    time_coordinate = response_body["data"]["coordinates"][3]
-    assert time_coordinate["name"] == "time"
-    assert time_coordinate["target"] == "#core_profiles/profiles_2d[:]"
-    assert time_coordinate["unit"] == "s"
-    assert time_coordinate["shape"] == [5]
-    assert time_coordinate["path"] == "#core_profiles/time"
-    assert time_coordinate["description"] == "Generic time"
-
-    dim1_coordinate = response_body["data"]["coordinates"][0]
-    assert dim1_coordinate["name"] == "dim1"
-    assert dim1_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
-    assert dim1_coordinate["shape"] == [5, 3]
-    assert dim1_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim1"
-
-    dim2_coordinate = response_body["data"]["coordinates"][1]
-    assert dim2_coordinate["name"] == "dim2"
-    assert dim2_coordinate["target"] == "#core_profiles/profiles_2d[:]/ion[:]/temperature"
-    assert dim2_coordinate["shape"] == [5, 3]
-    assert dim2_coordinate["path"] == "#core_profiles/profiles_2d[:]/grid/dim2"
-
-
-def test_plot_data_1_N_coord(entry_path):
-    parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/ion[:]/z_ion",
-    }
-    response = pytest.test_client.get("/data/plot_data", params=parameters)
-    response_body = response.json()
-
-    assert response.status_code == 200
-
-    numeric_coordinate = response_body["data"]["coordinates"][0]
-    assert numeric_coordinate["name"] == "ion"
-    assert numeric_coordinate["target"] == "#core_profiles/profiles_1d[:]/ion[:]"
-    assert numeric_coordinate["unit"] == ""
-    assert numeric_coordinate["shape"] == [5, 3]
-    assert numeric_coordinate["ndim"] == 1
-    assert numeric_coordinate["path"] == ""
-    assert numeric_coordinate["description"] == "1...N"
-
-
-def test_plot_data_requires_gaussian_sigma(entry_path):
-    parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
-        "smoothing_method": "gaussian_filter",
-    }
-    response = pytest.test_client.get("/data/plot_data", params=parameters)
-
-    assert response.status_code == 422
-    assert "gaussian_smoothing_sigma is required" in response.text
-
-
-def test_combined_features(entry_path, interpolation_entry_path_directory):
-    """
-    Single test exercising all data manipulation features:
-    simple operations, smoothing, interpolation (exact_value), and signal operations.
-    """
-    # --- Part 1: simple ops + gaussian smoothing + signal ops (entry_path) ---
-    db = f"imas:hdf5?path={entry_path}"
-    parameters = {
-        "uri": f"{db}#core_profiles/global_quantities/ip",
-        "operations": ["add:2", "mul:3"],
-        "smoothing_method": "gaussian_filter",
-        "gaussian_smoothing_sigma": 1,
-        "signal_operations": [f"add:{db}#core_profiles/time"],
-    }
-    response = pytest.test_client.get("/data/plot_data", params=parameters)
-    assert response.status_code == 200
-
-    response_body = response.json()
-    assert response_body["data"]["value"] == pytest.approx([11.28, 14.20, 18.0, 21.80, 24.72], 0.1)
-
-    # --- Part 2: different simple ops + savgol smoothing + exact_value interpolation + signal ops ---
-    db_names = [
-        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
-        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
-    ]
-
-    parameters = {
-        "uri": f"{db_names[0]}#equilibrium/vacuum_toroidal_field/b0",
-        "operations": ["mul:10", "pow:2"],
-        "smoothing_method": "savitzky-golay_filter",
-        "savgol_smoothing_window_length": 3,
-        "savgol_smoothing_polyorder": 1,
-        "signal_operations": [f"add:{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
-        "interpolate_over": [f"{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
-        "interpolation_method": "exact_value",
-    }
-    response = pytest.test_client.get("/data/plot_data", params=parameters)
-    assert response.status_code == 200
-
-    response_body = response.json()
-    # db_1 b0: [0.1,0.2,0.3,0.4], mul:10+pow:2 -> [1,4,9,16]
-    # savgol wl=3 po=1 -> [0.6667,4.6667,9.6667,15.6667]
-    # exact_value interpolation on union [1,2,3,4] -> no change
-    # db_2 b0: [0.1,0.2,0.3]
-    # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None->0]
-    # signal add: [0.6667+0.1, 4.6667+0.2, 9.6667+0.3, 15.6667+0]
-    # Result: [0.7667,4.8667,9.9667,15.6667]
-    assert response_body["data"]["value"] == pytest.approx([0.76, 4.86, 9.96, 15.66], 0.01)
-
-
-def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
-    base_parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
-        "smoothing_method": "savitzky-golay_filter",
-    }
-
-    response = pytest.test_client.get("/data/plot_data", params=base_parameters)
-    assert response.status_code == 422
-    assert "savgol_smoothing_window_length is required" in response.text
-
-    response = pytest.test_client.get(
-        "/data/plot_data",
-        params={**base_parameters, "savgol_smoothing_window_length": 5},
-    )
-    assert response.status_code == 422
-    assert "savgol_smoothing_polyorder is required" in response.text

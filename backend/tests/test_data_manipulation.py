@@ -110,11 +110,6 @@ def test_apply_simple_operations_recurses_over_lists():
     assert np.asarray(result[1]) == pytest.approx([11.0, 13.0])
 
 
-def test_apply_simple_operations_rejects_division_by_zero():
-    with pytest.raises(InvalidParametersException, match="Division by zero is not allowed"):
-        apply_simple_operations(np.array([1.0]), ["div:0"])
-
-
 def test_apply_simple_operations_uses_order():
     data = np.array([5.0])
     # mul then add -> (5*2)+1 = 11

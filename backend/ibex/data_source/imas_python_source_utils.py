@@ -1,11 +1,38 @@
+from typing import List
 from functools import reduce
 
 import numpy as np
 from imas.ids_primitive import IDSNumericArray
 from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter1d
 from scipy.signal import savgol_filter
 from ibex.data_source.exception import InvalidParametersException
+import operator as _op
+
+
+def path_in_filled_paths(node_path: str, filled_paths: List[str]):
+    """
+    Returns true if node path is in filled paths.
+    Checks also for intermediate paths e.g. node_path = 'profiles_2d' filled_paths = ['profiles_2d/t_i_average'] should also return True.
+    :param node_path: single node path e.g 'time', 'ids_properties/comment'
+    :param filled_paths: list of filled paths extracted from imas.DBEntry.list_filled_paths()
+    :return: True or False
+    """
+
+    node_path = node_path.rstrip("/")
+
+    for path in filled_paths:
+        path = path.rstrip("/")
+
+        # exact match
+        if path == node_path:
+            return True
+
+        # node_path is a prefix for full path
+        if path.startswith(node_path + "/"):
+            return True
+
+    return False
 
 
 def apply_savgol_filter(
@@ -20,12 +47,12 @@ def apply_savgol_filter(
     """
     Apply Savitzky-Golay filer to data
     :param data: The input array.
-    :param window_length: The length of the filter window (i.e., the number of coefficients). If mode is ‘interp’, window_length must be less than or equal to the size of x.
+    :param window_length: The length of the filter window (i.e., the number of coefficients). If mode is `interp`, window_length must be less than or equal to the size of x.
     :param polyorder: The order of the polynomial used to fit the samples. polyorder must be less than window_length.
     :param deriv: The order of the derivative to compute. This must be a nonnegative integer. The default is 0, which means to filter the data without differentiating.
     :param delta: The spacing of the samples to which the filter will be applied. This is only used if deriv > 0. Default is 1.0.
-    :param mode: Must be ‘mirror’, ‘constant’, ‘nearest’, ‘wrap’ or ‘interp’.
-    :param cval: Value to fill past the edges of the input if mode is ‘constant’. Default is 0.0.
+    :param mode: Must be `mirror`, `constant`, `nearest`, `wrap` or `interp`.
+    :param cval: Value to fill past the edges of the input if mode is `constant`. Default is 0.0.
 
     :return: Data with filter applied
     """
@@ -49,7 +76,7 @@ def apply_savgol_filter(
         raise InvalidParametersException(msg)
 
 
-def apply_gaussian_filter(data: list | np.ndarray, sigma):
+def apply_gaussian_filter(data: list | np.ndarray, sigma, axis: int | None = None):
     """
     Apply Gaussian filer to data
     :param data: The input array.
@@ -59,9 +86,59 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma):
     if isinstance(data, list):
         return [apply_gaussian_filter(x, sigma) for x in data]
     elif isinstance(data, (np.ndarray, IDSNumericArray)):
-        return gaussian_filter(data, sigma=sigma)
+        if axis is None:
+            return gaussian_filter1d(data, sigma=sigma)
+        else:
+            return gaussian_filter1d(data, sigma=sigma, axis=axis)
     else:
         msg = "Smoothing can be executed only on numeric arrays, not single values or strings."
+        raise InvalidParametersException(msg)
+
+
+def _safe_division(data, divisor):
+    if divisor == 0:
+        raise InvalidParametersException("Division by zero is not allowed")
+    return data / divisor
+
+
+def _safe_root(data, exponent):
+    if exponent == 0:
+        raise InvalidParametersException("Root by zero is not allowed")
+    return np.power(data, 1 / exponent)
+
+
+_SIMPLE_OPERATIONS_FUNCTIONS = {
+    "add": _op.add,
+    "sub": _op.sub,
+    "mul": _op.mul,
+    "div": _safe_division,
+    "pow": np.power,
+    "root": _safe_root,
+}
+
+
+def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
+    """
+    Apply simple scalar operations to data in the order given.
+    Each operation is a string in the format 'type:value', e.g. 'add:10', 'mul:5'.
+    :param data: Input data
+    :param operations: List of operations and operands divided by colon (:)
+    :return: Data after operation
+    """
+    if isinstance(data, list):
+        return [apply_simple_operations(x, operations) for x in data]
+    elif isinstance(data, (np.ndarray, IDSNumericArray)):
+        result = data
+        for op_str in operations:
+            op_type, value_str = op_str.split(":", 1)
+            value = float(value_str)
+            func = _SIMPLE_OPERATIONS_FUNCTIONS.get(op_type)
+            if func is None:
+                raise InvalidParametersException(f"Unknown operation type: {op_type}")
+            result = func(result, value)
+        return result
+    else:
+        msg = "Simple operations can be executed only on numeric arrays, not single values or strings."
         raise InvalidParametersException(msg)
 
 
@@ -172,17 +249,13 @@ def flatten(lst):
     return result
 
 
-def calculate_coordinate_shapes(shape: list[int], dims: int, n_coords: int):
+def calculate_coordinate_shapes(shape: list[int], dims: int):
     """
     Generate shapes for coordinate arrays based on a full data shape.
 
     :param shape: Full shape of the data array (e.g. [4, 5, 10, 15]).
     :param dims: Number of base dimensions extracted from Data Dictionary (e.g. 2 for a 2D grid -> [4, 5]).
-    :param n_coords: Number of coordinate dimensions generated by AoS presence in node path (e.g. [10, 15]).
     :return: List of shapes for each coordinate.
-
-    :raises ValueError: If ``len(shape) != dims + n_coords``.
-
     """
 
     if dims < 0 or dims > len(shape):
@@ -295,6 +368,8 @@ def resample_data_with_interpolation(
         interpolator = RegularGridInterpolator(original_coords, data, bounds_error=False, method=interpolation_method)
     except ValueError as e:
         message = f"Invalid parameter passed to interpolator: {e}"
+        if "could not convert string to float" in str(e):
+            message += ". Use 'exact_value' interpolation method for non-numeric coordinates"
         raise InvalidParametersException(message) from None
 
     # build mesh grid (manipulate coordinates to be list of coordinates e.g. [[x1,y1,z1,h1...], [x2,y2,z2,h3...]])

@@ -66,6 +66,7 @@ test = [
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "pytest-unordered",
 ]
 
 linting = [
@@ -107,6 +108,9 @@ search_parent_directories = true
 # Set the maximum line length to 120.
 line-length = 120
 exclude = ["venv", "_version.py"]
+
+[tool.ruff.lint]
+extend-select = ["RUF001", "RUF002", "RUF003"]
 
 [tool.coverage.run]
 omit = [
