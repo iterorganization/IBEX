@@ -10,6 +10,94 @@ from ibex.data_source.exception import InvalidParametersException
 import operator as _op
 
 
+def resolve_irregular_coordinate_data_shape(
+    coordinates: list[list[int]], data: list, target_coordinates: list[list[int]]
+):
+    """
+    Convert data with irregular (nD / time-varying) coordinate arrays into a regular NaN-padded grid.
+
+    Comment from developer:
+    IMAS stores some quantities (e.g. profiles_1d[:]/electrons/temperature) with a coordinate
+    (e.g. rho_tor_norm) that has a *different* 1D array per time slice, or is *n-dimensional*
+    (e.g. 2D psi on a poloidal grid).  The SciPy interpolators used downstream (e.g.
+    RegularGridInterpolator) require data arranged as a full rectangular grid where each axis
+    corresponds to one unique set of coordinate values.
+
+    This function:
+    1. Flattens the nested data array into a list of (coordinate-tuple, value) points, respecting
+       which coordinate dimension varies along which nesting level.
+    2. Creates an empty dense grid on ``target_coordinates`` (filled with NaN).
+    3. Places each point into the correct grid cell by looking up its coordinate values in the
+       target-coordinate index dictionaries.
+
+    Cells that have no corresponding point remain NaN, signalling "no data at that location".
+
+    :param coordinates: List of coordinate arrays. Arrays can be 1+D
+    :param data: Nested list / array of data values. The nesting depth must equal the number
+        of dimensions implied by *coordinates*.
+    :param target_coordinates: List of 1D arrays defining the output grid axes.
+    :return: ndarray of shape ``(len(tc) for tc in target_coordinates)``, filled with NaN
+        except where a data point fell on a grid vertex.
+    """
+
+    def convert_data_to_points_grid(
+        coordinates: list,
+        data,
+        result=None,
+    ):
+        """
+        Recursively flatten a nested data array into a list of ((x, y, …), value) tuples.
+
+        The nesting depth of *data* matches the number of coordinate dimensions.
+        At each level we consume one element from the coordinate arrays — if a coordinate
+        is a 1D array of the same length as the current *data* level, we index it at the
+        current position *i* (it varies along this dimension); otherwise it is treated as
+        a constant along this dimension and passed through unchanged.
+
+        When we reach a scalar (leaf), we record the accumulated coordinate tuple and its
+        value.  These points are later placed into the target grid.
+
+        :param coordinates: Coordinate arrays at the current recursion level. Each element
+            is either a 1D array (indexed by *i* if its length matches *data*) or a scalar
+            (passed through unchanged).
+        :param data: Data at the current recursion level — a nested list, array, or scalar.
+        :param result: Accumulator list of ``(tuple, value)`` pairs. Passed by reference.
+        """
+        if result is None:
+            result = []
+
+        if isinstance(data, (list, IDSNumericArray, np.ndarray)):
+            for i in range(len(data)):
+                new_coords = [
+                    c[i] if isinstance(c, (list, np.ndarray)) and len(c) > 0 and len(c) == len(data) else c
+                    for c in coordinates
+                ]
+                convert_data_to_points_grid(
+                    new_coords,
+                    data[i],
+                    result,
+                )
+        else:
+            result.append((tuple(coordinates), data))
+
+    # CONVERT DATA ARRAY INTO LIST OF POINTS
+    # single point = ((x, y, z, ...), value)
+    data_points = []
+    convert_data_to_points_grid(coordinates, data, result=data_points)
+
+    # FILL GRID FROM COLLECTED POINTS
+    output_shape = [len(tc) for tc in target_coordinates]
+    result = np.full(output_shape, np.nan, dtype=float)
+
+    lookups = [{val: idx for idx, val in enumerate(tc)} for tc in target_coordinates]
+
+    for position, value in data_points:
+        idx = tuple(lookups[d][position[d]] for d in range(len(position)))
+        result[idx] = value
+
+    return result
+
+
 def path_in_filled_paths(node_path: str, filled_paths: List[str]):
     """
     Returns true if node path is in filled paths.
@@ -283,7 +371,10 @@ def resample_data_with_interpolation(
     mesh = np.meshgrid(*target_coords, indexing="ij")
     points = np.stack(mesh, axis=-1).reshape(-1, len(target_coords))
 
-    result = interpolator(points)
+    try:
+        result = interpolator(points)
+    except ValueError as e:
+        raise InvalidParametersException(f"Cannot interpolate data: {e}", code=464) from None
 
     # revert mesh shape
     result = result.reshape([len(c) for c in target_coords])
