@@ -2,8 +2,9 @@ from typing import List  # type: ignore
 from enum import Enum  # type: ignore
 
 from tsdownsample import MinMaxDownsampler, M4Downsampler, LTTBDownsampler, MinMaxLTTBDownsampler  # type: ignore
+from ibex.data_source.exception import InvalidParametersException
 from imas.ids_primitive import IDSNumericArray
-from ibex.data_source.exception import NotAnArrayException, InvalidParametersException
+from ibex.data_source.exception import NotAnArrayException
 
 import numpy as np  # type: ignore
 from dataclasses import dataclass
@@ -250,15 +251,18 @@ class IMAS_URI:
 
         self.uri_entry_identifiers, self.uri_fragment = self.full_uri.split("#", 1)
 
-        pattern = r"^(?P<idsname>[^:/]+)(?::(?P<occurrence>[^/]*))?(?:/(?P<node_path>.*))?$"
+        pattern = r"^(?P<idsname>[^:/]+)(?::(?P<occurrence>\d*))?(?:/(?P<node_path>.*))?$"
 
         match = re.match(pattern, self.uri_fragment)
 
         if not match:
-            return
+            raise InvalidParametersException(
+                f"Invalid IMAS URI fragment: '{self.uri_fragment}'. "
+                "Expected format: ids_name:occurrence/node_path (occurrence and node_path are optional)"
+            )
 
         self.ids_name = match.group("idsname") if match.group("idsname") else ""
-        self.occurrence = match.group("occurrence") if match.group("occurrence") else 0
+        self.occurrence = int(match.group("occurrence")) if match.group("occurrence") else 0
         self.node_path = match.group("node_path") if match.group("node_path") else ""
 
     def __str__(self):
