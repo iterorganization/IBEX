@@ -16,19 +16,19 @@ def resolve_irregular_coordinate_data_shape(
     """
     Convert data with irregular (nD / time-varying) coordinate arrays into a regular NaN-padded grid.
 
-    Comment from developer:
-    IMAS stores some quantities (e.g. profiles_1d[:]/electrons/temperature) with a coordinate
-    (e.g. rho_tor_norm) that has a *different* 1D array per time slice, or is *n-dimensional*
-    (e.g. 2D psi on a poloidal grid).  The SciPy interpolators used downstream (e.g.
-    RegularGridInterpolator) require data arranged as a full rectangular grid where each axis
-    corresponds to one unique set of coordinate values.
+    IMAS stores some quantities (e.g. ``profiles_1d[:]/electrons/temperature``) with a
+    coordinate (e.g. ``rho_tor_norm``) that has a *different* 1D array per time slice,
+    or is *n-dimensional* (e.g. 2D psi on a poloidal grid).  The SciPy interpolators
+    used downstream (e.g. RegularGridInterpolator) require data arranged as a full
+    rectangular grid where each axis corresponds to one unique set of coordinate values.
 
     This function:
-    1. Flattens the nested data array into a list of (coordinate-tuple, value) points, respecting
-       which coordinate dimension varies along which nesting level.
-    2. Creates an empty dense grid on ``target_coordinates`` (filled with NaN).
-    3. Places each point into the correct grid cell by looking up its coordinate values in the
-       target-coordinate index dictionaries.
+
+    * flattens the nested data array into a list of (coordinate-tuple, value) points,
+      respecting which coordinate dimension varies along which nesting level.
+    * creates an empty dense grid on ``target_coordinates`` (filled with NaN).
+    * places each point into the correct grid cell by looking up its coordinate values
+      in the target-coordinate index dictionaries.
 
     Cells that have no corresponding point remain NaN, signalling "no data at that location".
 
