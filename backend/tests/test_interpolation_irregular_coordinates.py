@@ -17,7 +17,7 @@ def test_interpolation_irregular_coordinate(interpolation_entry_path_directory):
         response = pytest.test_client.get("/data/plot_data", params=parameters)
 
         if method == "slinear":
-            assert response.status_code == 464
+            assert response.status_code == 466
         else:
             assert response.status_code == 200
 

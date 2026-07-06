@@ -374,7 +374,7 @@ def resample_data_with_interpolation(
     try:
         result = interpolator(points)
     except ValueError as e:
-        raise InvalidParametersException(f"Cannot interpolate data: {e}", code=464) from None
+        raise InvalidParametersException(f"Cannot interpolate data: {e}") from None
 
     # revert mesh shape
     result = result.reshape([len(c) for c in target_coords])
