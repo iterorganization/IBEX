@@ -52,7 +52,7 @@ export type Geometry = {
   x: number[];
   y: number[];
   line: GeometryLine;
-  geometryUri: string;
+  geometry_node: string;
   nodeUris: string[];
   name: string;
   legendgroup: string;
@@ -145,6 +145,10 @@ export type synchronizedList = {
 export type PlotType = '1D' | 'Heatmap' | 'Contour';
 
 export type GeometryInfos = {
-  geometryUri: string;
+  geometry_node: string;
   parameters: string[];
+};
+
+export type GeometryInfosResponse = {
+  outline_nodes: GeometryInfos[];
 };

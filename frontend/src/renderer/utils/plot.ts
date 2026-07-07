@@ -862,7 +862,7 @@ const fetchGeometryOutline = async (
     type: 'scatter',
     mode: 'lines',
     line: { color: 'black', width: 2 },
-    geometryUri: uri + path,
+    geometry_node: uri + path,
     nodeUris: [uri + rPath, uri + zPath],
     name: groupLegend,
     legendgroup: groupLegend,
@@ -950,7 +950,7 @@ const fetchGeometryRectangle = async (
       type: 'scatter',
       mode: 'lines',
       line: { color: 'orange', width: 2 },
-      geometryUri: uri + path,
+      geometry_node: uri + path,
       nodeUris: [uri + rPath, uri + zPath, uri + widthPath, uri + heightPath],
       name: groupLegend,
       legendgroup: groupLegend,
@@ -1080,7 +1080,7 @@ const fetchGeometryOblique = async (
       type: 'scatter',
       mode: 'lines',
       line: { color: 'orange', width: 2 },
-      geometryUri: uri + path,
+      geometry_node: uri + path,
       nodeUris: [
         uri + rPath,
         uri + zPath,
@@ -1839,16 +1839,16 @@ export async function plotNodeUriLoaded(
         if (dataGridUpdated.geometries.length) {
           const listOfGeometries: GeometryInfos[] =
             dataGridUpdated.geometries.map((geo) => ({
-              geometryUri: geo.geometryUri,
+              geometry_node: geo.geometry_node,
               parameters: geo.nodeUris,
             }));
           dataGridUpdated.geometries = [];
           for (const geometry of listOfGeometries) {
             const geometryToDisplay = listOfGeometries.find(
-              (g) => g.geometryUri === geometry.geometryUri,
+              (g) => g.geometry_node === geometry.geometry_node,
             );
             await fetchGeometries(
-              geometry.geometryUri,
+              geometry.geometry_node,
               dataGridUpdated,
               undefined,
               geometryToDisplay,
@@ -2825,12 +2825,12 @@ export function formatGeometriesToSave(
   const geometryMap = new Map<string, Set<string>>();
 
   for (const geom of geometries) {
-    const splittedUri = geom.geometryUri.split('#');
+    const splittedUri = geom.geometry_node.split('#');
 
     const normalizedUri =
       splittedUri.length >= 0
         ? `${dataURI.find((uri) => uri.uri === splittedUri[0]).name}#${splittedUri[1]}`
-        : geom.geometryUri;
+        : geom.geometry_node;
 
     const match = normalizedUri.match(/(.*\/geometry\/)([^/]+)\/?$/);
 
@@ -2843,13 +2843,13 @@ export function formatGeometriesToSave(
 
       geometryMap.get(baseUri)!.add(parameter);
     } else {
-      result.push({ geometryUri: normalizedUri, nodeUris: [] });
+      result.push({ geometry_node: normalizedUri, nodeUris: [] });
     }
   }
 
-  for (const [geometryUri, parameters] of geometryMap.entries()) {
+  for (const [geometry_node, parameters] of geometryMap.entries()) {
     result.push({
-      geometryUri,
+      geometry_node,
       nodeUris: [...parameters],
     });
   }

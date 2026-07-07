@@ -7,6 +7,7 @@ import {
   DownsamplingMethodsResponse,
   FieldValueResponse,
   FormDbEntries,
+  GeometryInfosResponse,
   InfoVersionResponse,
   NodeInfoResponse,
   NodeInfoTypeEnum,
@@ -431,6 +432,20 @@ export const fetchArraySummary = async (uri: string) => {
   return fetchFromApi<ArraySummaryResponse>(
     `/ids_info/array_summary?uri=${encodeURIComponent(uri)}`,
   );
+};
+
+/**
+ * Retrieves geometries to overlay for a given URI.
+ */
+export const fetchGeometryNodes = async (uri: string, labelUri: string) => {
+  const geometries = await fetchFromApi<GeometryInfosResponse>(
+    `/ids_info/geometry_overlay_nodes?uri=${encodeURIComponent(uri)}`,
+  );
+  for (const geometry of geometries.outline_nodes) {
+    const splittedNode = geometry.geometry_node.split('#');
+    geometry.geometry_node = labelUri + '#' + splittedNode[1] + '/';
+  }
+  return geometries.outline_nodes;
 };
 
 /**

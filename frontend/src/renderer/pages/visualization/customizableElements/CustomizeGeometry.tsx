@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { DataGridPlot, GeometryInfos } from '../../../types';
 import { MultiSelect, Select, Stack } from '@mantine/core';
 import { useIbexStore } from '../../../stores';
-import { fetchGeometries, formatGeometriesToSave } from '../../../utils';
+import {
+  fetchGeometries,
+  fetchGeometryNodes,
+  formatGeometriesToSave,
+} from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 
 interface CustomizeGeometryProps {
@@ -27,38 +31,23 @@ export const CustomizeGeometry = ({
         formatGeometriesToSave(
           customizedDataGrid.geometries,
           active.dataURI,
-        ).map((geo) => geo.geometryUri),
+        ).map((geo) => geo.geometry_node),
       ),
     ];
   });
 
-  const handleSelectedUri = (value: string) => {
+  const handleSelectedUri = async (value: string) => {
+    if (!value) {
+      return;
+    }
     setSelectedUri(value);
-    // TODO : call BE endpoint to get geometries and fill multiselect data
-    const rawData: GeometryInfos[] = [
-      {
-        geometryUri: 'URI-0#wall:0/description_2d[:]/limiter/unit[:]/outline/',
-        parameters: ['r', 'z'],
-      },
-      {
-        geometryUri: 'URI-0#pf_active:0/coil[:]/element[:]/geometry/',
-        parameters: [
-          'rectangle/r',
-          'rectangle/z',
-          'rectangle/width',
-          'rectangle/height',
 
-          'oblique/r',
-          'oblique/z',
-          'oblique/length_alpha',
-          'oblique/length_beta',
-          'oblique/alpha',
-          'oblique/beta',
-        ],
-      },
-    ];
-    setGeometriesAvailable(rawData);
-    setGeometriesSelectable(rawData?.map((d) => d.geometryUri));
+    // Call BE endpoint to get geometries and fill multiselect data
+    const labelUri = active.dataURI.find((d) => d.uri === value)?.name || '';
+    const geometryNode = await fetchGeometryNodes(value, labelUri);
+
+    setGeometriesAvailable(geometryNode);
+    setGeometriesSelectable(geometryNode?.map((d) => d.geometry_node));
   };
 
   /**
@@ -104,7 +93,8 @@ export const CustomizeGeometry = ({
         const pathToRemove = '#' + selectUriToRemove.split('#')[1];
         const fullPathToRemove = uri + pathToRemove;
         customizedDataGrid.geometries = customizedDataGrid.geometries.filter(
-          (geoToRemove) => !geoToRemove.geometryUri.includes(fullPathToRemove),
+          (geoToRemove) =>
+            !geoToRemove.geometry_node.includes(fullPathToRemove),
         );
       } else if (values.length > selectedGeometries.length) {
         // Add selected geometry
@@ -115,7 +105,7 @@ export const CustomizeGeometry = ({
             .split('#')[1]; // Get selected geometries
 
         const wantedGeometryInfos: GeometryInfos = geometriesAvailable.find(
-          (geo) => geo.geometryUri.includes(added),
+          (geo) => geo.geometry_node.includes(added),
         );
 
         // Get geometries
