@@ -818,7 +818,6 @@ const fetchGeometryOutline = async (
   path: string,
   shouldSwitchAxis: boolean,
 ) => {
-  // TODO replace constrained paths by them provided by BE
   const rPath = path + 'r';
   const zPath = path + 'z';
 
@@ -876,7 +875,6 @@ const fetchGeometryRectangle = async (
   path: string,
   shouldSwitchAxis: boolean,
 ) => {
-  // TODO replace constrained paths by them provided by BE
   const rPath = path + 'r';
   const zPath = path + 'z';
   const widthPath = path + 'width';
@@ -967,7 +965,6 @@ const fetchGeometryOblique = async (
   path: string,
   shouldSwitchAxis: boolean,
 ) => {
-  // TODO replace constrained paths by them provided by BE
   const rPath = path + 'r';
   const zPath = path + 'z';
   const lengthAlphaPath = path + 'length_alpha';
