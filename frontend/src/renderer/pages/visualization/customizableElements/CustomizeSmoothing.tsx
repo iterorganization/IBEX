@@ -11,7 +11,7 @@ import {
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { IconRestore } from '@tabler/icons-react';
 import { OptionWithTooltip } from '../../../types/components/select';
 import { RenderSelectOption } from '../../../components/select';
 
@@ -43,7 +43,9 @@ export const CustomizeSmoothing = ({
   const [savgolMode, setSavgolMode] = useState<string>('interp');
   const [savgolCval, setSavgolCval] = useState<number>(0.0);
 
-  const [loading, { open, close }] = useDisclosure();
+  const [loadingAction, setLoadingAction] = useState<
+    'apply' | 'restore' | null
+  >(null);
 
   /**
    * Build the smoothing params for the selected method
@@ -70,27 +72,21 @@ export const CustomizeSmoothing = ({
   };
 
   /**
-   * Update configuration with smoothed data (changes coordinates & plots)
+   * Re-fetch plot data (optionally with smoothing) and update coordinates & plots.
+   * Called with smoothing params to apply smoothing, or without to restore raw data.
    */
-  const getSmoothedData = async () => {
-    const smoothingParams = buildSmoothingParams();
-    if (!smoothingParams) {
-      showNotification({
-        title: 'No smoothing method',
-        message: 'Please select a smoothing method.',
-        color: 'red',
-      });
-      return;
-    }
+  const updatePlotsData = async (
+    action: 'apply' | 'restore',
+    smoothingParams?: SmoothingParams,
+  ) => {
     try {
-      open();
+      setLoadingAction(action);
       const updatedDataPlot = structuredClone(
         customizedDataGrid,
       ) as DataGridPlot;
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
-        // Smooth data
         const urisToInterpolate = getUrisToInterpolate(
           plot.nodeUri,
           updatedDataPlot.plot,
@@ -106,7 +102,7 @@ export const CustomizeSmoothing = ({
         );
 
         if (plotIndex === 0) {
-          // Update coordinates with smoothed data only once because each plots have same coordinates
+          // Update coordinates only once because each plots have same coordinates
           let coordinateIndex = 0;
           for (const coordinate of updatedDataPlot.coordinates) {
             // Apply new shape
@@ -135,7 +131,7 @@ export const CustomizeSmoothing = ({
           }
         }
 
-        // Update plot with smoothed data
+        // Update plot with new data
         plot.shape = dataPlotSmoothed.data.downsampled_shape;
         // Get x axis switch coordinates dependances
         plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
@@ -150,22 +146,46 @@ export const CustomizeSmoothing = ({
         plotIndex++;
       }
 
-      // Save new configuration with smoothed data
+      // Save new configuration with updated data
       setCustomizedDataGrid({
         ...customizedDataGrid,
         coordinates: updatedDataPlot.coordinates,
         plot: updatedDataPlot.plot,
       });
     } catch (error) {
-      console.error('Error getting smoothed data: ', error);
+      console.error('Error getting plot data: ', error);
       showNotification({
         title: 'Error',
-        message: `Unable to get smoothed data.`,
+        message: `Unable to get plot data.`,
         color: 'red',
       });
     } finally {
-      close();
+      setLoadingAction(null);
     }
+  };
+
+  /**
+   * Apply the selected smoothing method to the plot data
+   */
+  const getSmoothedData = async () => {
+    const smoothingParams = buildSmoothingParams();
+    if (!smoothingParams) {
+      showNotification({
+        title: 'No smoothing method',
+        message: 'Please select a smoothing method.',
+        color: 'red',
+      });
+      return;
+    }
+    await updatePlotsData('apply', smoothingParams);
+  };
+
+  /**
+   * Restore the plot data by re-fetching it without smoothing
+   */
+  const restoreData = async () => {
+    await updatePlotsData('restore');
+    setSmoothingMethod(null);
   };
 
   /*
@@ -293,10 +313,19 @@ export const CustomizeSmoothing = ({
       <Group justify="center">
         <Button
           onClick={getSmoothedData}
-          loading={loading}
-          disabled={!smoothingMethod}
+          loading={loadingAction === 'apply'}
+          disabled={!smoothingMethod || loadingAction === 'restore'}
         >
           Apply
+        </Button>
+        <Button
+          onClick={restoreData}
+          loading={loadingAction === 'restore'}
+          disabled={loadingAction === 'apply'}
+          variant="outline"
+          leftSection={<IconRestore size={20} />}
+        >
+          Restore
         </Button>
       </Group>
     </Stack>
