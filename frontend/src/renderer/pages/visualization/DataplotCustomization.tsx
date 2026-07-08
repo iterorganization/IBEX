@@ -28,6 +28,7 @@ import {
   CustomizeDataRange,
   CustomizeSynchronization,
   CustomizeInterpolation,
+  CustomizeSmoothing,
 } from './customizableElements';
 import { IconLink } from '@tabler/icons-react';
 import { initPlotColors } from '../../utils';
@@ -449,6 +450,15 @@ const Customization = ({
       value: 'Interpolation',
       component: (
         <CustomizeInterpolation
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Data smoothing',
+      component: (
+        <CustomizeSmoothing
           customizedDataGrid={customizedDataGrid}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />

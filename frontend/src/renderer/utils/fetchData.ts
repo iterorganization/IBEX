@@ -12,6 +12,7 @@ import {
   NodeInfoTypeEnum,
   PlotDataResponse,
   SearchNodeResponse,
+  SmoothingParams,
   URDataEntriesResponse,
   URIExistsResponse,
   URIFromPathResponse,
@@ -202,6 +203,22 @@ export const getInterpolationMethods = async (): Promise<
   );
 };
 
+export const getSmoothingMethods = async (): Promise<OptionWithTooltip[]> => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const smoothing = methodsRes.data_manipulation_methods.find(
+    (m) => m.name === 'Data smoothing/denoising',
+  );
+  const param = smoothing?.method_parameters.find(
+    (p) => p.name === 'smoothing_method',
+  );
+  return (
+    param?.possible_values?.map((item) => ({
+      value: item.value,
+      tooltip: item.description,
+    })) ?? []
+  );
+};
+
 /**
  * Retrieves plot data for a given URI.
  */
@@ -212,6 +229,7 @@ export const fetchDataPlot = async (
   type?: NodeInfoTypeEnum,
   interpolateOver?: string[],
   interpolationMethod?: string,
+  smoothing?: SmoothingParams,
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
@@ -240,16 +258,26 @@ export const fetchDataPlot = async (
     encodedInterpolateOver += `&interpolation_method=${encodeURIComponent(interpolationMethod)}`;
   }
 
+  // Provide smoothing params if needed
+  let encodedSmoothing: string = '';
+  if (smoothing?.smoothing_method) {
+    for (const [key, value] of Object.entries(smoothing)) {
+      if (value != null) {
+        encodedSmoothing += `&${key}=${encodeURIComponent(value)}`;
+      }
+    }
+  }
+
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}`,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}`,
         5000,
       );
     } catch (error) {
@@ -274,7 +302,7 @@ export const fetchDataPlot = async (
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}`,
         );
       }
     }
