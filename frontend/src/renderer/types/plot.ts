@@ -37,6 +37,22 @@ export interface Coordinates extends BaseCoordinates {
   unit?: string;
 }
 
+export type UnaryOperation = {
+  type: string | null;
+  value: number;
+};
+
+export type SmoothingParams = {
+  smoothing_method: string;
+  gaussian_smoothing_sigma?: number;
+  savgol_smoothing_window_length?: number;
+  savgol_smoothing_polyorder?: number;
+  savgol_smoothing_deriv?: number;
+  savgol_smoothing_delta?: number;
+  savgol_smoothing_mode?: string;
+  savgol_smoothing_cval?: number;
+};
+
 export interface BaseDataPlotly {
   nodeUri: string;
   labelUri: string;
@@ -44,6 +60,8 @@ export interface BaseDataPlotly {
   customPreferences?: CustomPreferences;
   line?: PlotLine;
   mode?: string;
+  smoothing?: SmoothingParams;
+  operations?: UnaryOperation[];
 }
 
 export type DataPlotly = BaseDataPlotly &

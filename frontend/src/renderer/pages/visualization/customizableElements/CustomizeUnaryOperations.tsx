@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DataGridPlot, UnaryOperation } from '../../../types';
+import { DataGridPlot, DataPlotly, UnaryOperation } from '../../../types';
 import {
   fetchDataPlot,
   getArrayValueFromDependance,
@@ -26,41 +26,56 @@ const EMPTY_OPERATION: UnaryOperation = { type: null, value: 1 };
 
 interface CustomizeUnaryOperationsProps {
   customizedDataGrid: DataGridPlot;
+  selectedPlot: DataPlotly | null;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
 }
 export const CustomizeUnaryOperations = ({
   customizedDataGrid,
+  selectedPlot,
   setCustomizedDataGrid,
 }: CustomizeUnaryOperationsProps) => {
   const [operationMethods, setOperationMethods] = useState<OptionWithTooltip[]>(
     [],
   );
-  const [operations, setOperations] = useState<UnaryOperation[]>([
-    { ...EMPTY_OPERATION },
-  ]);
   const [loadingAction, setLoadingAction] = useState<
     'apply' | 'restore' | null
   >(null);
 
+  // Source of truth is the selected plot's own operations (persisted on the grid)
+  const operations = selectedPlot?.operations ?? [{ ...EMPTY_OPERATION }];
+
+  /**
+   * Persist the operations rows onto the selected plot
+   */
+  const updateOperations = (next: UnaryOperation[]) => {
+    if (!selectedPlot) return;
+    const updated = structuredClone(customizedDataGrid) as DataGridPlot;
+    const plot = updated.plot.find((p) => p.name === selectedPlot.name);
+    if (plot) {
+      plot.operations = next;
+    }
+    setCustomizedDataGrid({ ...customizedDataGrid, plot: updated.plot });
+  };
+
   const addOperation = () => {
-    setOperations((prev) => [...prev, { ...EMPTY_OPERATION }]);
+    updateOperations([...operations, { ...EMPTY_OPERATION }]);
   };
 
   const removeOperation = (index: number) => {
-    setOperations((prev) => prev.filter((_, i) => i !== index));
+    updateOperations(operations.filter((_, i) => i !== index));
   };
 
   const updateOperationType = (index: number, type: string | null) => {
-    setOperations((prev) =>
-      prev.map((operation, i) =>
+    updateOperations(
+      operations.map((operation, i) =>
         i === index ? { ...operation, type } : operation,
       ),
     );
   };
 
   const updateOperationValue = (index: number, value: number) => {
-    setOperations((prev) =>
-      prev.map((operation, i) =>
+    updateOperations(
+      operations.map((operation, i) =>
         i === index ? { ...operation, value } : operation,
       ),
     );
@@ -76,82 +91,72 @@ export const CustomizeUnaryOperations = ({
   };
 
   /**
-   * Re-fetch plot data (optionally with operations) and update coordinates & plots.
+   * Re-fetch the selected plot's data (optionally with operations) and update it.
    * Called with operations to apply them, or without to restore raw data.
    */
   const updatePlotsData = async (
     action: 'apply' | 'restore',
     operationsList?: string[],
   ) => {
+    if (!selectedPlot) return;
     try {
       setLoadingAction(action);
       const updatedDataPlot = structuredClone(
         customizedDataGrid,
       ) as DataGridPlot;
 
-      let plotIndex = 0;
-      for (const plot of updatedDataPlot.plot) {
-        const urisToInterpolate = getUrisToInterpolate(
-          plot.nodeUri,
-          updatedDataPlot.plot,
+      const plot = updatedDataPlot.plot.find(
+        (p) => p.name === selectedPlot.name,
+      );
+      if (!plot) return;
+
+      const urisToInterpolate = getUrisToInterpolate(
+        plot.nodeUri,
+        updatedDataPlot.plot,
+      );
+      const dataPlotOperated = await fetchDataPlot(
+        normalizeIndices(plot.nodeUri),
+        customizedDataGrid?.downsampled_method,
+        customizedDataGrid?.downsampled_size,
+        updatedDataPlot?.dataType,
+        urisToInterpolate,
+        customizedDataGrid?.interpolated_method,
+        undefined,
+        operationsList,
+      );
+
+      // Realign coordinates with the returned data (a no-op when the operations
+      // preserve the shape; needed if the fetch auto-downsampled the data)
+      let coordinateIndex = 0;
+      for (const coordinate of updatedDataPlot.coordinates) {
+        coordinate.shape =
+          dataPlotOperated.data.coordinates[coordinateIndex].downsampled_shape;
+        coordinate.data =
+          dataPlotOperated.data.coordinates[coordinateIndex].value;
+        coordinateIndex++;
+        coordinate.range = [
+          0,
+          coordinate.shape[coordinate.shape.length - 1] - 1,
+        ];
+        const firstArrayValueFromCoord = getFirstArrayValueFromShape(
+          coordinate.data,
+          coordinate.shape,
         );
-        const dataPlotOperated = await fetchDataPlot(
-          normalizeIndices(plot.nodeUri),
-          customizedDataGrid?.downsampled_method,
-          customizedDataGrid?.downsampled_size,
-          updatedDataPlot?.dataType,
-          urisToInterpolate,
-          customizedDataGrid?.interpolated_method,
-          undefined,
-          operationsList,
-        );
-
-        if (plotIndex === 0) {
-          // Update coordinates only once because each plots have same coordinates
-          let coordinateIndex = 0;
-          for (const coordinate of updatedDataPlot.coordinates) {
-            // Apply new shape
-            coordinate.shape =
-              dataPlotOperated.data.coordinates[
-                coordinateIndex
-              ].downsampled_shape;
-            // Apply new data
-            coordinate.data =
-              dataPlotOperated.data.coordinates[coordinateIndex].value;
-            coordinateIndex++;
-            // Apply new range
-            coordinate.range = [
-              0,
-              coordinate.shape[coordinate.shape.length - 1] - 1,
-            ];
-            const firstArrayValueFromCoord = getFirstArrayValueFromShape(
-              coordinate.data,
-              coordinate.shape,
-            );
-
-            coordinate.rangeValues = [
-              firstArrayValueFromCoord[0],
-              firstArrayValueFromCoord[firstArrayValueFromCoord.length - 1],
-            ];
-          }
-        }
-
-        // Update plot with new data
-        plot.shape = dataPlotOperated.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-        plot.yData = dataPlotOperated.data.value;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
-
-        plotIndex++;
+        coordinate.rangeValues = [
+          firstArrayValueFromCoord[0],
+          firstArrayValueFromCoord[firstArrayValueFromCoord.length - 1],
+        ];
       }
 
-      // Save new configuration with updated data
+      // Update only the selected plot with the new data
+      plot.shape = dataPlotOperated.data.downsampled_shape;
+      plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
+      plot.yData = dataPlotOperated.data.value;
+      plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
+      if (action === 'restore') {
+        plot.operations = undefined;
+      }
+
       setCustomizedDataGrid({
         ...customizedDataGrid,
         coordinates: updatedDataPlot.coordinates,
@@ -170,7 +175,7 @@ export const CustomizeUnaryOperations = ({
   };
 
   /**
-   * Apply the selected operations to the plot data
+   * Apply the operations to the selected plot
    */
   const applyOperations = async () => {
     const operationsList = buildOperations();
@@ -186,11 +191,10 @@ export const CustomizeUnaryOperations = ({
   };
 
   /**
-   * Restore the plot data by re-fetching it without operations
+   * Restore the selected plot by re-fetching it without operations
    */
   const restoreData = async () => {
     await updatePlotsData('restore');
-    setOperations([{ ...EMPTY_OPERATION }]);
   };
 
   /*
@@ -243,7 +247,6 @@ export const CustomizeUnaryOperations = ({
               variant="transparent"
               color="red"
               onClick={() => removeOperation(index)}
-              disabled={operations.length === 1}
               aria-label="Remove operation"
               size={36}
             >
@@ -267,14 +270,14 @@ export const CustomizeUnaryOperations = ({
         <Button
           onClick={applyOperations}
           loading={loadingAction === 'apply'}
-          disabled={loadingAction === 'restore'}
+          disabled={!selectedPlot || loadingAction === 'restore'}
         >
           Apply
         </Button>
         <Button
           onClick={restoreData}
           loading={loadingAction === 'restore'}
-          disabled={loadingAction === 'apply'}
+          disabled={!selectedPlot || loadingAction === 'apply'}
           variant="outline"
           leftSection={<IconRestore size={20} />}
         >

@@ -461,6 +461,7 @@ const Customization = ({
       component: (
         <CustomizeSmoothing
           customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />
       ),
@@ -470,6 +471,7 @@ const Customization = ({
       component: (
         <CustomizeUnaryOperations
           customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />
       ),

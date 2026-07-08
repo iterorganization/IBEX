@@ -33,22 +33,6 @@ export type FieldValueResponse = {
   value: AxisData;
 };
 
-export type UnaryOperation = {
-  type: string | null;
-  value: number;
-};
-
-export type SmoothingParams = {
-  smoothing_method: string;
-  gaussian_smoothing_sigma?: number;
-  savgol_smoothing_window_length?: number;
-  savgol_smoothing_polyorder?: number;
-  savgol_smoothing_deriv?: number;
-  savgol_smoothing_delta?: number;
-  savgol_smoothing_mode?: string;
-  savgol_smoothing_cval?: number;
-};
-
 export type DownsamplingMethodsResponse = {
   downsampling_methods: [
     {

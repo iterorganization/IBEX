@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DataGridPlot, SmoothingParams } from '../../../types';
+import { DataGridPlot, DataPlotly, SmoothingParams } from '../../../types';
 import {
   fetchDataPlot,
   getArrayValueFromDependance,
@@ -19,134 +19,162 @@ const GAUSSIAN_FILTER = 'gaussian_filter';
 const SAVGOL_FILTER = 'savitzky-golay_filter';
 const SAVGOL_MODES = ['mirror', 'constant', 'nearest', 'wrap', 'interp'];
 
+// Default parameter values, reused by the inputs and by buildSmoothingParams
+const DEFAULT_GAUSSIAN_SIGMA = 1;
+const DEFAULT_SAVGOL_WINDOW_LENGTH = 5;
+const DEFAULT_SAVGOL_POLYORDER = 2;
+const DEFAULT_SAVGOL_DERIV = 0;
+const DEFAULT_SAVGOL_DELTA = 1.0;
+const DEFAULT_SAVGOL_MODE = 'interp';
+const DEFAULT_SAVGOL_CVAL = 0.0;
+
 interface CustomizeSmoothingProps {
   customizedDataGrid: DataGridPlot;
+  selectedPlot: DataPlotly | null;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
 }
 export const CustomizeSmoothing = ({
   customizedDataGrid,
+  selectedPlot,
   setCustomizedDataGrid,
 }: CustomizeSmoothingProps) => {
   const [smoothingMethods, setSmoothingMethods] = useState<OptionWithTooltip[]>(
     [],
   );
-  const [smoothingMethod, setSmoothingMethod] = useState<string | null>(null);
-
-  // Gaussian filter parameter
-  const [gaussianSigma, setGaussianSigma] = useState<number>(1);
-
-  // Savitzky-Golay filter parameters
-  const [savgolWindowLength, setSavgolWindowLength] = useState<number>(5);
-  const [savgolPolyorder, setSavgolPolyorder] = useState<number>(2);
-  const [savgolDeriv, setSavgolDeriv] = useState<number>(0);
-  const [savgolDelta, setSavgolDelta] = useState<number>(1.0);
-  const [savgolMode, setSavgolMode] = useState<string>('interp');
-  const [savgolCval, setSavgolCval] = useState<number>(0.0);
-
   const [loadingAction, setLoadingAction] = useState<
     'apply' | 'restore' | null
   >(null);
 
+  // Source of truth is the selected plot's own smoothing config (persisted on the grid)
+  const smoothing = selectedPlot?.smoothing;
+  const smoothingMethod = smoothing?.smoothing_method ?? null;
+
   /**
-   * Build the smoothing params for the selected method
+   * Persist the smoothing config onto the selected plot
+   */
+  const updateSmoothing = (next: SmoothingParams | undefined) => {
+    if (!selectedPlot) return;
+    const updated = structuredClone(customizedDataGrid) as DataGridPlot;
+    const plot = updated.plot.find((p) => p.name === selectedPlot.name);
+    if (plot) {
+      plot.smoothing = next;
+    }
+    setCustomizedDataGrid({ ...customizedDataGrid, plot: updated.plot });
+  };
+
+  const updateSmoothingMethod = (method: string | null) => {
+    updateSmoothing(
+      method ? { ...smoothing, smoothing_method: method } : undefined,
+    );
+  };
+
+  const updateSmoothingParam = (
+    param: keyof SmoothingParams,
+    value: number | string,
+  ) => {
+    if (!smoothing) return;
+    updateSmoothing({ ...smoothing, [param]: value });
+  };
+
+  /**
+   * Build the smoothing params for the selected method, filling unedited fields
+   * with their defaults so the request always carries complete params
    */
   const buildSmoothingParams = (): SmoothingParams | undefined => {
     if (smoothingMethod === GAUSSIAN_FILTER) {
       return {
         smoothing_method: smoothingMethod,
-        gaussian_smoothing_sigma: gaussianSigma,
+        gaussian_smoothing_sigma:
+          smoothing?.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SIGMA,
       };
     }
     if (smoothingMethod === SAVGOL_FILTER) {
       return {
         smoothing_method: smoothingMethod,
-        savgol_smoothing_window_length: savgolWindowLength,
-        savgol_smoothing_polyorder: savgolPolyorder,
-        savgol_smoothing_deriv: savgolDeriv,
-        savgol_smoothing_delta: savgolDelta,
-        savgol_smoothing_mode: savgolMode,
-        savgol_smoothing_cval: savgolCval,
+        savgol_smoothing_window_length:
+          smoothing?.savgol_smoothing_window_length ??
+          DEFAULT_SAVGOL_WINDOW_LENGTH,
+        savgol_smoothing_polyorder:
+          smoothing?.savgol_smoothing_polyorder ?? DEFAULT_SAVGOL_POLYORDER,
+        savgol_smoothing_deriv:
+          smoothing?.savgol_smoothing_deriv ?? DEFAULT_SAVGOL_DERIV,
+        savgol_smoothing_delta:
+          smoothing?.savgol_smoothing_delta ?? DEFAULT_SAVGOL_DELTA,
+        savgol_smoothing_mode:
+          smoothing?.savgol_smoothing_mode ?? DEFAULT_SAVGOL_MODE,
+        savgol_smoothing_cval:
+          smoothing?.savgol_smoothing_cval ?? DEFAULT_SAVGOL_CVAL,
       };
     }
     return undefined;
   };
 
   /**
-   * Re-fetch plot data (optionally with smoothing) and update coordinates & plots.
+   * Re-fetch the selected plot's data (optionally with smoothing) and update it.
    * Called with smoothing params to apply smoothing, or without to restore raw data.
    */
   const updatePlotsData = async (
     action: 'apply' | 'restore',
     smoothingParams?: SmoothingParams,
   ) => {
+    if (!selectedPlot) return;
     try {
       setLoadingAction(action);
       const updatedDataPlot = structuredClone(
         customizedDataGrid,
       ) as DataGridPlot;
 
-      let plotIndex = 0;
-      for (const plot of updatedDataPlot.plot) {
-        const urisToInterpolate = getUrisToInterpolate(
-          plot.nodeUri,
-          updatedDataPlot.plot,
+      const plot = updatedDataPlot.plot.find(
+        (p) => p.name === selectedPlot.name,
+      );
+      if (!plot) return;
+
+      const urisToInterpolate = getUrisToInterpolate(
+        plot.nodeUri,
+        updatedDataPlot.plot,
+      );
+      const dataPlotSmoothed = await fetchDataPlot(
+        normalizeIndices(plot.nodeUri),
+        customizedDataGrid?.downsampled_method,
+        customizedDataGrid?.downsampled_size,
+        updatedDataPlot?.dataType,
+        urisToInterpolate,
+        customizedDataGrid?.interpolated_method,
+        smoothingParams,
+      );
+
+      // Realign coordinates with the returned data (a no-op when smoothing
+      // preserves the shape; needed if the fetch auto-downsampled the data)
+      let coordinateIndex = 0;
+      for (const coordinate of updatedDataPlot.coordinates) {
+        coordinate.shape =
+          dataPlotSmoothed.data.coordinates[coordinateIndex].downsampled_shape;
+        coordinate.data =
+          dataPlotSmoothed.data.coordinates[coordinateIndex].value;
+        coordinateIndex++;
+        coordinate.range = [
+          0,
+          coordinate.shape[coordinate.shape.length - 1] - 1,
+        ];
+        const firstArrayValueFromCoord = getFirstArrayValueFromShape(
+          coordinate.data,
+          coordinate.shape,
         );
-        const dataPlotSmoothed = await fetchDataPlot(
-          normalizeIndices(plot.nodeUri),
-          customizedDataGrid?.downsampled_method,
-          customizedDataGrid?.downsampled_size,
-          updatedDataPlot?.dataType,
-          urisToInterpolate,
-          customizedDataGrid?.interpolated_method,
-          smoothingParams,
-        );
-
-        if (plotIndex === 0) {
-          // Update coordinates only once because each plots have same coordinates
-          let coordinateIndex = 0;
-          for (const coordinate of updatedDataPlot.coordinates) {
-            // Apply new shape
-            coordinate.shape =
-              dataPlotSmoothed.data.coordinates[
-                coordinateIndex
-              ].downsampled_shape;
-            // Apply new data
-            coordinate.data =
-              dataPlotSmoothed.data.coordinates[coordinateIndex].value;
-            coordinateIndex++;
-            // Apply new range
-            coordinate.range = [
-              0,
-              coordinate.shape[coordinate.shape.length - 1] - 1,
-            ];
-            const firstArrayValueFromCoord = getFirstArrayValueFromShape(
-              coordinate.data,
-              coordinate.shape,
-            );
-
-            coordinate.rangeValues = [
-              firstArrayValueFromCoord[0],
-              firstArrayValueFromCoord[firstArrayValueFromCoord.length - 1],
-            ];
-          }
-        }
-
-        // Update plot with new data
-        plot.shape = dataPlotSmoothed.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-        plot.yData = dataPlotSmoothed.data.value;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
-
-        plotIndex++;
+        coordinate.rangeValues = [
+          firstArrayValueFromCoord[0],
+          firstArrayValueFromCoord[firstArrayValueFromCoord.length - 1],
+        ];
       }
 
-      // Save new configuration with updated data
+      // Update only the selected plot with the new data
+      plot.shape = dataPlotSmoothed.data.downsampled_shape;
+      plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
+      plot.yData = dataPlotSmoothed.data.value;
+      plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
+      if (action === 'restore') {
+        plot.smoothing = undefined;
+      }
+
       setCustomizedDataGrid({
         ...customizedDataGrid,
         coordinates: updatedDataPlot.coordinates,
@@ -165,7 +193,7 @@ export const CustomizeSmoothing = ({
   };
 
   /**
-   * Apply the selected smoothing method to the plot data
+   * Apply the selected smoothing method to the selected plot
    */
   const getSmoothedData = async () => {
     const smoothingParams = buildSmoothingParams();
@@ -181,11 +209,10 @@ export const CustomizeSmoothing = ({
   };
 
   /**
-   * Restore the plot data by re-fetching it without smoothing
+   * Restore the selected plot by re-fetching it without smoothing
    */
   const restoreData = async () => {
     await updatePlotsData('restore');
-    setSmoothingMethod(null);
   };
 
   /*
@@ -208,7 +235,7 @@ export const CustomizeSmoothing = ({
           placeholder="Select the method"
           value={smoothingMethod}
           data={smoothingMethods.map((meth) => meth.value)}
-          onChange={setSmoothingMethod}
+          onChange={updateSmoothingMethod}
           renderOption={(option) => {
             const selectedOption = smoothingMethods.find(
               (meth) => option.option.value === meth.value,
@@ -229,8 +256,12 @@ export const CustomizeSmoothing = ({
             label="Sigma"
             description="Standard deviation for Gaussian kernel"
             placeholder="Update the sigma"
-            value={gaussianSigma}
-            onChange={(value: number) => setGaussianSigma(value)}
+            value={
+              smoothing?.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SIGMA
+            }
+            onChange={(value: number) =>
+              updateSmoothingParam('gaussian_smoothing_sigma', value)
+            }
             w="45%"
             maw={200}
             min={0}
@@ -245,8 +276,13 @@ export const CustomizeSmoothing = ({
               label="Window length"
               description="Length of the filter window"
               placeholder="Update the window length"
-              value={savgolWindowLength}
-              onChange={(value: number) => setSavgolWindowLength(value)}
+              value={
+                smoothing?.savgol_smoothing_window_length ??
+                DEFAULT_SAVGOL_WINDOW_LENGTH
+              }
+              onChange={(value: number) =>
+                updateSmoothingParam('savgol_smoothing_window_length', value)
+              }
               w="45%"
               maw={200}
               min={1}
@@ -256,8 +292,13 @@ export const CustomizeSmoothing = ({
               label="Polyorder"
               description="Order of the polynomial"
               placeholder="Update the polyorder"
-              value={savgolPolyorder}
-              onChange={(value: number) => setSavgolPolyorder(value)}
+              value={
+                smoothing?.savgol_smoothing_polyorder ??
+                DEFAULT_SAVGOL_POLYORDER
+              }
+              onChange={(value: number) =>
+                updateSmoothingParam('savgol_smoothing_polyorder', value)
+              }
               w="45%"
               maw={200}
               min={0}
@@ -269,8 +310,10 @@ export const CustomizeSmoothing = ({
               label="Deriv"
               description="Order of the derivative to compute"
               placeholder="Update the deriv"
-              value={savgolDeriv}
-              onChange={(value: number) => setSavgolDeriv(value)}
+              value={smoothing?.savgol_smoothing_deriv ?? DEFAULT_SAVGOL_DERIV}
+              onChange={(value: number) =>
+                updateSmoothingParam('savgol_smoothing_deriv', value)
+              }
               w="45%"
               maw={200}
               min={0}
@@ -280,8 +323,10 @@ export const CustomizeSmoothing = ({
               label="Delta"
               description="Spacing of the samples (used if deriv > 0)"
               placeholder="Update the delta"
-              value={savgolDelta}
-              onChange={(value: number) => setSavgolDelta(value)}
+              value={smoothing?.savgol_smoothing_delta ?? DEFAULT_SAVGOL_DELTA}
+              onChange={(value: number) =>
+                updateSmoothingParam('savgol_smoothing_delta', value)
+              }
               w="45%"
               maw={200}
             />
@@ -291,9 +336,14 @@ export const CustomizeSmoothing = ({
               label="Mode"
               description="Padding mode at the edges"
               placeholder="Select the mode"
-              value={savgolMode}
+              value={smoothing?.savgol_smoothing_mode ?? DEFAULT_SAVGOL_MODE}
               data={SAVGOL_MODES}
-              onChange={(value) => setSavgolMode(value || savgolMode)}
+              onChange={(value) =>
+                updateSmoothingParam(
+                  'savgol_smoothing_mode',
+                  value ?? DEFAULT_SAVGOL_MODE,
+                )
+              }
               w="45%"
               maw={200}
             />
@@ -301,8 +351,10 @@ export const CustomizeSmoothing = ({
               label="Cval"
               description="Value to fill past the edges (mode 'constant')"
               placeholder="Update the cval"
-              value={savgolCval}
-              onChange={(value: number) => setSavgolCval(value)}
+              value={smoothing?.savgol_smoothing_cval ?? DEFAULT_SAVGOL_CVAL}
+              onChange={(value: number) =>
+                updateSmoothingParam('savgol_smoothing_cval', value)
+              }
               w="45%"
               maw={200}
             />
@@ -314,14 +366,16 @@ export const CustomizeSmoothing = ({
         <Button
           onClick={getSmoothedData}
           loading={loadingAction === 'apply'}
-          disabled={!smoothingMethod || loadingAction === 'restore'}
+          disabled={
+            !selectedPlot || !smoothingMethod || loadingAction === 'restore'
+          }
         >
           Apply
         </Button>
         <Button
           onClick={restoreData}
           loading={loadingAction === 'restore'}
-          disabled={loadingAction === 'apply'}
+          disabled={!selectedPlot || loadingAction === 'apply'}
           variant="outline"
           leftSection={<IconRestore size={20} />}
         >
