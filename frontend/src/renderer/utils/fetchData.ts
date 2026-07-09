@@ -13,6 +13,7 @@ import {
   PlotDataResponse,
   SearchNodeResponse,
   SmoothingParams,
+  UnaryOperation,
   URDataEntriesResponse,
   URIExistsResponse,
   URIFromPathResponse,
@@ -237,6 +238,62 @@ export const getOperationMethods = async (): Promise<OptionWithTooltip[]> => {
     })) ?? []
   );
 };
+
+// Smoothing methods
+export const GAUSSIAN_FILTER = 'gaussian_filter';
+export const SAVGOL_FILTER = 'savitzky-golay_filter';
+
+// Default smoothing parameters, reused for input display and request building
+export const DEFAULT_GAUSSIAN_SMOOTHING_SIGMA = 1;
+export const DEFAULT_SAVGOL_WINDOW_LENGTH = 5;
+export const DEFAULT_SAVGOL_POLYORDER = 2;
+export const DEFAULT_SAVGOL_DERIV = 0;
+export const DEFAULT_SAVGOL_DELTA = 1.0;
+export const DEFAULT_SAVGOL_MODE = 'interp';
+export const DEFAULT_SAVGOL_CVAL = 0.0;
+
+/**
+ * Build a clean, complete SmoothingParams for the selected method (unedited fields
+ * filled with their defaults), or undefined when no method is set.
+ */
+export const buildSmoothingRequest = (
+  smoothing?: SmoothingParams,
+): SmoothingParams | undefined => {
+  if (smoothing?.smoothing_method === GAUSSIAN_FILTER) {
+    return {
+      smoothing_method: GAUSSIAN_FILTER,
+      gaussian_smoothing_sigma:
+        smoothing.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SMOOTHING_SIGMA,
+    };
+  }
+  if (smoothing?.smoothing_method === SAVGOL_FILTER) {
+    return {
+      smoothing_method: SAVGOL_FILTER,
+      savgol_smoothing_window_length:
+        smoothing.savgol_smoothing_window_length ??
+        DEFAULT_SAVGOL_WINDOW_LENGTH,
+      savgol_smoothing_polyorder:
+        smoothing.savgol_smoothing_polyorder ?? DEFAULT_SAVGOL_POLYORDER,
+      savgol_smoothing_deriv:
+        smoothing.savgol_smoothing_deriv ?? DEFAULT_SAVGOL_DERIV,
+      savgol_smoothing_delta:
+        smoothing.savgol_smoothing_delta ?? DEFAULT_SAVGOL_DELTA,
+      savgol_smoothing_mode:
+        smoothing.savgol_smoothing_mode ?? DEFAULT_SAVGOL_MODE,
+      savgol_smoothing_cval:
+        smoothing.savgol_smoothing_cval ?? DEFAULT_SAVGOL_CVAL,
+    };
+  }
+  return undefined;
+};
+
+/**
+ * Build the ordered "type:value" list from operation rows (dropping rows without a type).
+ */
+export const formatOperations = (operations?: UnaryOperation[]): string[] =>
+  (operations ?? [])
+    .filter((operation) => operation.type)
+    .map((operation) => `${operation.type}:${operation.value}`);
 
 /**
  * Retrieves plot data for a given URI.

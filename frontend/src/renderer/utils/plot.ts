@@ -18,7 +18,12 @@ import {
   URITreeNodeData,
 } from '../types';
 import { ScatterData } from 'plotly.js';
-import { fetchDataPlot, fetchFieldValue } from './fetchData';
+import {
+  buildSmoothingRequest,
+  fetchDataPlot,
+  fetchFieldValue,
+  formatOperations,
+} from './fetchData';
 import { generateNewGridPlot } from './grid';
 import {
   getDefaultUri,
@@ -1268,6 +1273,8 @@ export async function plotNodeUriLoaded(
               dataGrid?.dataType,
               urisToInterpolate,
               dataGrid?.interpolated_method,
+              buildSmoothingRequest(plot.smoothing),
+              formatOperations(plot.operations),
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);

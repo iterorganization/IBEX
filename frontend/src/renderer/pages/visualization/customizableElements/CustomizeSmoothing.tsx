@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 import { DataGridPlot, DataPlotly, SmoothingParams } from '../../../types';
 import {
+  buildSmoothingRequest,
+  DEFAULT_GAUSSIAN_SMOOTHING_SIGMA,
+  DEFAULT_SAVGOL_CVAL,
+  DEFAULT_SAVGOL_DELTA,
+  DEFAULT_SAVGOL_DERIV,
+  DEFAULT_SAVGOL_MODE,
+  DEFAULT_SAVGOL_POLYORDER,
+  DEFAULT_SAVGOL_WINDOW_LENGTH,
   fetchDataPlot,
+  GAUSSIAN_FILTER,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getSmoothingMethods,
   getUrisToInterpolate,
   getVectorData,
   normalizeIndices,
+  SAVGOL_FILTER,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
@@ -15,18 +25,7 @@ import { IconRestore } from '@tabler/icons-react';
 import { OptionWithTooltip } from '../../../types/components/select';
 import { RenderSelectOption } from '../../../components/select';
 
-const GAUSSIAN_FILTER = 'gaussian_filter';
-const SAVGOL_FILTER = 'savitzky-golay_filter';
 const SAVGOL_MODES = ['mirror', 'constant', 'nearest', 'wrap', 'interp'];
-
-// Default parameter values, reused by the inputs and by buildSmoothingParams
-const DEFAULT_GAUSSIAN_SIGMA = 1;
-const DEFAULT_SAVGOL_WINDOW_LENGTH = 5;
-const DEFAULT_SAVGOL_POLYORDER = 2;
-const DEFAULT_SAVGOL_DERIV = 0;
-const DEFAULT_SAVGOL_DELTA = 1.0;
-const DEFAULT_SAVGOL_MODE = 'interp';
-const DEFAULT_SAVGOL_CVAL = 0.0;
 
 interface CustomizeSmoothingProps {
   customizedDataGrid: DataGridPlot;
@@ -74,39 +73,6 @@ export const CustomizeSmoothing = ({
   ) => {
     if (!smoothing) return;
     updateSmoothing({ ...smoothing, [param]: value });
-  };
-
-  /**
-   * Build the smoothing params for the selected method, filling unedited fields
-   * with their defaults so the request always carries complete params
-   */
-  const buildSmoothingParams = (): SmoothingParams | undefined => {
-    if (smoothingMethod === GAUSSIAN_FILTER) {
-      return {
-        smoothing_method: smoothingMethod,
-        gaussian_smoothing_sigma:
-          smoothing?.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SIGMA,
-      };
-    }
-    if (smoothingMethod === SAVGOL_FILTER) {
-      return {
-        smoothing_method: smoothingMethod,
-        savgol_smoothing_window_length:
-          smoothing?.savgol_smoothing_window_length ??
-          DEFAULT_SAVGOL_WINDOW_LENGTH,
-        savgol_smoothing_polyorder:
-          smoothing?.savgol_smoothing_polyorder ?? DEFAULT_SAVGOL_POLYORDER,
-        savgol_smoothing_deriv:
-          smoothing?.savgol_smoothing_deriv ?? DEFAULT_SAVGOL_DERIV,
-        savgol_smoothing_delta:
-          smoothing?.savgol_smoothing_delta ?? DEFAULT_SAVGOL_DELTA,
-        savgol_smoothing_mode:
-          smoothing?.savgol_smoothing_mode ?? DEFAULT_SAVGOL_MODE,
-        savgol_smoothing_cval:
-          smoothing?.savgol_smoothing_cval ?? DEFAULT_SAVGOL_CVAL,
-      };
-    }
-    return undefined;
   };
 
   /**
@@ -196,7 +162,7 @@ export const CustomizeSmoothing = ({
    * Apply the selected smoothing method to the selected plot
    */
   const getSmoothedData = async () => {
-    const smoothingParams = buildSmoothingParams();
+    const smoothingParams = buildSmoothingRequest(smoothing);
     if (!smoothingParams) {
       showNotification({
         title: 'No smoothing method',
@@ -257,7 +223,8 @@ export const CustomizeSmoothing = ({
             description="Standard deviation for Gaussian kernel"
             placeholder="Update the sigma"
             value={
-              smoothing?.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SIGMA
+              smoothing?.gaussian_smoothing_sigma ??
+              DEFAULT_GAUSSIAN_SMOOTHING_SIGMA
             }
             onChange={(value: number) =>
               updateSmoothingParam('gaussian_smoothing_sigma', value)

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { DataGridPlot, DataPlotly, UnaryOperation } from '../../../types';
 import {
   fetchDataPlot,
+  formatOperations,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getOperationMethods,
@@ -79,15 +80,6 @@ export const CustomizeUnaryOperations = ({
         i === index ? { ...operation, value } : operation,
       ),
     );
-  };
-
-  /**
-   * Build the ordered list of "type:value" operations for the query param
-   */
-  const buildOperations = (): string[] => {
-    return operations
-      .filter((operation) => operation.type)
-      .map((operation) => `${operation.type}:${operation.value}`);
   };
 
   /**
@@ -178,7 +170,7 @@ export const CustomizeUnaryOperations = ({
    * Apply the operations to the selected plot
    */
   const applyOperations = async () => {
-    const operationsList = buildOperations();
+    const operationsList = formatOperations(operations);
     if (!operationsList.length) {
       showNotification({
         title: 'No operation',
