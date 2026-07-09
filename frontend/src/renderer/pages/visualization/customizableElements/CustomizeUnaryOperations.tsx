@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DataGridPlot, DataPlotly, UnaryOperation } from '../../../types';
 import {
+  buildSmoothingRequest,
   fetchDataPlot,
   formatOperations,
   getArrayValueFromDependance,
@@ -113,7 +114,7 @@ export const CustomizeUnaryOperations = ({
         updatedDataPlot?.dataType,
         urisToInterpolate,
         customizedDataGrid?.interpolated_method,
-        undefined,
+        buildSmoothingRequest(plot.smoothing),
         operationsList,
       );
 

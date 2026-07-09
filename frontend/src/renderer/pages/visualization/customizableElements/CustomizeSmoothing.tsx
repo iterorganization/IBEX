@@ -10,6 +10,7 @@ import {
   DEFAULT_SAVGOL_POLYORDER,
   DEFAULT_SAVGOL_WINDOW_LENGTH,
   fetchDataPlot,
+  formatOperations,
   GAUSSIAN_FILTER,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
@@ -107,6 +108,7 @@ export const CustomizeSmoothing = ({
         urisToInterpolate,
         customizedDataGrid?.interpolated_method,
         smoothingParams,
+        formatOperations(plot.operations),
       );
 
       // Realign coordinates with the returned data (a no-op when smoothing
