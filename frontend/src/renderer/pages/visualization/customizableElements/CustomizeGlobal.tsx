@@ -137,17 +137,6 @@ export const CustomizeGlobal = ({
           })
         }
       />
-
-      <Switch
-        label="Force axis ratio (1:1)"
-        checked={customizedDataGrid.forceXyRatio}
-        onChange={(event) =>
-          setCustomizedDataGrid({
-            ...customizedDataGrid,
-            forceXyRatio: event.currentTarget.checked,
-          })
-        }
-      />
     </Stack>
   );
 };
