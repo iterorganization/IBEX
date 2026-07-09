@@ -1,0 +1,6 @@
+/* Screenshots are click-to-zoom (see zoom-init.js). */
+.md-content img.align-center { cursor: zoom-in; }
+
+/* Keep the zoom overlay above sphinx-immaterial's sticky header / TOC. */
+.medium-zoom-overlay      { z-index: 9998; }
+.medium-zoom-image--opened { z-index: 9999; }
