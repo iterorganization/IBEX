@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
 
       - name: Setup Python
@@ -46,7 +46,7 @@ jobs:
 
       - name: Cache Zenodo datasets
         id: cache-datasets
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: e2e_datasets
           key: ${{ steps.datasets.outputs.key }}
@@ -63,7 +63,7 @@ jobs:
       - name: Always save Zenodo datasets (even if pytest would fail)
         id: cache-datasets-save
         if: always() && steps.cache-datasets.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           key: ${{ steps.cache-datasets.outputs.cache-primary-key }}
           path: e2e_datasets

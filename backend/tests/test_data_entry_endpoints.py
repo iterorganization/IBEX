@@ -1,5 +1,6 @@
+from unittest.mock import patch
+
 import pytest
-import os
 
 
 def test_entry_exists(entry_path):
@@ -18,10 +19,16 @@ def test_entry_list_idses(entry_path):
     assert core_profiles_dict["occurrences"] == [0]
 
 
-@pytest.mark.skipif("IMAS_HOME" not in os.environ, reason="IMAS_HOME is not set")
-def test_entry_available_entries(entry_path):
-    parameters = {"uri": f"imas:hdf5?path={entry_path}"}
-    response = pytest.test_client.get("/data_entry/available_entries", params=parameters)
+def test_entry_available_entries():
+    fake_dbs = [("test_db", [(3, [("hdf5", {1: [(0, 0)]})])])]
+    with patch(
+        "ibex.data_source.imas_python_source.DBMaster.get_database_files",
+        return_value=fake_dbs,
+    ):
+        response = pytest.test_client.get(
+            "/data_entry/available_entries",
+            params={"user": "public", "version": "3"},
+        )
 
     assert response.status_code == 200
-    # TODO: test when functionality will be ready
+    assert response.json() == {"entries": ["imas:hdf5?user=public;pulse=1;run=0;database=test_db;version=3"]}

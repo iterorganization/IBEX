@@ -1,7 +1,8 @@
 """Interface for all data sources"""
 
 from abc import ABC, abstractmethod
-from typing import Sequence, Optional, List
+from typing import Sequence, Optional
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
 class DataSourceInterface(ABC):
@@ -123,28 +124,34 @@ class DataSourceInterface(ABC):
         """
         ...
 
-    def get_plot_data(
-        self,
-        uri: str,
-        ids: str,
-        node_path: str,
-        occurrence: int = 0,
-        interpolate_over: List[str] | None = None,
-        interpolation_method: str | None = None,
-        downsampling_method: str | None = None,
-        downsampled_size: int = 1000,
-    ) -> dict:
+    def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 
-        :param uri: imas URI
-        :param ids: name of ids e.g. core_profiles
-        :param node_path: path to ids node e.g. ids_properties/version_put
-        :param occurrence: ids occurrence number
-        :param interpolate_over: list of uris used in interpolation
-        :param interpolation_method: method to be used in data interpolation; one from scipy.interpolate.RegularGridInterpolator or 'exact_value'
-        :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-        :param downsampled_size: target size of downsampled data
+        :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+        :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
         :return: Dictionary containing data values, metadata and coordinates.
+        """
+        ...
+
+    @abstractmethod
+    def get_geometry_overlay_nodes(
+        self,
+        uri: str,
+        show_empty_nodes: bool = False,
+        show_error_bars: bool = False,
+    ) -> dict:
+        """
+        Returns paths to metadata nodes that describe geometry overlays.
+
+        A node is included when:
+        - its type is ``outline_2d_geometry_static``, or
+        - its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+        Error bar nodes are filtered out by default and can be included with ``show_error_bars=True``.
+
+        :param uri: imas URI
+        :param show_empty_nodes: whether empty nodes should be returned, or not
+        :param show_error_bars: whether error bar nodes should be returned, or not
+        :return: dictionary {'outline_nodes': [{'geometry_node': '...', 'parameters': [...]}, ...]}
         """
         ...
