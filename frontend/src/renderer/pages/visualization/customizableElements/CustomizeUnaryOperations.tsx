@@ -21,8 +21,6 @@ import {
   Stack,
 } from '@mantine/core';
 import { IconMinus, IconPlus, IconRestore } from '@tabler/icons-react';
-import { OptionWithTooltip } from '../../../types/components/select';
-import { RenderSelectOption } from '../../../components/select';
 
 const EMPTY_OPERATION: UnaryOperation = { type: null, value: 1 };
 
@@ -36,9 +34,9 @@ export const CustomizeUnaryOperations = ({
   selectedPlot,
   setCustomizedDataGrid,
 }: CustomizeUnaryOperationsProps) => {
-  const [operationMethods, setOperationMethods] = useState<OptionWithTooltip[]>(
-    [],
-  );
+  const [operationMethods, setOperationMethods] = useState<
+    { value: string; label: string }[]
+  >([]);
   const [loadingAction, setLoadingAction] = useState<
     'apply' | 'restore' | null
   >(null);
@@ -210,19 +208,8 @@ export const CustomizeUnaryOperations = ({
             description="Select the operation"
             placeholder="Select the operation"
             value={operation.type}
-            data={operationMethods.map((meth) => meth.value)}
+            data={operationMethods}
             onChange={(value) => updateOperationType(index, value)}
-            renderOption={(option) => {
-              const selectedOption = operationMethods.find(
-                (meth) => option.option.value === meth.value,
-              );
-              return (
-                <RenderSelectOption
-                  option={selectedOption}
-                  checked={option.checked}
-                />
-              );
-            }}
             w="45%"
             maw={200}
           />

@@ -220,7 +220,9 @@ export const getSmoothingMethods = async (): Promise<OptionWithTooltip[]> => {
   );
 };
 
-export const getOperationMethods = async (): Promise<OptionWithTooltip[]> => {
+export const getOperationMethods = async (): Promise<
+  { value: string; label: string }[]
+> => {
   const methodsRes = await fetchDataManipulationMethods();
   const operations = methodsRes.data_manipulation_methods.find(
     (m) => m.name === 'Simple Data Operations',
@@ -231,10 +233,12 @@ export const getOperationMethods = async (): Promise<OptionWithTooltip[]> => {
   const typeField = operationsParam?.fields?.find(
     (f) => f.name === 'operation_type',
   );
+  // Display the human-readable description as the label while keeping the raw
+  // operation value (e.g. "add") for the fetchDataPlot request.
   return (
     typeField?.possible_values?.map((item) => ({
       value: item.value,
-      tooltip: item.description,
+      label: item.description,
     })) ?? []
   );
 };
