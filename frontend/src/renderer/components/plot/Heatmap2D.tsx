@@ -95,28 +95,12 @@ export const Heatmap2D = ({
   const layoutPlotWidth = showSliders ? width * 0.8 : width;
 
   /**
-   * Rule to determine if we have to force ratio
+   * Rule to determine if we have to force ratio.
+   * The value is initialized once at grid creation and only changed via the customization switch.
    */
   useEffect(() => {
-    const getShouldForceRatio = () => {
-      let shoudForceRatioSwitchRule = false;
-      if (itemDataGrid.xyRatioRule === 'Force') {
-        shoudForceRatioSwitchRule = true;
-      } else if (itemDataGrid.xyRatioRule === 'Auto') {
-        const firstCoordinateUnit = itemDataGrid.coordinates.find(
-          (c) => c.axeIndex === 0,
-        )?.unit;
-        const secondCoordinateUnit = itemDataGrid.coordinates.find(
-          (c) => c.axeIndex === 1,
-        )?.unit;
-        shoudForceRatioSwitchRule =
-          !!firstCoordinateUnit && firstCoordinateUnit === secondCoordinateUnit;
-      }
-      setShouldForceRatio(shoudForceRatioSwitchRule);
-    };
-
-    getShouldForceRatio();
-  }, [itemDataGrid.xyRatioRule, itemDataGrid.coordinates]);
+    setShouldForceRatio(itemDataGrid.forceXyRatio);
+  }, [itemDataGrid.forceXyRatio]);
 
   /**
    * Update layout to force ratio or not

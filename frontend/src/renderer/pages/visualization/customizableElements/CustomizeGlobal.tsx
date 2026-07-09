@@ -138,20 +138,15 @@ export const CustomizeGlobal = ({
         }
       />
 
-      <Select
-        label="Rule of axis ratios"
-        description="Select the rule of axis ratios"
-        placeholder="Select the rule of axis ratios"
-        data={['Auto', 'None', 'Force']}
-        value={customizedDataGrid?.xyRatioRule || 'Auto'}
-        onChange={(value: 'Auto' | 'None' | 'Force') =>
-          value &&
+      <Switch
+        label="Force axis ratio (1:1)"
+        checked={customizedDataGrid.forceXyRatio}
+        onChange={(event) =>
           setCustomizedDataGrid({
             ...customizedDataGrid,
-            xyRatioRule: value,
+            forceXyRatio: event.currentTarget.checked,
           })
         }
-        maw={200}
       />
     </Stack>
   );
