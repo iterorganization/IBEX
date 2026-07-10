@@ -5,16 +5,28 @@ How to launch IBEX?
 ===================
 
 IBEX is structured into two components: a **frontend** and a **backend**. Both must be running to use
-all IBEX features. On a standard Linux system you build the application once, then launch it: the
-packaged application automatically starts the backend and connects to it.
+all IBEX features. You build the application once, then launch it: the packaged application
+automatically starts the backend and connects to it.
+
+The backend reads IMAS data through `IMAS-Python <https://github.com/iterorganization/IMAS-Python>`_
+and its low-level **IMAS Core** library (the ``imas_core`` package). Launching IBEX therefore
+requires an environment that provides this IMAS stack, together with a recent Python and Node.js.
 
 Prerequisites
 -------------
 
-* A Linux x86-64 system
-* `Python <https://www.python.org/>`_ 3.9 or newer
-* `Node.js <https://nodejs.org/>`_ 16 or newer, with ``npm``
-* `git <https://git-scm.com/>`_
+* An **IMAS environment** providing both **IMAS-Python** (the ``imas`` package) and **IMAS Core**
+  (the ``imas_core`` package), running on **Python 3.10 or newer**.
+
+  * On **ITER systems** (e.g. the SDCC cluster), these are available as *environment modules* — this
+    is the recommended and tested setup, used throughout this page.
+  * On **other systems**, IMAS-Python is installable from PyPI (``pip install imas-python``), but
+    **IMAS Core is not distributed on PyPI**: it must be built from the ITER sources. Refer to the
+    `IMAS-Python installation guide <https://imas-python.readthedocs.io/en/stable/installing.html>`_
+    for details. Without ``imas_core`` the backend cannot start.
+
+* `Node.js <https://nodejs.org/>`_ 16 or newer with ``npm`` (the ``nodejs`` module on ITER systems).
+* `git <https://git-scm.com/>`_.
 
 Getting the source
 ------------------
@@ -31,28 +43,43 @@ Clone the repository and move into it:
 
    cd IBEX
 
+Loading the IMAS environment
+----------------------------
+
+On an ITER system, load the IMAS-Python and Node.js modules. Loading ``IMAS-Python`` brings in a
+recent Python (3.11), the ``imas`` and ``imas_core`` packages, and the NetCDF support needed to read
+data files:
+
+.. code-block:: bash
+
+   # Run `module avail IMAS-Python` to list the versions available on your system
+   module load IMAS-Python/2.3.0-foss-2023b nodejs
+
+.. note::
+
+   On non-ITER systems, activate instead your own IMAS environment (Python 3.10+ with ``imas`` and
+   ``imas_core`` importable), then follow the same steps below.
+
 Installing the backend
 ----------------------
 
-The backend is a standard Python package. Install it in a dedicated virtual environment. IMAS-Python
-provides the ``imas`` package and must be installed explicitly, as it is not pulled in automatically;
-IDStools is installed as a dependency.
+Create the virtual environment **with** ``--system-site-packages`` so that it can see the ``imas``
+and ``imas_core`` packages provided by the loaded module, then install the backend into it:
 
 .. code-block:: bash
 
    cd backend
-   python -m venv venv
+   python -m venv --system-site-packages venv
    . venv/bin/activate
 
    pip install --upgrade pip
-   pip install imas-python   # provides the `imas` package (not installed automatically)
    pip install .
 
-.. note::
+.. caution::
 
-   Depending on the data formats you want to read, IMAS-Python may require additional optional
-   dependencies. Refer to the `IMAS-Python project
-   <https://github.com/iterorganization/IMAS-Python>`_ for detailed installation instructions.
+   The ``--system-site-packages`` flag is essential: a plain ``python -m venv venv`` would hide the
+   module-provided ``imas``/``imas_core`` packages, and the backend would fail to start with
+   ``ModuleNotFoundError: No module named 'imas_core'``.
 
 Installing the frontend
 -----------------------
@@ -70,26 +97,29 @@ This produces the executable in ``frontend/out/ibex-linux-x64/``.
 Running IBEX
 ------------
 
-Launch the packaged application from a terminal where the backend virtual environment is activated,
-so that the ``run_ibex_service`` command is available on your ``PATH``:
+Launch the packaged application from a terminal where the IMAS module is loaded **and** the backend
+virtual environment is activated, so that ``run_ibex_service`` (and ``imas_core``) are available:
 
 .. code-block:: bash
 
-   # From the repository root, with the backend venv activated
-   . backend/venv/bin/activate   # if it is not already active
+   # From the repository root
+   module load IMAS-Python/2.3.0-foss-2023b nodejs   # if not already loaded
+   . backend/venv/bin/activate                        # if not already active
    ./frontend/out/ibex-linux-x64/ibex
 
 .. note::
 
    The application automatically starts the backend on a free local port and connects to it, so no
-   further configuration is required. Keep the virtual environment activated when launching the
-   application: it is what allows the app to find and start ``run_ibex_service``.
+   further configuration is required. The IMAS module must stay loaded and the virtual environment
+   activated: this is what lets the app find and start ``run_ibex_service`` with ``imas_core``
+   available. IBEX also needs a graphical display; GPU warnings printed on remote or headless
+   sessions are harmless (the app falls back to software rendering).
 
-On the ITER SDCC cluster
-------------------------
+Quick launch with the helper scripts (ITER systems)
+---------------------------------------------------
 
-On the ITER SDCC cluster, IMAS-Python, IDStools and Node.js are provided as environment modules, and
-helper scripts wrap the whole installation and launch process.
+On ITER systems, helper scripts wrap the whole install and launch process (module loading, virtual
+environment, free ports and backend/frontend startup).
 
 The installation stage is performed once and generates an executable that can be shared by multiple
 users (assuming proper permission settings are in place):
@@ -109,5 +139,5 @@ The application can then be launched with:
 
 .. seealso::
 
-   For the **development run mode** (running from source with hot-reloading, on SDCC or locally), see
+   For the **development run mode** (running from source with hot-reloading), see
    :doc:`/developers_manual/frontend_development/installation` in the developer's manual.
