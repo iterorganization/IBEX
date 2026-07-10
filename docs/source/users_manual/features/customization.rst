@@ -46,6 +46,23 @@ Applies an interpolation method to fill gaps between data points by estimating i
    :alt: Interpolation section of the data manipulation
    :align: center
 
+Data smoothing
+--------------------
+
+Applies a smoothing method to reduce noise while preserving the overall shape of the signal. Depending of the selected method, related parameters are displayed:
+
+.. image:: images/customization_smoothing.png
+   :alt: Data smoothing section of the customization
+   :align: center
+
+Unary operations
+--------------------
+
+Applies an ordered list of scalar operations to every data point of the plot:
+
+.. image:: images/customization_unary_operations.png
+   :alt: Unary operations section of the customization
+   :align: center
 
 Visual customization
 ----------------------------
@@ -71,7 +88,8 @@ Allows you to customize the appearance of 1D plots:
 Heatmap
 ~~~~~~~~~~~~
 
-Allows you to modify the color scale of the heatmap:
+The **Force axis ratio (1:1)** switch locks the x and y axes to the same scale. It is by default set to true if x and y axis share the same units in 2D plots.
+You can also modify the **color scale** of the heatmap:
 
 .. image:: images/customization_heatmap.png
    :alt: Heatmap section of the visual customization
