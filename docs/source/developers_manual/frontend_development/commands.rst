@@ -61,7 +61,7 @@ Install sphinx dependencies to be able to build the documentation:
 .. code-block:: bash
 
   . ibex_venv/bin/activate
-  pip install -U sphinx sphinx-autosummary-accessors sphinx_immaterial
+  pip install sphinx==8.2.3 sphinx-autosummary-accessors==2025.3.1 sphinx_immaterial==0.13.9
 
 **Build the documentation**
 
