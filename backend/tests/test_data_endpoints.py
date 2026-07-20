@@ -419,6 +419,8 @@ def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_
     # time2: [1, 2, 3]
     response_body = response.json()
     assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, 4.0])
+    assert response_body["data"]["shape"] == [4]
+    assert response_body["data"]["downsampled_shape"] == [4]
 
     # reversed order
     parameters = {
@@ -433,6 +435,9 @@ def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_
     # time2: [1, 2, 3, 4]
     response_body = response.json()
     assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, None])
+    # Interpolation expands the source from three to four samples.
+    assert response_body["data"]["shape"] == [4]
+    assert response_body["data"]["downsampled_shape"] == [4]
 
 
 def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_entry_path_directory):

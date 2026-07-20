@@ -1286,6 +1286,15 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END signal operations =============
 
+            # Interpolation and signal operations can change the data shape.
+            # The response's ``shape`` describes the processed data before
+            # downsampling, rather than the raw shape used for compatibility
+            # checks above.
+            try:
+                processed_data_shape = np.asarray(data_to_be_returned).shape
+            except ValueError:
+                processed_data_shape = "irregular"
+
             # Downsample only 1D data
             if first_value.metadata.ndim == 1:
                 if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":
@@ -1318,7 +1327,7 @@ class IMASPythonSource(DataSourceInterface):
                 "data": {
                     "name": node_path.split("/")[-1],
                     "unit": first_value.metadata.units,
-                    "shape": original_data_shape,
+                    "shape": processed_data_shape,
                     "downsampled_shape": downsampled_shape,
                     "ndim": first_value.metadata.ndim,
                     "path": f"#{ids}/{node_path}",
