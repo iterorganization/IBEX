@@ -18,6 +18,7 @@ import {
   getUrisToInterpolate,
   getVectorData,
   normalizeIndices,
+  reapplyAxisOrder,
   SAVGOL_FILTER,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
@@ -142,6 +143,13 @@ export const CustomizeSmoothing = ({
       if (action === 'restore') {
         plot.smoothing = undefined;
       }
+
+      // Re-apply axis transposition on the re-fetched plot only: the back-end
+      // returns data in default axis order, so restore the user's transposition
+      const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
+        (coord) => coord.axeIndex,
+      );
+      await reapplyAxisOrder(updatedDataPlot, wantedAxeIndexOrder, plot);
 
       setCustomizedDataGrid({
         ...customizedDataGrid,

@@ -10,6 +10,7 @@ import {
   getUrisToInterpolate,
   getVectorData,
   normalizeIndices,
+  reapplyAxisOrder,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import {
@@ -147,6 +148,13 @@ export const CustomizeUnaryOperations = ({
       if (action === 'restore') {
         plot.operations = undefined;
       }
+
+      // Re-apply axis transposition on the re-fetched plot only: the back-end
+      // returns data in default axis order, so restore the user's transposition
+      const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
+        (coord) => coord.axeIndex,
+      );
+      await reapplyAxisOrder(updatedDataPlot, wantedAxeIndexOrder, plot);
 
       setCustomizedDataGrid({
         ...customizedDataGrid,

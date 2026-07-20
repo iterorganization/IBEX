@@ -1520,6 +1520,60 @@ export const transposeDataGrid = async (
 };
 
 /**
+ * Re-apply the axis transposition after a back-end fetch (data comes back in
+ * default axeIndex order). Pass a targetPlot to only transpose that plot
+ * (single-plot fetch), otherwise the whole grid is transposed.
+ * @param updatedDataPlot
+ * @param wantedAxeIndexOrder
+ * @param targetPlot
+ */
+export const reapplyAxisOrder = async (
+  updatedDataPlot: DataGridPlot,
+  wantedAxeIndexOrder: number[],
+  targetPlot?: DataPlotly,
+) => {
+  const isTransposed =
+    JSON.stringify(wantedAxeIndexOrder) !==
+    JSON.stringify(updatedDataPlot.coordinates.map((_, index) => index));
+  if (!isTransposed) {
+    return;
+  }
+
+  if (targetPlot) {
+    // Transpose only the target plot through a temporary grid with default axeIndex
+    const tempGrid = structuredClone(updatedDataPlot) as DataGridPlot;
+    tempGrid.plot = tempGrid.plot.filter((p) => p.name === targetPlot.name);
+    tempGrid.coordinates.forEach((coord, index) => {
+      coord.axeIndex = index;
+    });
+    const transposed = await transposeDataGrid(
+      tempGrid,
+      wantedAxeIndexOrder,
+      true,
+    );
+    // Copy transposed data back on the real plot
+    const transposedPlot = transposed.plot[0];
+    targetPlot.yData = transposedPlot.yData;
+    targetPlot.shape = transposedPlot.shape;
+    targetPlot.x = transposedPlot.x;
+    targetPlot.y = transposedPlot.y;
+    return;
+  }
+
+  // Reset axeIndex to default order then transpose the whole grid
+  updatedDataPlot.coordinates.forEach((coord, index) => {
+    coord.axeIndex = index;
+  });
+  const transposed = await transposeDataGrid(
+    updatedDataPlot,
+    wantedAxeIndexOrder,
+    true,
+  );
+  updatedDataPlot.coordinates = transposed.coordinates;
+  updatedDataPlot.plot = transposed.plot;
+};
+
+/**
  * @description Retrieves vector data from a plot item based on the provided URI and coordinates.
  * @param uri The URI to retrieve the vector data from.
  * @param coordinates The coordinates to use for retrieving the vector data.
