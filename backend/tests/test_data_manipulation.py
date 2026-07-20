@@ -45,6 +45,14 @@ def test_apply_signal_operations_division():
     assert np.allclose(result, [5.0, 4.0, 5.0])
 
 
+def test_apply_signal_operations_preserves_operand_nans():
+    operand_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([10.0, 20.0, 30.0])
+    signal_data_by_uri = {operand_uri: np.array([1.0, np.nan, 3.0])}
+    result = apply_signal_operations(data, [f"add:{operand_uri}"], signal_data_by_uri)
+    assert np.allclose(result, [11.0, np.nan, 33.0], equal_nan=True)
+
+
 def test_apply_gaussian_smoothing():
     data = np.array([10.25, 12.8, 15.4, 18.15, 21.0, 24.35, 27.6, 30.2, 33.75, 36.1])
 

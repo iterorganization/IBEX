@@ -126,14 +126,6 @@ _SIGNAL_OPERATIONS_FUNCTIONS = {
     "div": _safe_division,
 }
 
-_SIGNAL_NULL_REPLACEMENT = {
-    "add": 0,
-    "sub": 0,
-    "mul": 1,
-    "div": 1,
-}
-
-
 def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
     """
     Apply simple scalar operations to data in the order given.
@@ -179,14 +171,6 @@ def apply_signal_operations(data: list | np.ndarray, operations: list[str], sign
             func = _SIGNAL_OPERATIONS_FUNCTIONS.get(op_type)
             if func is None:
                 raise InvalidParametersException(f"Unknown operation type: {op_type}")
-
-            # Replace NaN/null values with operation-specific neutral value
-            if isinstance(value, np.ndarray):
-                mask = np.isnan(value)
-                if np.any(mask):
-                    value = np.where(mask, _SIGNAL_NULL_REPLACEMENT.get(op_type, 0), value)
-            elif isinstance(value, float) and np.isnan(value):
-                value = _SIGNAL_NULL_REPLACEMENT.get(op_type, 0)
 
             result = func(result, value)
         return result

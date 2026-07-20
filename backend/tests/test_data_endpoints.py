@@ -316,10 +316,11 @@ def test_combined_features(entry_path, interpolation_entry_path_directory):
     # savgol wl=3 po=1 -> [0.6667,4.6667,9.6667,15.6667]
     # exact_value interpolation on union [1,2,3,4] -> no change
     # db_2 b0: [0.1,0.2,0.3]
-    # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None->0]
-    # signal add: [0.6667+0.1, 4.6667+0.2, 9.6667+0.3, 15.6667+0]
-    # Result: [0.7667,4.8667,9.9667,15.6667]
-    assert response_body["data"]["value"] == pytest.approx([0.76, 4.86, 9.96, 15.66], 0.01)
+    # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None]
+    # signal add propagates missing operand data: [0.7667,4.8667,9.9667,None]
+    values = response_body["data"]["value"]
+    assert values[:3] == pytest.approx([0.76, 4.86, 9.96], 0.01)
+    assert values[3] is None
 
 
 def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
@@ -418,7 +419,7 @@ def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_
     # time1: [1, 2, 3, 4]
     # time2: [1, 2, 3]
     response_body = response.json()
-    assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, 4.0])
+    assert response_body["data"]["value"] == [2.0, 4.0, 6.0, None]
     assert response_body["data"]["shape"] == [4]
     assert response_body["data"]["downsampled_shape"] == [4]
 
@@ -434,7 +435,7 @@ def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_
     # time1: [1, 2, 3]
     # time2: [1, 2, 3, 4]
     response_body = response.json()
-    assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, None])
+    assert response_body["data"]["value"] == [2.0, 4.0, 6.0, None]
     # Interpolation expands the source from three to four samples.
     assert response_body["data"]["shape"] == [4]
     assert response_body["data"]["downsampled_shape"] == [4]
@@ -458,10 +459,8 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
     data = np.array(response_body["data"]["value"], dtype=float)
     # data shape reflects common coordinates (reversed): [time, profiles_2d, dim2, dim1]
     assert data.shape == (4, 4, 3, 12)
-    # db_1 has data at time=[1,2,3,4], profiles_2d=[0,1], dim2=[1,2,3], dim1=[1,2,3]
-    # Common dim1 has 1,2,3 at indices 3,7,11 → 4*2*3*3 = 72 non-NaN values
-    # Operand NaN replaced with 0, result = db_1 primary values
-    assert np.count_nonzero(~np.isnan(data)) == 72
+    # db_1 and db_2 have disjoint valid dim1 locations after interpolation, so operand NaNs propagate.
+    assert np.count_nonzero(~np.isnan(data)) == 0
 
     # ---- reversed: db_2 primary, db_1 operand ----
     parameters = {
@@ -475,6 +474,5 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
 
     data = np.array(response_body["data"]["value"], dtype=float)
     assert data.shape == (4, 4, 3, 12)
-    # db_2 has data at time=[1,2,3], profiles_2d=[0,1,2,3], dim2=[1,2,3], dim1 has 9 values
-    # Common dim1 has db_2's 9 values at indices [0,1,2,4,5,6,8,9,10] → 3*4*3*9 = 324
-    assert np.count_nonzero(~np.isnan(data)) == 324
+    # db_1 and db_2 have disjoint valid dim1 locations after interpolation, so operand NaNs propagate.
+    assert np.count_nonzero(~np.isnan(data)) == 0
