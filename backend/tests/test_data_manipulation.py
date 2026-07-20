@@ -6,6 +6,7 @@ from ibex.data_source.imas_python_source_utils import (
     apply_savgol_filter,
     apply_signal_operations,
     apply_simple_operations,
+    combine_signal_units,
 )
 
 
@@ -51,6 +52,21 @@ def test_apply_signal_operations_preserves_operand_nans():
     signal_data_by_uri = {operand_uri: np.array([1.0, np.nan, 3.0])}
     result = apply_signal_operations(data, [f"add:{operand_uri}"], signal_data_by_uri)
     assert np.allclose(result, [11.0, np.nan, 33.0], equal_nan=True)
+
+
+@pytest.mark.parametrize(
+    ("left_unit", "right_unit", "operation", "expected"),
+    [
+        ("kg", "kg", "add", "kg"),
+        ("kg", "kg", "sub", "kg"),
+        ("kg", "kg", "mul", "kg*kg"),
+        ("kg", "kg", "div", ""),
+        ("kg", "s", "div", "kg/s"),
+        ("", "kg", "mul", "kg"),
+    ],
+)
+def test_combine_signal_units(left_unit, right_unit, operation, expected):
+    assert combine_signal_units(left_unit, right_unit, operation) == expected
 
 
 def test_apply_gaussian_smoothing():

@@ -126,6 +126,30 @@ _SIGNAL_OPERATIONS_FUNCTIONS = {
     "div": _safe_division,
 }
 
+
+def combine_signal_units(left_unit: str, right_unit: str, operation: str) -> str:
+    """Return the unit produced by a binary signal operation."""
+    left_unit = left_unit or ""
+    right_unit = right_unit or ""
+
+    if operation in {"add", "sub"}:
+        return left_unit
+    if operation == "mul":
+        if not left_unit:
+            return right_unit
+        if not right_unit:
+            return left_unit
+        return f"{left_unit}*{right_unit}"
+    if operation == "div":
+        if left_unit == right_unit:
+            return ""
+        if not right_unit:
+            return left_unit
+        return f"{left_unit}/{right_unit}"
+
+    raise InvalidParametersException(f"Unknown operation type: {operation}")
+
+
 def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
     """
     Apply simple scalar operations to data in the order given.

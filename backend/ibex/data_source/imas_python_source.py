@@ -51,6 +51,7 @@ from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_simple_operations,
     apply_signal_operations,
+    combine_signal_units,
 )
 from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
@@ -1054,6 +1055,7 @@ class IMASPythonSource(DataSourceInterface):
                         }
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
+            result_unit = first_value.metadata.units or ""
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
             if first_value.metadata.ndim == 2:
@@ -1169,6 +1171,7 @@ class IMASPythonSource(DataSourceInterface):
                                 sorted(set(flatten(convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
                             ],
                             "shape": interpolate_to["shape"],
+                            "unit": interpolate_to["unit"],
                         }
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
@@ -1259,6 +1262,7 @@ class IMASPythonSource(DataSourceInterface):
                                     for c in other_signal["data"]["coordinates"]
                                 ],
                                 "shape": other_signal["data"]["shape"],
+                                "unit": other_signal["data"]["unit"],
                             }
                         else:
                             msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
@@ -1283,6 +1287,13 @@ class IMASPythonSource(DataSourceInterface):
                 data_to_be_returned = apply_signal_operations(
                     data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
                 )
+                for operation in plot_data_query.signal_operations:
+                    operation_type, signal_uri = operation.split(":", 1)
+                    result_unit = combine_signal_units(
+                        result_unit,
+                        others_signals_data[signal_uri]["unit"],
+                        operation_type,
+                    )
 
             # ============= END signal operations =============
 
@@ -1326,7 +1337,7 @@ class IMASPythonSource(DataSourceInterface):
             result = {
                 "data": {
                     "name": node_path.split("/")[-1],
-                    "unit": first_value.metadata.units,
+                    "unit": result_unit,
                     "shape": processed_data_shape,
                     "downsampled_shape": downsampled_shape,
                     "ndim": first_value.metadata.ndim,

@@ -385,6 +385,18 @@ def test_plot_data_with_signal_operations(entry_path):
     assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, 8.0, 10.0])
 
 
+@pytest.mark.parametrize(("operation", "expected_unit"), [("mul", "s*s"), ("div", "")])
+def test_plot_data_with_signal_operations_updates_unit(entry_path, operation, expected_unit):
+    uri = f"imas:hdf5?path={entry_path}#core_profiles/time"
+    response = pytest.test_client.get(
+        "/data/plot_data",
+        params={"uri": uri, "signal_operations": [f"{operation}:{uri}"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["unit"] == expected_unit
+
+
 def test_plot_data_with_signal_operations_same_shape_different_uris(interpolation_entry_path_directory):
     db_names = [
         f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
