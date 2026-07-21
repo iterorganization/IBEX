@@ -1251,53 +1251,33 @@ class IMASPythonSource(DataSourceInterface):
                         request = PlotDataRequestModel(uri=signal_uri)
                         other_signal = self.get_plot_data(request)
 
+                        # Comparing signal shapes
+                        if (
+                            other_signal["data"]["shape"] == "irregular"
+                            or other_signal["data"]["shape"] != original_data_shape
+                        ):
+                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
+                            raise InvalidParametersException(msg)
+
                         # Comparing time coordinates (if any)
-                        other_coordinates = other_signal["data"]["coordinates"]
-
-                        # Looking for time coordinate of the 'current' signal
-                        current_time = None
-                        for coordinate in coordinates_to_be_returned:
-                            if coordinate["name"] == "time":
-                                current_time = coordinate
-                                break
-
-                        # Looking for time coordinate of the 'other' signal
-                        other_time = None
-                        for coordinate in other_coordinates:
-                            if coordinate["name"] == "time":
-                                other_time = coordinate
-                                break
-
-                        time_coordinates_match = (  # Both time coordinates are None
-                            current_time is None and other_time is None
-                        ) or (  # Both time coordinates are equal
-                            current_time is not None
-                            and other_time is not None
-                            and np.array_equal(
-                                np.asarray(flatten(convert_to_lists(current_time["value"]))),
-                                np.asarray(flatten(convert_to_lists(other_time["value"]))),
-                                equal_nan=True,
-                            )
+                        time_coordinates_match = self._time_coordinates_match(
+                            coordinates_to_be_returned, other_signal["data"]["coordinates"]
                         )
 
-                        if (
-                            other_signal["data"]["shape"] != "irregular"
-                            and other_signal["data"]["shape"] == original_data_shape
-                            and time_coordinates_match
-                        ):
-                            others_signals_data[signal_uri] = {
-                                "uri": request.uri,
-                                "data": other_signal["data"]["value"],
-                                "coordinates": [
-                                    sorted(set(flatten(convert_to_lists(c["value"]))))
-                                    for c in other_signal["data"]["coordinates"]
-                                ],
-                                "shape": other_signal["data"]["shape"],
-                                "unit": other_signal["data"]["unit"],
-                            }
-                        else:
-                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape or time coordinates does not match. Try interpolating signal onto data's shape."
+                        if not time_coordinates_match:
+                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Time coordinates does not match. Try interpolating signal onto data's shape."
                             raise InvalidParametersException(msg)
+
+                        others_signals_data[signal_uri] = {
+                            "uri": request.uri,
+                            "data": other_signal["data"]["value"],
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"]))))
+                                for c in other_signal["data"]["coordinates"]
+                            ],
+                            "shape": other_signal["data"]["shape"],
+                            "unit": other_signal["data"]["unit"],
+                        }
 
                     # Step 4: prepare interpolated_data (resampled or raw)
                     if "interpolated_data" not in others_signals_data[signal_uri]:
@@ -1389,6 +1369,29 @@ class IMASPythonSource(DataSourceInterface):
                     new_shape_factors_list.append(coord_name)
                 coordinate["coordinates"] = new_shape_factors_list
         return result
+
+    def _time_coordinates_match(self, coordinates_1, coordinates_2):
+        # Looking for time coordinate of the 'current' signal
+        time_1 = None
+        for coordinate in coordinates_1:
+            if coordinate["name"] == "time":
+                time_1 = coordinate
+                break
+        # Looking for time coordinate of the 'other' signal
+        time_2 = None
+        for coordinate in coordinates_2:
+            if coordinate["name"] == "time":
+                time_2 = coordinate
+                break
+        if time_1 is None or time_2 is None:
+            time_coordinates_match = time_1 is None and time_2 is None
+        else:
+            time_coordinates_match = np.array_equal(
+                np.asarray(time_1["value"]),
+                np.asarray(time_2["value"]),
+                equal_nan=True,
+            )
+        return time_coordinates_match
 
     def _is_empty(self, seq):
         """Checks if list is essentially empty (contains only empty lists or empty strings)"""
