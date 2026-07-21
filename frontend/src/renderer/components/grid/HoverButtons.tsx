@@ -17,7 +17,7 @@ import {
   IconEyeEdit,
   IconTrash,
 } from '@tabler/icons-react';
-import { useHover } from '@mantine/hooks';
+import { useElementSize, useHover, useMergedRef } from '@mantine/hooks';
 import { Configuration, CustomizedGridType, DataGridPlot } from '../../types';
 import {
   applyRange,
@@ -52,6 +52,8 @@ export const HoverButtons = React.memo(
   }: HoverButtonsProps) => {
     const { active, updatedConfiguration } = useIbexStore();
     const { hovered, ref: hoverRef } = useHover();
+    const { ref: sizeRef, width: containerWidth } = useElementSize();
+    const containerRef = useMergedRef(hoverRef, sizeRef);
     const previousValueDisplayErrorBands = useRef<boolean | undefined>(
       undefined,
     );
@@ -185,7 +187,7 @@ export const HoverButtons = React.memo(
     };
 
     return (
-      <div ref={hoverRef} className={classes.containerButton}>
+      <div ref={containerRef} className={classes.containerButton}>
         <Group justify="space-between" h={'100%'}>
           {is3DView || !data.coordinates.length || shouldDisplayMetadata ? (
             <Tabs
@@ -198,10 +200,10 @@ export const HoverButtons = React.memo(
                 scrollbarSize={6}
                 offsetScrollbars
                 maw={
-                  hoverRef?.current?.offsetWidth
+                  containerWidth
                     ? !data.coordinates.length || shouldDisplayMetadata
-                      ? hoverRef.current.offsetWidth - 110
-                      : hoverRef.current.offsetWidth - 230
+                      ? containerWidth - 110
+                      : containerWidth - 280
                     : '100%'
                 }
               >
