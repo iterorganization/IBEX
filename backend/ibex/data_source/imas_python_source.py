@@ -1250,9 +1250,40 @@ class IMASPythonSource(DataSourceInterface):
                         # Fetch it now and verify shape compatibility.
                         request = PlotDataRequestModel(uri=signal_uri)
                         other_signal = self.get_plot_data(request)
+
+                        # Comparing time coordinates (if any)
+                        other_coordinates = other_signal["data"]["coordinates"]
+
+                        # Looking for time coordinate of the 'current' signal
+                        current_time = None
+                        for coordinate in coordinates_to_be_returned:
+                            if coordinate["name"] == "time":
+                                current_time = coordinate
+                                break
+
+                        # Looking for time coordinate of the 'other' signal
+                        other_time = None
+                        for coordinate in other_coordinates:
+                            if coordinate["name"] == "time":
+                                other_time = coordinate
+                                break
+
+                        time_coordinates_match = (  # Both time coordinates are None
+                            current_time is None and other_time is None
+                        ) or (  # Both time coordinates are equal
+                            current_time is not None
+                            and other_time is not None
+                            and np.array_equal(
+                                np.asarray(flatten(convert_to_lists(current_time["value"]))),
+                                np.asarray(flatten(convert_to_lists(other_time["value"]))),
+                                equal_nan=True,
+                            )
+                        )
+
                         if (
                             other_signal["data"]["shape"] != "irregular"
                             and other_signal["data"]["shape"] == original_data_shape
+                            and time_coordinates_match
                         ):
                             others_signals_data[signal_uri] = {
                                 "uri": request.uri,
@@ -1265,7 +1296,7 @@ class IMASPythonSource(DataSourceInterface):
                                 "unit": other_signal["data"]["unit"],
                             }
                         else:
-                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
+                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape or time coordinates does not match. Try interpolating signal onto data's shape."
                             raise InvalidParametersException(msg)
 
                     # Step 4: prepare interpolated_data (resampled or raw)
