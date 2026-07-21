@@ -49,6 +49,8 @@ export const SimplePlotly = ({
   const SELECT_AXIS_HEIGHT = 40; // Height of the select axis component
   const [layoutPlot, setLayoutPlot] = useState<Partial<Layout>>({
     xaxis: {
+      scaleanchor: null,
+      scaleratio: null,
       title: {
         font: {
           family: 'Courier New, monospace',
@@ -69,6 +71,7 @@ export const SimplePlotly = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      showgrid: itemDataGrid.displayGrid,
     },
     yaxis: {
       title: {
@@ -85,12 +88,14 @@ export const SimplePlotly = ({
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      showgrid: itemDataGrid.displayGrid,
     },
     yaxis2: {
       type: (itemDataGrid?.y2AxisData?.type as AxisType) || 'linear',
       exponentformat: 'power',
       showexponent: 'all',
       separatethousands: true,
+      showgrid: itemDataGrid.displayGrid,
     },
     modebar: {
       orientation: 'v',

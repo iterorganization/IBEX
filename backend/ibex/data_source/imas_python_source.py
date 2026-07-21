@@ -51,6 +51,7 @@ from ibex.data_source.imas_python_source_utils import (
     apply_savgol_filter,
     apply_gaussian_filter,
     apply_simple_operations,
+    resolve_irregular_coordinate_data_shape,
 )
 from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
@@ -1127,10 +1128,29 @@ class IMASPythonSource(DataSourceInterface):
 
                 # =================== GATHER ALL COORDINATES ===================
                 original_coord_values = []
-                new_common_coords = coordinates_to_be_returned
-                for c in new_common_coords:
+
+                should_resample_data_onto_new_coordinates: bool = False
+
+                for c in coordinates_to_be_returned:
                     c["value"] = convert_to_lists(c["value"])
                     original_coord_values.append(sorted(set(flatten(c["value"]))))
+
+                    expected_flattened_shape = np.array(c["value"]).shape[-1]
+                    flattened_shape = np.array(original_coord_values[-1]).shape[-1]
+
+                    if expected_flattened_shape != flattened_shape:
+                        # If given coordinate is different across AoS indices, we cannot simply flatted coordinates list to 1D.
+                        should_resample_data_onto_new_coordinates = True
+
+                if should_resample_data_onto_new_coordinates:
+                    # Coordinates values are different across AoS indices
+                    # New data array has to be created with all data points
+                    data_to_be_returned = resolve_irregular_coordinate_data_shape(
+                        coordinates=list(reversed([c["value"] for c in coordinates_to_be_returned])),
+                        data=data_to_be_returned,
+                        target_coordinates=list(reversed(original_coord_values)),
+                    )
+
                 original_coord_values.reverse()
 
                 for _uri in plot_data_query.interpolate_over:
@@ -1164,7 +1184,7 @@ class IMASPythonSource(DataSourceInterface):
                         x["value"] = sorted(set(flatten(x["value"]) + flatten(convert_to_lists(y["value"]))))
 
                 # reverse coordinates list so it matches data dimensions
-                common_coords_values = [c["value"] for c in reversed(new_common_coords)]
+                common_coords_values = [c["value"] for c in reversed(coordinates_to_be_returned)]
                 # =================== INTERPOLATE ===================
 
                 # === make data vector rectangular ===

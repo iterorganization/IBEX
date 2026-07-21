@@ -1,6 +1,42 @@
-import { By, Key, until, WebElement } from 'selenium-webdriver';
+import {
+  By,
+  error as seleniumError,
+  Key,
+  until,
+  WebElement,
+} from 'selenium-webdriver';
 import { expect } from 'chai';
 import { getDriver } from '../setup';
+
+/**
+ * Re-runs `fn` when it throws a StaleElementReferenceError.
+ *
+ * A stale reference happens when the DOM node is detached (React/Mantine/Plotly
+ * re-render) between the moment an element is located and the moment we act on
+ * it. Retrying the whole locate-then-act sequence re-resolves a fresh node.
+ */
+async function retryOnStale<T>(
+  fn: () => Promise<T>,
+  retries = 5,
+  delayMs = 200,
+): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (
+        err instanceof seleniumError.StaleElementReferenceError &&
+        i < retries - 1
+      ) {
+        await new Promise((res) => setTimeout(res, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
+  // Unreachable: the loop either returns or throws.
+  throw new Error('retryOnStale exhausted its retries');
+}
 
 export async function getCssElementFromDataTestId(
   cssElementDataTestIdName: string,
@@ -76,18 +112,20 @@ export async function writeTextInCssElement(
   text: string,
   clearText: boolean = false,
 ) {
-  const input = await getCssElementFromDataTestId(cssElementDataTestIdName);
-  if (clearText) {
-    if (
-      (await input.getAttribute('value')) != undefined &&
-      (await input.getAttribute('value'))?.length > 0
-    ) {
-      while ((await input.getAttribute('value')).length > 0) {
-        await input.sendKeys(Key.BACK_SPACE);
+  await retryOnStale(async () => {
+    const input = await getCssElementFromDataTestId(cssElementDataTestIdName);
+    if (clearText) {
+      if (
+        (await input.getAttribute('value')) != undefined &&
+        (await input.getAttribute('value'))?.length > 0
+      ) {
+        while ((await input.getAttribute('value')).length > 0) {
+          await input.sendKeys(Key.BACK_SPACE);
+        }
       }
     }
-  }
-  await input.sendKeys(text);
+    await input.sendKeys(text);
+  });
 }
 
 export async function findCssElementAndClickIt(
@@ -95,18 +133,20 @@ export async function findCssElementAndClickIt(
   retries = 100,
   delayMs = 100,
 ) {
-  const button = await getCssElementFromDataTestId(
-    cssElementDataTestIdName,
-    retries * delayMs,
-  );
+  await retryOnStale(async () => {
+    const button = await getCssElementFromDataTestId(
+      cssElementDataTestIdName,
+      retries * delayMs,
+    );
 
-  await getDriver().wait(until.elementIsEnabled(button), retries * delayMs);
+    await getDriver().wait(until.elementIsEnabled(button), retries * delayMs);
 
-  expect(
-    await button.isDisplayed(),
-    `Button "${cssElementDataTestIdName}" was found but isDisplayed() returned false.`,
-  ).to.be.true;
-  await button.click();
+    expect(
+      await button.isDisplayed(),
+      `Button "${cssElementDataTestIdName}" was found but isDisplayed() returned false.`,
+    ).to.be.true;
+    await button.click();
+  });
 }
 
 export async function findTextElementAndClickIt(
@@ -138,9 +178,17 @@ export async function waitForValue<T>(
   delayMs = 300,
 ): Promise<void> {
   for (let i = 0; i < retries; i++) {
-    const actual = await callback();
-    if (comparator(actual, expected)) {
-      return; // success
+    try {
+      const actual = await callback();
+      if (comparator(actual, expected)) {
+        return; // success
+      }
+    } catch (err) {
+      // A transient error while the DOM re-renders (e.g. a stale element read)
+      // should not fail the test: keep polling until the retries run out.
+      if (!(err instanceof seleniumError.StaleElementReferenceError)) {
+        throw err;
+      }
     }
     await new Promise((res) => setTimeout(res, delayMs));
   }

@@ -111,7 +111,23 @@ export const plotData = (
     downsampled_method: downsampled_method,
     interpolated_method: interpolated_method,
     plot: [...currentPlot, trace],
+    forceXyRatio: dataPlot?.forceXyRatio ?? false,
   };
+};
+
+/**
+ * @description Computes the default axis-ratio rule for a newly created grid, based on the 2D
+ * rule: force a 1:1 ratio only when the first two coordinate axes (x and y) share the same,
+ * non-empty unit. Returns false for mono-coordinate (1D) plots.
+ * @param coordinates The coordinates of the created grid.
+ * @returns Whether the x/y ratio should be forced by default.
+ */
+export const computeDefaultForceXyRatio = (
+  coordinates: Coordinates[],
+): boolean => {
+  const firstCoordinateUnit = coordinates.find((c) => c.axeIndex === 0)?.unit;
+  const secondCoordinateUnit = coordinates.find((c) => c.axeIndex === 1)?.unit;
+  return !!firstCoordinateUnit && firstCoordinateUnit === secondCoordinateUnit;
 };
 
 /**
@@ -195,6 +211,11 @@ export const handleNewPlot = async (
     response.data.description,
   );
   updatedPlot.dataType = nodes[0].type;
+
+  // Initialize the axis-ratio rule from the 2D rule (matching x/y coordinate units)
+  updatedPlot.forceXyRatio = computeDefaultForceXyRatio(
+    updatedPlot.coordinates,
+  );
 
   // Rule to define the default plot mode
   updatedPlot.selectedPlotMode =
@@ -1388,6 +1409,7 @@ export async function plotNodeUriLoaded(
 
         const dataGridUpdated = {
           ...dataGrid,
+          forceXyRatio: dataGrid?.forceXyRatio ?? false,
           xAxisData: updatedXAxisData,
           plot: updatedPlot,
         } as DataGridPlot;

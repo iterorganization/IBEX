@@ -102,6 +102,7 @@ export function MainLayout() {
         isTitleOverwritten: dataGrid.isTitleOverwritten,
         displayErrorBand: dataGrid.displayErrorBand,
         displayGrid: dataGrid.displayGrid,
+        forceXyRatio: dataGrid.forceXyRatio,
         synchronizedGrids: dataGrid.synchronizedGrids,
         downsampled_method: dataGrid?.downsampled_method,
         downsampled_size: dataGrid?.downsampled_size,

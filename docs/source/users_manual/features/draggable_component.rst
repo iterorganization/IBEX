@@ -19,10 +19,6 @@ Each chart includes several options:
    :alt: Plot data with slider
    :align: center
 
-**Downsampling method:**
-
-Selecting the downsampling method reduces the amount of data to be displayed while preserving the visual appearance of the data.
-
 **Error bands:**
 
 Enabling or disabling error bars allows you to load the "_error_upper" & "_error_lower" data to represent them as vertical lines.
@@ -35,9 +31,13 @@ Allows you to select how you want the data to be displayed. In 1D, it will be re
 
 This opens a ":doc:`Metadata <metadatas>`" component that displays various information related to all nodes (path, min, max, average, value, coordinates, etc.). This gives the user a broader overview of the data.
 
-**Customize the grid:**
+**Data manipulation:**
 
-It opens a ":doc:`Customization <customization>`" component which allows to personnalize the grid.
+It opens a ":doc:`Customization <customization>`" component which allows to personnalize the grid. It includes data manipulation features.
+
+**Visual customization:**
+
+It opens a ":doc:`Customization <customization>`" component which allows to personnalize the grid. It includes visual customization features.
 
 **Edit Grid:**
 
