@@ -35,6 +35,7 @@ export const generateNewGrid = (
     isTitleOverwritten: false,
     displayErrorBand: true,
     displayGrid: true,
+    forceXyRatio: false,
     synchronizedGrids: { color: '', list: [] },
     i: generateUuid(),
     isEditing: true,

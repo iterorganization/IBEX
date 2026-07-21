@@ -37,7 +37,7 @@ pip install -e . # editable mode allows changes to have instant impact
 ## Documentation build
 ```commandline
 . venv/bin/activate
-pip install -U sphinx sphinx-autosummary-accessors sphinx_immaterial
+pip install sphinx==8.2.3 sphinx-autosummary-accessors==2025.3.1 sphinx_immaterial==0.13.9
 
 make -C docs html
 ```

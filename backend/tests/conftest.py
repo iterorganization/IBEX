@@ -37,6 +37,32 @@ def interpolation_entry_path_directory(tmp_path_factory):
                 p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0], dtype=float)
         entry.put(eq)
 
+        cp = entry.factory.core_profiles()
+        cp.ids_properties.homogeneous_time = 1
+        cp.time = np.array([1.0, 2.0, 3.0, 4.0])
+        cp.profiles_1d.resize(4)
+
+        for i, p1d in enumerate(cp.profiles_1d):
+            n_rho = 10
+            p1d.grid.rho_tor_norm = np.linspace(0.1 + i * 0.01, 1.0 + i * 0.01, n_rho)
+            p1d.electrons.temperature = np.linspace(1000 - i * 100, 100 + i * 10, n_rho)
+
+        cp.profiles_2d.resize(4)
+        for j, p2d in enumerate(cp.profiles_2d):
+            p2d.ion.resize(2)
+            for k, ion in enumerate(p2d.ion):
+                ion.temperature = np.array(
+                    [
+                        [j + k + 1.0, j + k + 2.0, j + k + 3.0],
+                        [j + k + 4.0, j + k + 5.0, j + k + 6.0],
+                        [j + k + 7.0, j + k + 8.0, j + k + 9.0],
+                    ],
+                    dtype=float,
+                )
+            p2d.grid.dim1 = np.array([0.0, 1.0, 2.0], dtype=float)
+            p2d.grid.dim2 = np.array([0.0, 1.0, 2.0], dtype=float)
+        entry.put(cp)
+
     with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_2", mode="w") as entry:
         eq = entry.factory.equilibrium()
 
@@ -60,6 +86,33 @@ def interpolation_entry_path_directory(tmp_path_factory):
                 p2d.grid.dim1 = np.asarray([0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7], dtype=float)
                 p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0], dtype=float)
         entry.put(eq)
+
+        cp = entry.factory.core_profiles()
+        cp.ids_properties.homogeneous_time = 1
+        cp.time = np.array([1.5, 2.5, 3.5])
+        cp.profiles_1d.resize(3)
+
+        for i, p1d in enumerate(cp.profiles_1d):
+            n_rho = 8
+            p1d.grid.rho_tor_norm = np.linspace(0.2 + i * 0.02, 1.0 + i * 0.02, n_rho)
+            p1d.electrons.temperature = np.linspace(900 - i * 50, 200 + i * 20, n_rho)
+
+        cp.profiles_2d.resize(3)
+        for j, p2d in enumerate(cp.profiles_2d):
+            p2d.ion.resize(2)
+            for k, ion in enumerate(p2d.ion):
+                ion.temperature = np.array(
+                    [
+                        [j + k + 10.0, j + k + 11.0, j + k + 12.0],
+                        [j + k + 13.0, j + k + 14.0, j + k + 15.0],
+                        [j + k + 16.0, j + k + 17.0, j + k + 18.0],
+                    ],
+                    dtype=float,
+                )
+            p2d.grid.dim1 = np.array([0.0, 1.0, 2.0], dtype=float)
+            p2d.grid.dim2 = np.array([0.0, 1.0, 2.0], dtype=float)
+        entry.put(cp)
+
     return tmp_path
 
 
