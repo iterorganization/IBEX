@@ -1,4 +1,4 @@
-import { Checkbox, Select, Stack } from '@mantine/core';
+import { Checkbox, Group, Select, Stack, Switch } from '@mantine/core';
 import { DataGridPlot, DataPlotly } from '../../../types';
 
 interface CustomizeHeatmapProps {
@@ -40,20 +40,35 @@ export const CustomizeHeatmap = ({
 
   return (
     <Stack>
-      <Select
-        label="Colorscale"
-        description="Customize the colorscale"
-        placeholder="Customize the colorscale"
-        data={['Viridis', 'Cividis', 'RdBu', 'YlGnBu', 'YlOrRd']}
-        value={selectedPlot?.customPreferences?.colorscale || 'Viridis'}
-        onChange={(value) => updateColorscale(value)}
-        maw={200}
+      <Switch
+        label="Force axis ratio (1:1)"
+        checked={customizedDataGrid.forceXyRatio}
+        onChange={(event) =>
+          setCustomizedDataGrid({
+            ...customizedDataGrid,
+            forceXyRatio: event.currentTarget.checked,
+          })
+        }
       />
-      <Checkbox
-        checked={applyToAllHeatmap}
-        onChange={(event) => setApplyToAllHeatmap(event.currentTarget.checked)}
-        label="Apply to all plots"
-      />
+      <Group align="flex-end">
+        <Select
+          label="Colorscale"
+          description="Customize the colorscale"
+          placeholder="Customize the colorscale"
+          data={['Viridis', 'Cividis', 'RdBu', 'YlGnBu', 'YlOrRd']}
+          value={selectedPlot?.customPreferences?.colorscale || 'Viridis'}
+          onChange={(value) => updateColorscale(value)}
+          maw={200}
+        />
+        <Checkbox
+          mb={8}
+          checked={applyToAllHeatmap}
+          onChange={(event) =>
+            setApplyToAllHeatmap(event.currentTarget.checked)
+          }
+          label="Apply to all plots"
+        />
+      </Group>
     </Stack>
   );
 };

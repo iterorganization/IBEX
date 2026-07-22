@@ -210,6 +210,11 @@ object_description_options = [
 # so a file named 'default.css' will overwrite the builtin 'default.css'.
 html_static_path = ["_static"]
 
+# Custom assets: click-to-zoom lightbox for screenshots (medium-zoom).
+# html_js_files order is preserved, so medium-zoom loads before its init.
+html_css_files = ["zoom.css"]
+html_js_files = ["medium-zoom.min.js", "zoom-init.js"]
+
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
 # directly to the root of the documentation.

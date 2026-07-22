@@ -50,6 +50,7 @@ from ibex.data_source.imas_python_source_utils import (
     apply_savgol_filter,
     apply_gaussian_filter,
     apply_simple_operations,
+    resolve_irregular_coordinate_data_shape,
     apply_signal_operations,
     combine_signal_units,
 )
@@ -1137,10 +1138,29 @@ class IMASPythonSource(DataSourceInterface):
 
                 # =================== GATHER ALL COORDINATES ===================
                 original_coord_values = []
-                new_common_coords = coordinates_to_be_returned
-                for c in new_common_coords:
+
+                should_resample_data_onto_new_coordinates: bool = False
+
+                for c in coordinates_to_be_returned:
                     c["value"] = convert_to_lists(c["value"])
                     original_coord_values.append(sorted(set(flatten(c["value"]))))
+
+                    expected_flattened_shape = np.array(c["value"]).shape[-1]
+                    flattened_shape = np.array(original_coord_values[-1]).shape[-1]
+
+                    if expected_flattened_shape != flattened_shape:
+                        # If given coordinate is different across AoS indices, we cannot simply flatted coordinates list to 1D.
+                        should_resample_data_onto_new_coordinates = True
+
+                if should_resample_data_onto_new_coordinates:
+                    # Coordinates values are different across AoS indices
+                    # New data array has to be created with all data points
+                    data_to_be_returned = resolve_irregular_coordinate_data_shape(
+                        coordinates=list(reversed([c["value"] for c in coordinates_to_be_returned])),
+                        data=data_to_be_returned,
+                        target_coordinates=list(reversed(original_coord_values)),
+                    )
+
                 original_coord_values.reverse()
 
                 store_other_signals_data = False  # used for signal combining after interpolation
@@ -1187,7 +1207,7 @@ class IMASPythonSource(DataSourceInterface):
                         x["value"] = sorted(set(flatten(x["value"]) + flatten(convert_to_lists(y["value"]))))
 
                 # reverse coordinates list so it matches data dimensions
-                common_coords_values = [c["value"] for c in reversed(new_common_coords)]
+                common_coords_values = [c["value"] for c in reversed(coordinates_to_be_returned)]
                 # =================== INTERPOLATE ===================
 
                 # === make data vector rectangular ===
@@ -1250,23 +1270,34 @@ class IMASPythonSource(DataSourceInterface):
                         # Fetch it now and verify shape compatibility.
                         request = PlotDataRequestModel(uri=signal_uri)
                         other_signal = self.get_plot_data(request)
+
+                        # Comparing signal shapes
                         if (
-                            other_signal["data"]["shape"] != "irregular"
-                            and other_signal["data"]["shape"] == original_data_shape
+                            other_signal["data"]["shape"] == "irregular"
+                            or other_signal["data"]["shape"] != original_data_shape
                         ):
-                            others_signals_data[signal_uri] = {
-                                "uri": request.uri,
-                                "data": other_signal["data"]["value"],
-                                "coordinates": [
-                                    sorted(set(flatten(convert_to_lists(c["value"]))))
-                                    for c in other_signal["data"]["coordinates"]
-                                ],
-                                "shape": other_signal["data"]["shape"],
-                                "unit": other_signal["data"]["unit"],
-                            }
-                        else:
                             msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
                             raise InvalidParametersException(msg)
+
+                        # Comparing time coordinates (if any)
+                        time_coordinates_match = self._time_coordinates_match(
+                            coordinates_to_be_returned, other_signal["data"]["coordinates"]
+                        )
+
+                        if not time_coordinates_match:
+                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Time coordinates does not match. Try interpolating signal onto data's shape."
+                            raise InvalidParametersException(msg)
+
+                        others_signals_data[signal_uri] = {
+                            "uri": request.uri,
+                            "data": other_signal["data"]["value"],
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"]))))
+                                for c in other_signal["data"]["coordinates"]
+                            ],
+                            "shape": other_signal["data"]["shape"],
+                            "unit": other_signal["data"]["unit"],
+                        }
 
                     # Step 4: prepare interpolated_data (resampled or raw)
                     if "interpolated_data" not in others_signals_data[signal_uri]:
@@ -1358,6 +1389,29 @@ class IMASPythonSource(DataSourceInterface):
                     new_shape_factors_list.append(coord_name)
                 coordinate["coordinates"] = new_shape_factors_list
         return result
+
+    def _time_coordinates_match(self, coordinates_1, coordinates_2):
+        # Looking for time coordinate of the 'current' signal
+        time_1 = None
+        for coordinate in coordinates_1:
+            if coordinate["name"] == "time":
+                time_1 = coordinate
+                break
+        # Looking for time coordinate of the 'other' signal
+        time_2 = None
+        for coordinate in coordinates_2:
+            if coordinate["name"] == "time":
+                time_2 = coordinate
+                break
+        if time_1 is None or time_2 is None:
+            time_coordinates_match = time_1 is None and time_2 is None
+        else:
+            time_coordinates_match = np.array_equal(
+                np.asarray(time_1["value"]),
+                np.asarray(time_2["value"]),
+                equal_nan=True,
+            )
+        return time_coordinates_match
 
     def _is_empty(self, seq):
         """Checks if list is essentially empty (contains only empty lists or empty strings)"""

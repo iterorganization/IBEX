@@ -6,7 +6,7 @@ When you save a configuration, a file in the following format will be created. I
 
 You can share configuration files with other users to quickly access their workspace.
 
-You can also edit the file manually before loading it. However, this is dangerous and should only be done with caution by experienced users, as incorrect edits could cause unwanted bugs in the configuration.
+You can also edit the file manually before loading it. However, this is not recommended and dangerous. It should only be done with caution by experienced users, as incorrect edits could cause unwanted bugs in the configuration.
 
 Exemple configuration file :
 
@@ -27,6 +27,11 @@ Exemple configuration file :
         "title": "t_e_URI-0",
         "isTitleOverwritten": false,
         "displayErrorBand": false,
+        "synchronizedGrids": {
+          "color": "",
+          "list": []
+        },
+        "interpolated_method": "exact_value",
         "xAxisData": {
           "name": "time",
           "unit": "s",
@@ -43,11 +48,13 @@ Exemple configuration file :
         "h": 12,
         "coordinates": [
           {
+            "axeIndex": 0,
             "path": "#ece/time",
             "target": "#ece/channel[0]/t_e/data[0]",
             "valueIndex": 0
           },
           {
+            "axeIndex": 1,
             "path": "",
             "target": "#ece/channel[0]",
             "valueIndex": 0
@@ -57,7 +64,12 @@ Exemple configuration file :
           {
             "nodeUri": "URI-0#ece:0/channel[0]/t_e/data",
             "yaxis": "",
-            "labelUri": "URI-0"
+            "labelUri": "URI-0",
+            "line": {
+              "color": "rgb(31, 119, 180)"
+            },
+            "customPreferences": {},
+            "mode": "line"
           }
         ]
       }
