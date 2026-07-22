@@ -1279,13 +1279,13 @@ class IMASPythonSource(DataSourceInterface):
                             msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
                             raise InvalidParametersException(msg)
 
-                        # Comparing time coordinates (if any)
-                        time_coordinates_match = self._time_coordinates_match(
+                        # Comparing coordinates
+                        coordinates_match = self._coordinates_match(
                             coordinates_to_be_returned, other_signal["data"]["coordinates"]
                         )
 
-                        if not time_coordinates_match:
-                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Time coordinates does not match. Try interpolating signal onto data's shape."
+                        if not coordinates_match:
+                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Coordinates do not match. Try interpolating signal onto data's shape."
                             raise InvalidParametersException(msg)
 
                         others_signals_data[signal_uri] = {
@@ -1390,28 +1390,18 @@ class IMASPythonSource(DataSourceInterface):
                 coordinate["coordinates"] = new_shape_factors_list
         return result
 
-    def _time_coordinates_match(self, coordinates_1, coordinates_2):
-        # Looking for time coordinate of the 'current' signal
-        time_1 = None
-        for coordinate in coordinates_1:
-            if coordinate["name"] == "time":
-                time_1 = coordinate
-                break
-        # Looking for time coordinate of the 'other' signal
-        time_2 = None
-        for coordinate in coordinates_2:
-            if coordinate["name"] == "time":
-                time_2 = coordinate
-                break
-        if time_1 is None or time_2 is None:
-            time_coordinates_match = time_1 is None and time_2 is None
-        else:
-            time_coordinates_match = np.array_equal(
-                np.asarray(time_1["value"]),
-                np.asarray(time_2["value"]),
-                equal_nan=True,
+    def _coordinates_match(self, coordinates_1, coordinates_2):
+        if len(coordinates_1) != len(coordinates_2):
+            return False
+
+        coordinates_match = all(
+            coordinate_1["name"] == coordinate_2["name"]
+            and np.array_equal(
+                np.asarray(coordinate_1["value"]), np.asarray(coordinate_2["value"]), equal_nan=True
             )
-        return time_coordinates_match
+            for coordinate_1, coordinate_2 in zip(coordinates_1, coordinates_2)
+        )
+        return coordinates_match
 
     def _is_empty(self, seq):
         """Checks if list is essentially empty (contains only empty lists or empty strings)"""
