@@ -231,21 +231,6 @@ Multiple signal operations (subtraction then multiplication):
      '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&signal_operations=sub:<other_signal_URI>&signal_operations=mul:<yet_another_URI>' \
      -H 'accept: application/json'
 
-.. _`Signal operations details`:
 
 
-Null and NaN handling
-~~~~~~~~~~~~~~~~~~~~~~
 
-Before applying each operation, the backend inspects the operand signal's data for NaN values.
-If any NaN values are found, they are replaced with an **operation-specific neutral value**
-that will not affect the result of the operation:
-
-* ``add`` — neutral value ``0``
-* ``sub`` — neutral value ``0``
-* ``mul`` — neutral value ``1``
-* ``div`` — neutral value ``1``
-* ``pow`` — neutral value ``1``
-* ``root`` — neutral value ``1``
-
-This prevents NaN propagation through chained operations.
