@@ -1322,9 +1322,6 @@ class IMASPythonSource(DataSourceInterface):
 
                 # Step 5: flatten dict and apply operations in order
                 signal_data_by_uri = {uri: info["data"] for uri, info in others_signals_data.items()}
-                data_to_be_returned = apply_signal_operations(
-                    data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
-                )
                 for operation in plot_data_query.signal_operations:
                     operation_type, signal_uri = operation.split(":", 1)
                     result_unit = combine_signal_units(
@@ -1332,6 +1329,9 @@ class IMASPythonSource(DataSourceInterface):
                         others_signals_data[signal_uri]["unit"],
                         operation_type,
                     )
+                data_to_be_returned = apply_signal_operations(
+                    data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
+                )
 
             # ============= END signal operations =============
 
@@ -1403,9 +1403,7 @@ class IMASPythonSource(DataSourceInterface):
 
         coordinates_match = all(
             coordinate_1["name"] == coordinate_2["name"]
-            and np.array_equal(
-                np.asarray(coordinate_1["value"]), np.asarray(coordinate_2["value"]), equal_nan=True
-            )
+            and np.array_equal(np.asarray(coordinate_1["value"]), np.asarray(coordinate_2["value"]), equal_nan=True)
             for coordinate_1, coordinate_2 in zip(coordinates_1, coordinates_2)
         )
         return coordinates_match

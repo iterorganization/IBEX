@@ -373,16 +373,14 @@ def test_plot_data_coordinate_aliases(entry_path, expected_unit):
     assert dim2_coordinate["unit"].lower() == expected_unit[1]
 
 
-def test_plot_data_with_signal_operations(entry_path):
+def test_plot_data_with_signal_operations_rejects_different_units(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
         "signal_operations": [f"add:imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
-    assert response.status_code == 200
-
-    response_body = response.json()
-    assert response_body["data"]["value"] == pytest.approx([2.0, 4.0, 6.0, 8.0, 10.0])
+    assert response.status_code == 466
+    assert "Cannot add signals with different units" in response.json()["message"]
 
 
 @pytest.mark.parametrize(("operation", "expected_unit"), [("mul", "s*s"), ("div", "")])

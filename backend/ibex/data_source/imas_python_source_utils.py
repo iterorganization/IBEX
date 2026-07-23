@@ -221,6 +221,10 @@ def combine_signal_units(left_unit: str, right_unit: str, operation: str) -> str
     right_unit = right_unit or ""
 
     if operation in {"add", "sub"}:
+        if left_unit != right_unit:
+            raise InvalidParametersException(
+                f"Cannot {operation} signals with different units ({left_unit!r} and {right_unit!r})"
+            )
         return left_unit
     if operation == "mul":
         if not left_unit:

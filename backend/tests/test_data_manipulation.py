@@ -69,6 +69,15 @@ def test_combine_signal_units(left_unit, right_unit, operation, expected):
     assert combine_signal_units(left_unit, right_unit, operation) == expected
 
 
+@pytest.mark.parametrize("operation", ["add", "sub"])
+def test_combine_signal_units_rejects_different_units(operation):
+    with pytest.raises(
+        InvalidParametersException,
+        match=rf"Cannot {operation} signals with different units",
+    ):
+        combine_signal_units("kg", "s", operation)
+
+
 def test_apply_gaussian_smoothing():
     data = np.array([10.25, 12.8, 15.4, 18.15, 21.0, 24.35, 27.6, 30.2, 33.75, 36.1])
 
