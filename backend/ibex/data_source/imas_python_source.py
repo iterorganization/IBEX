@@ -1247,9 +1247,9 @@ class IMASPythonSource(DataSourceInterface):
             #    a. If the signal was already interpolated (stored during
             #       interpolation phase), skip fetching
             #    b. Otherwise fetch the signal and check shape compatibility
-            # 4. Prepare interpolated_data for each signal:
+            # 4. Prepare operand data for each signal:
             #    a. If interpolation was requested, resample onto common coords
-            #    b. Otherwise use raw signal data directly (same shape path)
+            #    b. Otherwise normalize raw signal data to a NumPy array
             # 5. Build a flat uri->array dict and apply all signal operations
 
             if plot_data_query.signal_operations:
@@ -1276,7 +1276,11 @@ class IMASPythonSource(DataSourceInterface):
                             other_signal["data"]["shape"] == "irregular"
                             or other_signal["data"]["shape"] != original_data_shape
                         ):
-                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Signal shape and data shape does not match. Try interpolating signal onto data's shape."
+                            msg = (
+                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                                "Signal and data shapes do not match. "
+                                "Try interpolating the signal onto the data shape."
+                            )
                             raise InvalidParametersException(msg)
 
                         # Comparing coordinates
@@ -1285,7 +1289,11 @@ class IMASPythonSource(DataSourceInterface):
                         )
 
                         if not coordinates_match:
-                            msg = f"Cannot apply operation on signal {signal_uri} without interpolation. Coordinates do not match. Try interpolating signal onto data's shape."
+                            msg = (
+                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                                "Coordinates do not match. "
+                                "Try interpolating the signal onto the data coordinates."
+                            )
                             raise InvalidParametersException(msg)
 
                         others_signals_data[signal_uri] = {
@@ -1299,22 +1307,21 @@ class IMASPythonSource(DataSourceInterface):
                             "unit": other_signal["data"]["unit"],
                         }
 
-                    # Step 4: prepare interpolated_data (resampled or raw)
-                    if "interpolated_data" not in others_signals_data[signal_uri]:
-                        if plot_data_query.interpolate_over:
-                            # Resample signal data onto the common coordinate grid
-                            signal_data = resample_data_without_interpolation(
-                                tuple(reversed(others_signals_data[signal_uri]["coordinates"])),
-                                others_signals_data[signal_uri]["data"],
-                                tuple(common_coords_values),
-                            )
-                        else:
-                            # No interpolation needed — use signal data as-is
-                            signal_data = others_signals_data[signal_uri]["data"]
-                        others_signals_data[signal_uri]["interpolated_data"] = np.array(signal_data)
+                    # Step 4: prepare operand data (resampled or raw)
+                    if plot_data_query.interpolate_over:
+                        # Resample signal data onto the common coordinate grid
+                        signal_data = resample_data_without_interpolation(
+                            tuple(reversed(others_signals_data[signal_uri]["coordinates"])),
+                            others_signals_data[signal_uri]["data"],
+                            tuple(common_coords_values),
+                        )
+                    else:
+                        signal_data = others_signals_data[signal_uri]["data"]
+
+                    others_signals_data[signal_uri]["data"] = np.asarray(signal_data)
 
                 # Step 5: flatten dict and apply operations in order
-                signal_data_by_uri = {uri: info["interpolated_data"] for uri, info in others_signals_data.items()}
+                signal_data_by_uri = {uri: info["data"] for uri, info in others_signals_data.items()}
                 data_to_be_returned = apply_signal_operations(
                     data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
                 )
