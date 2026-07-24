@@ -32,6 +32,7 @@ interface Heatmap2DProps {
   height: number;
   plotIndex: string;
   showSliders: boolean;
+  forcedPlotType?: 'heatmap' | 'contour';
   handleUpdateCoordinate?: (
     coordinate: Coordinates,
     valueIndex: number,
@@ -44,6 +45,7 @@ export const Heatmap2D = ({
   height,
   plotIndex,
   showSliders,
+  forcedPlotType,
   handleUpdateCoordinate,
 }: Heatmap2DProps) => {
   const { active, updatedConfiguration } = useIbexStore();
@@ -84,6 +86,12 @@ export const Heatmap2D = ({
     },
     modebar: {
       orientation: 'v',
+    },
+    legend: {
+      x: 1.3,
+      y: 1,
+      groupclick: 'togglegroup',
+      tracegroupgap: 0,
     },
   });
   const selectedPlot = itemDataGrid.plot[parseInt(plotIndex)];
@@ -335,9 +343,13 @@ export const Heatmap2D = ({
                             coord.axeIndex === (targetAxis === 'y' ? 1 : 0),
                         ).name
                       }
-                      data={itemDataGrid.coordinates.map(
-                        (coord: Coordinates) => coord.name,
-                      )}
+                      data={(itemDataGrid.geometries.length // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
+                        ? itemDataGrid.coordinates.filter(
+                            (coord) =>
+                              coord.axeIndex === 0 || coord.axeIndex === 1,
+                          )
+                        : itemDataGrid.coordinates
+                      ).map((coord: Coordinates) => coord.name)}
                       w={`${width * 0.2}px`}
                       onChange={(value) =>
                         value &&
@@ -434,7 +446,16 @@ export const Heatmap2D = ({
             ref={plotRef}
             data={[
               {
-                type: 'heatmap',
+                type: forcedPlotType
+                  ? forcedPlotType
+                  : itemDataGrid.selectedPlotMode === 'Heatmap'
+                    ? 'heatmap'
+                    : itemDataGrid.selectedPlotMode === 'Contour'
+                      ? 'contour'
+                      : 'heatmap',
+                contours: {
+                  coloring: 'lines',
+                },
                 colorscale:
                   selectedPlot?.customPreferences?.colorscale || 'Viridis',
                 colorbar: {
@@ -449,10 +470,13 @@ export const Heatmap2D = ({
                 },
                 hovertemplate:
                   'x: %{x}<br>' + 'y: %{y}<br>' + 'z: %{z:,.6g}<extra></extra>',
-                x: x,
-                y: y,
-                z: z,
+                x: [...x],
+                y: [...y],
+                z: z.map((row) => [...row]),
               },
+
+              // Add geometries in contour type
+              ...(itemDataGrid?.geometries ?? []),
             ]}
             config={{
               autosizable: false,

@@ -334,7 +334,10 @@ export const VisualizationURIModal = ({
 
     // Get new data from BE
     const newListDataGridPlot = formatConfigBeforeLoadingURIs(active);
-    const wantedDataPlot = await plotNodeUriLoaded(newListDataGridPlot);
+    const wantedDataPlot = await plotNodeUriLoaded(
+      newListDataGridPlot,
+      active.dataURI,
+    );
     active.dataPlot = wantedDataPlot;
 
     const updatedActive: Configuration = {
@@ -429,7 +432,6 @@ export const VisualizationURIModal = ({
    *
    */
   async function fetchDataIDSFromURI() {
-    // ? function write/paste
     if (!formURI.values.uri) {
       console.error('URI is empty.');
       formURI.setFieldError('uri', 'Please provide a valid URI');

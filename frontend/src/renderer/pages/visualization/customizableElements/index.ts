@@ -5,3 +5,4 @@ export * from './CustomizeHeatmap';
 export * from './Customize1DPlot';
 export * from './CustomizeDataRange';
 export * from './CustomizeSynchronization';
+export * from './CustomizeGeometry';
