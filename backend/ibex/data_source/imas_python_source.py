@@ -1322,6 +1322,8 @@ class IMASPythonSource(DataSourceInterface):
 
                 # Step 5: flatten dict and apply operations in order
                 signal_data_by_uri = {uri: info["data"] for uri, info in others_signals_data.items()}
+
+                # Step 6: Handling operations units
                 for operation in plot_data_query.signal_operations:
                     operation_type, signal_uri = operation.split(":", 1)
                     result_unit = combine_signal_units(
@@ -1329,6 +1331,8 @@ class IMASPythonSource(DataSourceInterface):
                         others_signals_data[signal_uri]["unit"],
                         operation_type,
                     )
+
+                # Step 7: Computing 'operations'
                 data_to_be_returned = apply_signal_operations(
                     data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
                 )
