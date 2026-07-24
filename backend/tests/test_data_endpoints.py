@@ -284,7 +284,7 @@ def test_combined_features(entry_path, interpolation_entry_path_directory):
         "operations": ["add:2", "mul:3"],
         "smoothing_method": "gaussian_filter",
         "gaussian_smoothing_sigma": 1,
-        "signal_operations": [f"add:{db}#core_profiles/time"],
+        "signal_operations": [f"add:{db}#core_profiles/global_quantities/ip"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 200
@@ -375,7 +375,7 @@ def test_plot_data_coordinate_aliases(entry_path, expected_unit):
 
 def test_plot_data_with_signal_operations_rejects_different_units(entry_path):
     parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/v_loop",
         "signal_operations": [f"add:imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
@@ -398,7 +398,7 @@ def test_plot_data_with_signal_operations_updates_unit(entry_path, operation, ex
 def test_plot_data_with_signal_operations_same_shape_different_uris(interpolation_entry_path_directory):
     db_names = [
         f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
-        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_3",
     ]
 
     parameters = {
@@ -409,7 +409,7 @@ def test_plot_data_with_signal_operations_same_shape_different_uris(interpolatio
     assert response.status_code == 200
 
     response_body = response.json()
-    assert response_body["data"]["value"] == [[2.0, 4.0, 6.0], [2.0, 4.0, 6.0]]
+    assert response_body["data"]["value"] == [[12.0, 24.0, 36.0], [12.0, 24.0, 36.0]]
 
 
 def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_path_directory):
