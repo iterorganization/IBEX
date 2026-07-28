@@ -195,7 +195,7 @@ def test_plot_data_with_simple_operations_errors(entry_path):
 
 def test_plot_data_smoothing_with_wrong_target_node(entry_path):
     parameters = {
-        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targetet quantity must be time-based
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/time",  # targeted quantity must be time-based
         "smoothing_method": "gaussian_filter",
         "gaussian_smoothing_sigma": 1,
     }
@@ -272,6 +272,57 @@ def test_plot_data_requires_gaussian_sigma(entry_path):
     assert "gaussian_smoothing_sigma is required" in response.text
 
 
+def test_combined_features(entry_path, interpolation_entry_path_directory):
+    """
+    Single test exercising all data manipulation features:
+    simple operations, smoothing, interpolation (exact_value), and signal operations.
+    """
+    # --- Part 1: simple ops + gaussian smoothing + signal ops (entry_path) ---
+    db = f"imas:hdf5?path={entry_path}"
+    parameters = {
+        "uri": f"{db}#core_profiles/global_quantities/ip",
+        "operations": ["add:2", "mul:3"],
+        "smoothing_method": "gaussian_filter",
+        "gaussian_smoothing_sigma": 1,
+        "signal_operations": [f"add:{db}#core_profiles/global_quantities/ip"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == pytest.approx([11.28, 14.20, 18.0, 21.80, 24.72], 0.1)
+
+    # --- Part 2: different simple ops + savgol smoothing + exact_value interpolation + signal ops ---
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/vacuum_toroidal_field/b0",
+        "operations": ["mul:10", "pow:2"],
+        "smoothing_method": "savitzky-golay_filter",
+        "savgol_smoothing_window_length": 3,
+        "savgol_smoothing_polyorder": 1,
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
+        "interpolation_method": "exact_value",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    # db_1 b0: [0.1,0.2,0.3,0.4], mul:10+pow:2 -> [1,4,9,16]
+    # savgol wl=3 po=1 -> [0.6667,4.6667,9.6667,15.6667]
+    # exact_value interpolation on union [1,2,3,4] -> no change
+    # db_2 b0: [0.1,0.2,0.3]
+    # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None]
+    # signal add propagates missing operand data: [0.7667,4.8667,9.9667,None]
+    values = response_body["data"]["value"]
+    assert values[:3] == pytest.approx([0.76, 4.86, 9.96], 0.01)
+    assert values[3] is None
+
+
 def test_plot_data_requires_savgol_window_length_and_polyorder(entry_path):
     base_parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/profiles_1d[:]/time",
@@ -320,3 +371,118 @@ def test_plot_data_coordinate_aliases(entry_path, expected_unit):
 
     assert dim2_coordinate["name"].lower() == "theta"
     assert dim2_coordinate["unit"].lower() == expected_unit[1]
+
+
+def test_plot_data_with_signal_operations_rejects_different_units(entry_path):
+    parameters = {
+        "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/v_loop",
+        "signal_operations": [f"add:imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 466
+    assert "Cannot add signals with different units" in response.json()["message"]
+
+
+@pytest.mark.parametrize(("operation", "expected_unit"), [("mul", "s*s"), ("div", "")])
+def test_plot_data_with_signal_operations_updates_unit(entry_path, operation, expected_unit):
+    uri = f"imas:hdf5?path={entry_path}#core_profiles/time"
+    response = pytest.test_client.get(
+        "/data/plot_data",
+        params={"uri": uri, "signal_operations": [f"{operation}:{uri}"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["unit"] == expected_unit
+
+
+def test_plot_data_with_signal_operations_same_shape_different_uris(interpolation_entry_path_directory):
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_3",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2",
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    response_body = response.json()
+    assert response_body["data"]["value"] == [[12.0, 24.0, 36.0], [12.0, 24.0, 36.0]]
+
+
+def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_path_directory):
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/time",
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/time"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/time"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    # time1: [1, 2, 3, 4]
+    # time2: [1, 2, 3]
+    response_body = response.json()
+    assert response_body["data"]["value"] == [2.0, 4.0, 6.0, None]
+    assert response_body["data"]["shape"] == [4]
+    assert response_body["data"]["downsampled_shape"] == [4]
+
+    # reversed order
+    parameters = {
+        "uri": f"{db_names[1]}#equilibrium/time",
+        "signal_operations": [f"add:{db_names[0]}#equilibrium/time"],
+        "interpolate_over": [f"{db_names[0]}#equilibrium/time"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    # time1: [1, 2, 3]
+    # time2: [1, 2, 3, 4]
+    response_body = response.json()
+    assert response_body["data"]["value"] == [2.0, 4.0, 6.0, None]
+    # Interpolation expands the source from three to four samples.
+    assert response_body["data"]["shape"] == [4]
+    assert response_body["data"]["downsampled_shape"] == [4]
+
+
+def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_entry_path_directory):
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+
+    parameters = {
+        "uri": f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
+        "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+        "interpolate_over": [f"{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    response_body = response.json()
+
+    data = np.array(response_body["data"]["value"], dtype=float)
+    # data shape reflects common coordinates (reversed): [time, profiles_2d, dim2, dim1]
+    assert data.shape == (4, 4, 3, 12)
+    # db_1 and db_2 have disjoint valid dim1 locations after interpolation, so operand NaNs propagate.
+    assert np.count_nonzero(~np.isnan(data)) == 0
+
+    # ---- reversed: db_2 primary, db_1 operand ----
+    parameters = {
+        "uri": f"{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
+        "signal_operations": [f"add:{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+        "interpolate_over": [f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    response_body = response.json()
+
+    data = np.array(response_body["data"]["value"], dtype=float)
+    assert data.shape == (4, 4, 3, 12)
+    # db_1 and db_2 have disjoint valid dim1 locations after interpolation, so operand NaNs propagate.
+    assert np.count_nonzero(~np.isnan(data)) == 0

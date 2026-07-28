@@ -21,7 +21,7 @@ jobs:
         run: python -c "import sys; print(sys.version)"
 
       - name: Install the code linting and formatting tools
-        run: pip install --upgrade ruff
+        run: pip install --upgrade ruff==0.15.22
 
       - name: Check formatting of code with ruff
         run: ruff format --check backend/

@@ -5,7 +5,6 @@ from typing import Optional, Sequence, List
 import imas  # type: ignore
 import numpy as np  # type: ignore
 import re  # type: ignore
-from copy import copy  # type: ignore
 from idstools.database import DBMaster  # type: ignore
 from imas.ids_metadata import IDSMetadata  # type: ignore
 from imas.ids_primitive import (
@@ -52,6 +51,8 @@ from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_simple_operations,
     resolve_irregular_coordinate_data_shape,
+    apply_signal_operations,
+    combine_signal_units,
 )
 from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
@@ -1055,6 +1056,7 @@ class IMASPythonSource(DataSourceInterface):
                         }
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
+            result_unit = first_value.metadata.units or ""
             data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
             if first_value.metadata.ndim == 2:
@@ -1106,8 +1108,12 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END data smoothing =============
 
-            # ============= BEGIN resample data onto new time vector =============
+            try:
+                original_data_shape = np.asarray(data_to_be_returned).shape
+            except ValueError:
+                original_data_shape = "irregular"
 
+            # ============= BEGIN resample data onto new time vector =============
             def convert_to_lists(data):
                 if isinstance(data, list):
                     return [convert_to_lists(d) for d in data]
@@ -1115,6 +1121,10 @@ class IMASPythonSource(DataSourceInterface):
                     return data.tolist()
                 else:
                     return data
+
+            # list of dicts used when combining signals after
+            # {uri:str, data:list[*], interpolated_data: list[*]}
+            others_signals_data = {}
 
             if plot_data_query.interpolate_over:
                 # check for non-interpolatable coordinates
@@ -1153,6 +1163,10 @@ class IMASPythonSource(DataSourceInterface):
 
                 original_coord_values.reverse()
 
+                store_other_signals_data = False  # used for signal combining after interpolation
+                if plot_data_query.signal_operations:
+                    store_other_signals_data = True
+
                 for _uri in plot_data_query.interpolate_over:
                     _uri_obj = IMAS_URI(_uri)
 
@@ -1165,11 +1179,20 @@ class IMASPythonSource(DataSourceInterface):
                                 "IDS name and node path should be the same for source and target URI when interpolating data"
                             )
 
-                    new_plot_data_query = copy(plot_data_query)
-                    new_plot_data_query.uri = _uri
-                    new_plot_data_query.interpolate_over = None
-                    new_plot_data_query.smoothing_method = None
-                    interpolate_to_coordinates = self.get_plot_data(new_plot_data_query)["data"]["coordinates"]
+                    new_plot_data_query = PlotDataRequestModel(uri=_uri)
+                    # interpolate_to will be used later with signal combining
+                    interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
+                    interpolate_to_coordinates = interpolate_to["coordinates"]
+                    if store_other_signals_data:
+                        others_signals_data[_uri] = {
+                            "uri": _uri,
+                            "data": pad_to_rectangular(interpolate_to["value"]),
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
+                            ],
+                            "shape": interpolate_to["shape"],
+                            "unit": interpolate_to["unit"],
+                        }
 
                     if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
                         message = "Interpolation error. Source and target nodes have different number of coordinates."
@@ -1215,10 +1238,116 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END resample data onto new time vector =============
 
+            # ============= BEGIN signal operations =============
+            #
+            # Steps performed in this block:
+            # 1. Collect all signal URIs referenced in signal_operations
+            # 2. Pad data to rectangular if shape is irregular
+            # 3. For each signal URI, fetch and prepare data:
+            #    a. If the signal was already interpolated (stored during
+            #       interpolation phase), skip fetching
+            #    b. Otherwise fetch the signal and check shape compatibility
+            # 4. Prepare operand data for each signal:
+            #    a. If interpolation was requested, resample onto common coords
+            #    b. Otherwise normalize raw signal data to a NumPy array
+            # 5. Build a flat uri->array dict and apply all signal operations
+
+            if plot_data_query.signal_operations:
+                # Step 1: extract unique signal URIs from operation strings
+                signal_op_uris = set()
+                for op_str in plot_data_query.signal_operations or []:
+                    _, op_uri = op_str.split(":", 1)
+                    signal_op_uris.add(op_uri)
+
+                # Step 2: ensure rectangular data for downstream processing
+                if original_data_shape == "irregular":
+                    data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+                # Step 3: fetch and prepare each signal referenced in operations
+                for signal_uri in signal_op_uris:
+                    if signal_uri not in others_signals_data:
+                        # Signal was not pre-loaded during interpolation phase.
+                        # Fetch it now and verify shape compatibility.
+                        request = PlotDataRequestModel(uri=signal_uri)
+                        other_signal = self.get_plot_data(request)
+
+                        # Comparing signal shapes
+                        if (
+                            other_signal["data"]["shape"] == "irregular"
+                            or other_signal["data"]["shape"] != original_data_shape
+                        ):
+                            msg = (
+                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                                "Signal and data shapes do not match. "
+                                "Try interpolating the signal onto the data shape."
+                            )
+                            raise InvalidParametersException(msg)
+
+                        # Comparing coordinates
+                        coordinates_match = self._coordinates_match(
+                            coordinates_to_be_returned, other_signal["data"]["coordinates"]
+                        )
+
+                        if not coordinates_match:
+                            msg = (
+                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                                "Coordinates do not match. "
+                                "Try interpolating the signal onto the data coordinates."
+                            )
+                            raise InvalidParametersException(msg)
+
+                        others_signals_data[signal_uri] = {
+                            "uri": request.uri,
+                            "data": other_signal["data"]["value"],
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"]))))
+                                for c in other_signal["data"]["coordinates"]
+                            ],
+                            "shape": other_signal["data"]["shape"],
+                            "unit": other_signal["data"]["unit"],
+                        }
+
+                    # Step 4: prepare operand data (resampled or raw)
+                    if plot_data_query.interpolate_over:
+                        # Resample signal data onto the common coordinate grid
+                        signal_data = resample_data_without_interpolation(
+                            tuple(reversed(others_signals_data[signal_uri]["coordinates"])),
+                            others_signals_data[signal_uri]["data"],
+                            tuple(common_coords_values),
+                        )
+                    else:
+                        signal_data = others_signals_data[signal_uri]["data"]
+
+                    others_signals_data[signal_uri]["data"] = np.asarray(signal_data)
+
+                # Step 5: flatten dict and apply operations in order
+                signal_data_by_uri = {uri: info["data"] for uri, info in others_signals_data.items()}
+
+                # Step 6: Handling operations units
+                for operation in plot_data_query.signal_operations:
+                    operation_type, signal_uri = operation.split(":", 1)
+                    result_unit = combine_signal_units(
+                        result_unit,
+                        others_signals_data[signal_uri]["unit"],
+                        operation_type,
+                    )
+
+                # Step 7: Computing 'operations'
+                data_to_be_returned = apply_signal_operations(
+                    data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
+                )
+
+            # ============= END signal operations =============
+
+            # Interpolation and signal operations can change the data shape.
+            # The response's ``shape`` describes the processed data before
+            # downsampling, rather than the raw shape used for compatibility
+            # checks above.
             try:
-                original_data_shape = np.asarray(data_to_be_returned).shape
+                processed_data_shape = np.asarray(data_to_be_returned).shape
             except ValueError:
-                original_data_shape = "irregular"
+                processed_data_shape = "irregular"
+
             # Downsample only 1D data
             if first_value.metadata.ndim == 1:
                 if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":
@@ -1250,8 +1379,8 @@ class IMASPythonSource(DataSourceInterface):
             result = {
                 "data": {
                     "name": node_path.split("/")[-1],
-                    "unit": first_value.metadata.units,
-                    "shape": original_data_shape,
+                    "unit": result_unit,
+                    "shape": processed_data_shape,
                     "downsampled_shape": downsampled_shape,
                     "ndim": first_value.metadata.ndim,
                     "path": f"#{ids}/{node_path}",
@@ -1271,6 +1400,17 @@ class IMASPythonSource(DataSourceInterface):
                     new_shape_factors_list.append(coord_name)
                 coordinate["coordinates"] = new_shape_factors_list
         return result
+
+    def _coordinates_match(self, coordinates_1, coordinates_2):
+        if len(coordinates_1) != len(coordinates_2):
+            return False
+
+        coordinates_match = all(
+            coordinate_1["name"] == coordinate_2["name"]
+            and np.array_equal(np.asarray(coordinate_1["value"]), np.asarray(coordinate_2["value"]), equal_nan=True)
+            for coordinate_1, coordinate_2 in zip(coordinates_1, coordinates_2)
+        )
+        return coordinates_match
 
     def _is_empty(self, seq):
         """Checks if list is essentially empty (contains only empty lists or empty strings)"""

@@ -183,16 +183,19 @@ def apply_gaussian_filter(data: list | np.ndarray, sigma, axis: int | None = Non
         raise InvalidParametersException(msg)
 
 
-def _safe_division(data, divisor):
-    if divisor == 0:
-        raise InvalidParametersException("Division by zero is not allowed")
-    return data / divisor
-
-
 def _safe_root(data, exponent):
     if exponent == 0:
         raise InvalidParametersException("Root by zero is not allowed")
     return np.power(data, 1 / exponent)
+
+
+def _safe_division(data, divisor):
+    if isinstance(divisor, np.ndarray):
+        if np.any(divisor == 0):
+            raise InvalidParametersException("Division by zero is not allowed")
+    elif divisor == 0:
+        raise InvalidParametersException("Division by zero is not allowed")
+    return data / divisor
 
 
 _SIMPLE_OPERATIONS_FUNCTIONS = {
@@ -203,6 +206,40 @@ _SIMPLE_OPERATIONS_FUNCTIONS = {
     "pow": np.power,
     "root": _safe_root,
 }
+
+_SIGNAL_OPERATIONS_FUNCTIONS = {
+    "add": _op.add,
+    "sub": _op.sub,
+    "mul": _op.mul,
+    "div": _safe_division,
+}
+
+
+def combine_signal_units(left_unit: str, right_unit: str, operation: str) -> str:
+    """Return the unit produced by a binary signal operation."""
+    left_unit = left_unit or ""
+    right_unit = right_unit or ""
+
+    if operation in {"add", "sub"}:
+        if left_unit != right_unit:
+            raise InvalidParametersException(
+                f"Cannot {operation} signals with different units ({left_unit!r} and {right_unit!r})"
+            )
+        return left_unit
+    if operation == "mul":
+        if not left_unit:
+            return right_unit
+        if not right_unit:
+            return left_unit
+        return f"{left_unit}*{right_unit}"
+    if operation == "div":
+        if left_unit == right_unit:
+            return ""
+        if not right_unit:
+            return left_unit
+        return f"{left_unit}/{right_unit}"
+
+    raise InvalidParametersException(f"Unknown operation type: {operation}")
 
 
 def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
@@ -230,6 +267,34 @@ def apply_simple_operations(data: list | np.ndarray, operations: list[str]):
         raise InvalidParametersException(msg)
 
 
+def apply_signal_operations(data: list | np.ndarray, operations: list[str], signal_data_by_uri: dict):
+    """
+    Apply signal operations to data in the order given.
+    Each operation is a string in the format 'type:uri', e.g. 'add:some/imas/uri', 'mul:other/uri'.
+    :param data: Input data
+    :param operations: List of operations and URIs divided by colon (:)
+    :param signal_data_by_uri: Dict mapping signal URIs to their interpolated data arrays.
+    :return: Data after operation
+    """
+
+    if isinstance(data, list):
+        data = np.array(data)
+    if isinstance(data, (np.ndarray, IDSNumericArray)):
+        result = data
+        for op_str in operations:
+            op_type, uri = op_str.split(":", 1)
+            value = signal_data_by_uri[uri]
+            func = _SIGNAL_OPERATIONS_FUNCTIONS.get(op_type)
+            if func is None:
+                raise InvalidParametersException(f"Unknown operation type: {op_type}")
+
+            result = func(result, value)
+        return result
+    else:
+        msg = "Signal operations can be executed only on numeric arrays, not single values or strings."
+        raise InvalidParametersException(msg)
+
+
 def union_arrays(data: list):
     return reduce(np.union1d, data)
 
@@ -253,8 +318,8 @@ def calculate_coordinate_shapes(shape: list[int], dims: int):
     :return: List of shapes for each coordinate.
     """
 
-    if dims < 0 or dims >= len(shape):
-        raise ValueError("dims must be >= 0 and < len(shape)")
+    if dims < 0 or dims > len(shape):
+        raise ValueError("dims must be >= 0 and <= len(shape)")
 
     # Base dimensions (dimensions added by AoS in path), e.g. [4, 5]
     base = shape[:dims]
@@ -399,16 +464,7 @@ def resample_data_without_interpolation(original_coords, data, target_coords):
     target_indices = []
 
     for orig, target in zip(original_coords, target_coords):
-        # Build dictionary: coordinate -> target index
-        lookup = {}
-        for i, value in enumerate(target):
-            lookup[value] = i
-
-        axis_indices = []
-
-        for value in orig:
-            axis_indices.append(lookup[value])
-
+        axis_indices = np.searchsorted(np.asarray(target), np.asarray(orig))
         target_indices.append(axis_indices)
 
     # Create mesh

@@ -57,9 +57,9 @@ dependencies = [
 [project.optional-dependencies]
 # these self-dependencies are available since pip 21.2
 all = [
-    "ibex[test]",
-    "ibex[linting]",
-    "ibex[docs]",
+    "imas-ibex[test]",
+    "imas-ibex[linting]",
+    "imas-ibex[docs]",
 ]
 
 test = [
@@ -70,7 +70,7 @@ test = [
 ]
 
 linting = [
-    "ruff",
+    "ruff==0.15.22",
 ]
 
 docs =[
