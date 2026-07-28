@@ -1122,9 +1122,19 @@ class IMASPythonSource(DataSourceInterface):
                 else:
                     return data
 
-            # list of dicts used when combining signals after
-            # {uri:str, data:list[*], interpolated_data: list[*]}
-            others_signals_data = {}
+            # Signals used when combining data after interpolation.
+            # {uri: str, data: list[*], coordinates: list[list], shape: list, unit: str}
+            signals_data = {
+                plot_data_query.uri: {
+                    "uri": plot_data_query.uri,
+                    "data": data_to_be_returned,
+                    "coordinates": [
+                        sorted(set(flatten(convert_to_lists(c["value"])))) for c in coordinates_to_be_returned
+                    ],
+                    "shape": original_data_shape,
+                    "unit": result_unit,
+                }
+            }
 
             if plot_data_query.interpolate_over:
                 # check for non-interpolatable coordinates
@@ -1184,7 +1194,7 @@ class IMASPythonSource(DataSourceInterface):
                     interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
                     interpolate_to_coordinates = interpolate_to["coordinates"]
                     if store_other_signals_data:
-                        others_signals_data[_uri] = {
+                        signals_data[_uri] = {
                             "uri": _uri,
                             "data": pad_to_rectangular(interpolate_to["value"]),
                             "coordinates": [
@@ -1226,6 +1236,15 @@ class IMASPythonSource(DataSourceInterface):
                         interpolation_method=plot_data_query.interpolation_method,
                     )
 
+                # Keep the primary signal entry in sync with its resampled data.
+                signals_data[plot_data_query.uri].update(
+                    {
+                        "data": np.array(data_to_be_returned, copy=True),
+                        "coordinates": [list(values) for values in reversed(common_coords_values)],
+                        "shape": list(np.asarray(data_to_be_returned).shape),
+                    }
+                )
+
                 new_coordinate_shapes = calculate_coordinate_shapes(
                     list(np.asarray(data_to_be_returned).shape),
                     first_value.metadata.ndim,
@@ -1265,7 +1284,7 @@ class IMASPythonSource(DataSourceInterface):
 
                 # Step 3: fetch and prepare each signal referenced in operations
                 for signal_uri in signal_op_uris:
-                    if signal_uri not in others_signals_data:
+                    if signal_uri not in signals_data:
                         # Signal was not pre-loaded during interpolation phase.
                         # Fetch it now and verify shape compatibility.
                         request = PlotDataRequestModel(uri=signal_uri)
@@ -1296,7 +1315,7 @@ class IMASPythonSource(DataSourceInterface):
                             )
                             raise InvalidParametersException(msg)
 
-                        others_signals_data[signal_uri] = {
+                        signals_data[signal_uri] = {
                             "uri": request.uri,
                             "data": other_signal["data"]["value"],
                             "coordinates": [
@@ -1311,24 +1330,24 @@ class IMASPythonSource(DataSourceInterface):
                     if plot_data_query.interpolate_over:
                         # Resample signal data onto the common coordinate grid
                         signal_data = resample_data_without_interpolation(
-                            tuple(reversed(others_signals_data[signal_uri]["coordinates"])),
-                            others_signals_data[signal_uri]["data"],
+                            tuple(reversed(signals_data[signal_uri]["coordinates"])),
+                            signals_data[signal_uri]["data"],
                             tuple(common_coords_values),
                         )
                     else:
-                        signal_data = others_signals_data[signal_uri]["data"]
+                        signal_data = signals_data[signal_uri]["data"]
 
-                    others_signals_data[signal_uri]["data"] = np.asarray(signal_data)
+                    signals_data[signal_uri]["data"] = np.asarray(signal_data)
 
                 # Step 5: flatten dict and apply operations in order
-                signal_data_by_uri = {uri: info["data"] for uri, info in others_signals_data.items()}
+                signal_data_by_uri = {uri: info["data"] for uri, info in signals_data.items()}
 
                 # Step 6: Handling operations units
                 for operation in plot_data_query.signal_operations:
                     operation_type, signal_uri = operation.split(":", 1)
                     result_unit = combine_signal_units(
                         result_unit,
-                        others_signals_data[signal_uri]["unit"],
+                        signals_data[signal_uri]["unit"],
                         operation_type,
                     )
 
