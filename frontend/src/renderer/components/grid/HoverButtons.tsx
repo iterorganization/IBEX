@@ -20,7 +20,6 @@ import {
   IconTarget,
 } from '@tabler/icons-react';
 import { useElementSize, useHover, useMergedRef } from '@mantine/hooks';
-import { Configuration, CustomizedGridType, DataGridPlot } from '../../types';
 import {
   Configuration,
   CustomizedGridType,
