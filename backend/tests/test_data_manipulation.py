@@ -1,10 +1,81 @@
 import numpy as np
 import pytest
+from ibex.data_source.exception import InvalidParametersException
 from ibex.data_source.imas_python_source_utils import (
     apply_gaussian_filter,
     apply_savgol_filter,
+    apply_signal_operations,
     apply_simple_operations,
+    combine_signal_units,
 )
+
+
+def test_apply_signal_operations_addition():
+    addend_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([1.0, 2.0, 3.0])
+    operations = [f"add:{addend_uri}"]
+    signal_data_by_uri = {addend_uri: np.array([10.0, 20.0, 30.0])}
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
+    assert np.allclose(result, [11.0, 22.0, 33.0])
+
+
+def test_apply_signal_operations_subtraction():
+    subtrahend_uri = "imas:hdf5?path=/dummy/interpolation_db_2#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([10.0, 20.0, 30.0])
+    operations = [f"sub:{subtrahend_uri}"]
+    signal_data_by_uri = {subtrahend_uri: np.array([1.0, 2.0, 3.0])}
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
+    assert np.allclose(result, [9.0, 18.0, 27.0])
+
+
+def test_apply_signal_operations_multiplication():
+    factor_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([1.0, 2.0, 3.0])
+    operations = [f"mul:{factor_uri}"]
+    signal_data_by_uri = {factor_uri: np.array([2.0, 3.0, 4.0])}
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
+    assert np.allclose(result, [2.0, 6.0, 12.0])
+
+
+def test_apply_signal_operations_division():
+    divisor_uri = "imas:hdf5?path=/dummy/interpolation_db_2#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([10.0, 20.0, 30.0])
+    operations = [f"div:{divisor_uri}"]
+    signal_data_by_uri = {divisor_uri: np.array([2.0, 5.0, 6.0])}
+    result = apply_signal_operations(data, operations, signal_data_by_uri)
+    assert np.allclose(result, [5.0, 4.0, 5.0])
+
+
+def test_apply_signal_operations_preserves_operand_nans():
+    operand_uri = "imas:hdf5?path=/dummy/interpolation_db_1#equilibrium/time_slice[:]/profiles_2d[:]/psi"
+    data = np.array([10.0, 20.0, 30.0])
+    signal_data_by_uri = {operand_uri: np.array([1.0, np.nan, 3.0])}
+    result = apply_signal_operations(data, [f"add:{operand_uri}"], signal_data_by_uri)
+    assert np.allclose(result, [11.0, np.nan, 33.0], equal_nan=True)
+
+
+@pytest.mark.parametrize(
+    ("left_unit", "right_unit", "operation", "expected"),
+    [
+        ("kg", "kg", "add", "kg"),
+        ("kg", "kg", "sub", "kg"),
+        ("kg", "kg", "mul", "kg*kg"),
+        ("kg", "kg", "div", ""),
+        ("kg", "s", "div", "kg/s"),
+        ("", "kg", "mul", "kg"),
+    ],
+)
+def test_combine_signal_units(left_unit, right_unit, operation, expected):
+    assert combine_signal_units(left_unit, right_unit, operation) == expected
+
+
+@pytest.mark.parametrize("operation", ["add", "sub"])
+def test_combine_signal_units_rejects_different_units(operation):
+    with pytest.raises(
+        InvalidParametersException,
+        match=rf"Cannot {operation} signals with different units",
+    ):
+        combine_signal_units("kg", "s", operation)
 
 
 def test_apply_gaussian_smoothing():
@@ -80,3 +151,31 @@ def test_apply_simple_operations_uses_order():
     # add then mul -> (5+1)*2 = 12
     result = apply_simple_operations(data, ["add:1", "mul:2"])
     assert result == pytest.approx([12.0])
+
+
+def test_apply_signal_operations_uses_order():
+    uri_a = "some/uri/a"
+    uri_b = "some/uri/b"
+    data = np.array([5.0])
+    signal_data_by_uri = {uri_a: np.array([2.0]), uri_b: np.array([1.0])}
+    # mul then add -> (5*2)+1 = 11
+    result = apply_signal_operations(data, [f"mul:{uri_a}", f"add:{uri_b}"], signal_data_by_uri)
+    assert result == pytest.approx([11.0])
+    # add then mul -> (5+1)*2 = 12
+    result = apply_signal_operations(data, [f"add:{uri_b}", f"mul:{uri_a}"], signal_data_by_uri)
+    assert result == pytest.approx([12.0])
+
+
+def test_apply_signal_operations_2D():
+    uri = "some/uri"
+    data = [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
+    signal_data_by_uri = {uri: np.array([2.0, 3.0])}
+    result = apply_signal_operations(data, [f"add:{uri}", f"mul:{uri}"], signal_data_by_uri)
+    assert np.asarray(result[0]) == pytest.approx([6.0, 15.0])
+    assert np.asarray(result[1]) == pytest.approx([10.0, 21.0])
+
+
+def test_apply_signal_operations_rejects_division_by_zero():
+    uri = "some/uri"
+    with pytest.raises(InvalidParametersException, match="Division by zero is not allowed"):
+        apply_signal_operations(np.array([1.0]), [f"div:{uri}"], {uri: np.array([0.0])})

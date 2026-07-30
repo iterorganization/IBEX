@@ -20,6 +20,7 @@ import {
   plotNodeUriLoaded,
   updateCustomDataTree,
   readIbexConfig,
+  formatGeometriesToSave,
 } from '../utils';
 import { VisualizationURIModal } from '../pages';
 import { showNotification } from '@mantine/notifications';
@@ -107,6 +108,11 @@ export function MainLayout() {
         downsampled_method: dataGrid?.downsampled_method,
         downsampled_size: dataGrid?.downsampled_size,
         interpolated_method: dataGrid.interpolated_method,
+        is_geometry_node: dataGrid.is_geometry_node,
+        geometries: formatGeometriesToSave(
+          dataGrid?.geometries,
+          active.dataURI,
+        ),
         xAxisData: dataGrid.xAxisData,
         yAxisData: dataGrid.yAxisData,
         y2AxisData: dataGrid?.y2AxisData,
@@ -239,7 +245,10 @@ export function MainLayout() {
         dataURI: newIbexState.dataURI,
         customDataTree: updateCustomDataTree([], newIbexState.dataURI),
         checkedNodeURI: [],
-        dataPlot: await plotNodeUriLoaded(newListDataGridPlot),
+        dataPlot: await plotNodeUriLoaded(
+          newListDataGridPlot,
+          newIbexState.dataURI,
+        ),
         saved: true,
         path: path,
       };

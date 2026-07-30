@@ -9,6 +9,7 @@ import {
   DataGridPlot,
   DataPlotly,
   ErrorBandData,
+  Geometry,
   FieldValueResponse,
   NodeInfoTypeEnum,
   PlotCoordinatesResponse,
@@ -16,6 +17,7 @@ import {
   PlotLine,
   URIData,
   URITreeNodeData,
+  GeometryInfos,
 } from '../types';
 import { ScatterData } from 'plotly.js';
 import {
@@ -179,6 +181,7 @@ export const handleNewPlot = async (
     xAxis,
     yAxis,
     updatedActive.dataPlot || [],
+    nodes[0],
   );
 
   let defaultXValue: number[] = [];
@@ -211,6 +214,7 @@ export const handleNewPlot = async (
     response.data.description,
   );
   updatedPlot.dataType = nodes[0].type;
+  updatedPlot.is_geometry_node = nodes[0].is_geometry_node;
 
   // Initialize the axis-ratio rule from the 2D rule (matching x/y coordinate units)
   updatedPlot.forceXyRatio = computeDefaultForceXyRatio(
@@ -798,6 +802,7 @@ export const fetchErrorBandsInConfig = async (
             name: updatedPlot.labelUri,
             uri: normalizeIndices(error_band.path),
             type: selectedDataPlot.dataType,
+            is_geometry_node: selectedDataPlot.is_geometry_node,
           };
           const exists = updatedCheckedNodeURI.some(
             (node) =>
@@ -818,6 +823,416 @@ export const fetchErrorBandsInConfig = async (
     }
   } catch (error) {
     console.error('Error in fetchErrorBandsInConfig: ', error);
+  }
+};
+
+function closeContourGeometrie(data: AxisData): AxisData {
+  if (typeof data[0] === 'number') {
+    const vector = data as number[];
+
+    // Add first element in the end of the vector
+    return [...vector, vector[0]] as AxisData;
+  }
+
+  // Go through last depth
+  //eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]).map(closeContourGeometrie) as AxisData;
+}
+
+const fetchGeometryOutline = async (
+  uri: string,
+  path: string,
+  shouldSwitchAxis: boolean,
+) => {
+  const rPath = path + 'r';
+  const zPath = path + 'z';
+
+  // Get r
+  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  rResponse.data.value = closeContourGeometrie(rResponse.data.value);
+  const rFormattedCoordinates = formatCoordinates(
+    rResponse.data.coordinates,
+    0,
+  );
+  const rVector = getVectorData(rFormattedCoordinates, rResponse.data.value);
+
+  // Get z
+  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+  zResponse.data.value = closeContourGeometrie(zResponse.data.value);
+  const zFormattedCoordinates = formatCoordinates(
+    zResponse.data.coordinates,
+    0,
+  );
+  const zVector = getVectorData(zFormattedCoordinates, zResponse.data.value);
+
+  let x, y: number[];
+
+  if (shouldSwitchAxis) {
+    x = zVector;
+    y = rVector;
+  } else {
+    x = rVector;
+    y = zVector;
+  }
+
+  // Get legend name
+  const firstPart = path.slice(1).split('/')[0];
+  const secondPart = path.slice(1).split('/unit')[0].split('/');
+  const groupLegend = firstPart + '/' + secondPart[secondPart.length - 1];
+
+  // Get outline
+  const outlineGeometry: Geometry = {
+    x: [...x],
+    y: [...y],
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: 'black', width: 2 },
+    geometry_node: uri + path,
+    nodeUris: [uri + rPath, uri + zPath],
+    name: groupLegend,
+    legendgroup: groupLegend,
+    showlegend: false,
+  };
+  return outlineGeometry;
+};
+
+const fetchGeometryRectangle = async (
+  uri: string,
+  path: string,
+  shouldSwitchAxis: boolean,
+) => {
+  const rPath = path + 'r';
+  const zPath = path + 'z';
+  const widthPath = path + 'width';
+  const heightPath = path + 'height';
+
+  // Get r
+  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  const rVector = rResponse.data.value as number[][];
+
+  // Get z
+  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+  const zVector = zResponse.data.value as number[][];
+
+  // Get width
+  const widthResponse = await fetchDataPlot(normalizeIndices(uri + widthPath));
+  const widthVector = widthResponse.data.value as number[][];
+
+  // Get height
+  const heightResponse = await fetchDataPlot(
+    normalizeIndices(uri + heightPath),
+  );
+  const heightVector = heightResponse.data.value as number[][];
+
+  const rectangleGeometry: Geometry[] = [];
+  const lastCoord =
+    zResponse.data.coordinates[zResponse.data.coordinates.length - 1];
+  for (const [coordIndex] of lastCoord.value.entries()) {
+    if (
+      rVector[coordIndex][0] === -9e40 ||
+      zVector[coordIndex][0] === -9e40 ||
+      widthVector[coordIndex][0] === -9e40 ||
+      heightVector[coordIndex][0] === -9e40
+    ) {
+      // Data equals to -9e+40 are unexpected
+      continue;
+    }
+
+    // Format (x,y) points with rectangle rule
+    let x, y: number[];
+    x = [
+      rVector[coordIndex][0] - widthVector[coordIndex][0] / 2,
+      rVector[coordIndex][0] + widthVector[coordIndex][0] / 2,
+      rVector[coordIndex][0] + widthVector[coordIndex][0] / 2,
+      rVector[coordIndex][0] - widthVector[coordIndex][0] / 2,
+    ];
+    y = [
+      zVector[coordIndex][0] - heightVector[coordIndex][0] / 2,
+      zVector[coordIndex][0] - heightVector[coordIndex][0] / 2,
+      zVector[coordIndex][0] + heightVector[coordIndex][0] / 2,
+      zVector[coordIndex][0] + heightVector[coordIndex][0] / 2,
+    ];
+
+    // Close x & y vectors
+    x.push(x[0]);
+    y.push(y[0]);
+
+    if (shouldSwitchAxis) {
+      const tempX = x;
+      x = y;
+      y = tempX;
+    }
+
+    // Get legend name
+    const groupLegend =
+      path.slice(1).split('/')[0] + '/' + path.slice(1).split('/')[1];
+
+    // Add a rectangle
+    rectangleGeometry.push({
+      x: [...x],
+      y: [...y],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'orange', width: 2 },
+      geometry_node: uri + path,
+      nodeUris: [uri + rPath, uri + zPath, uri + widthPath, uri + heightPath],
+      name: groupLegend,
+      legendgroup: groupLegend,
+      showlegend: false,
+      fill: 'toself',
+    } as Geometry);
+  }
+  // Return rectangle list
+  return rectangleGeometry;
+};
+
+const fetchGeometryOblique = async (
+  uri: string,
+  path: string,
+  shouldSwitchAxis: boolean,
+) => {
+  const rPath = path + 'r';
+  const zPath = path + 'z';
+  const lengthAlphaPath = path + 'length_alpha';
+  const lengthBetaPath = path + 'length_beta';
+  const alphaPath = path + 'alpha';
+  const betaPath = path + 'beta';
+
+  // Get r
+  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  const rVector = rResponse.data.value as number[][];
+
+  // Get z
+  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
+  const zVector = zResponse.data.value as number[][];
+
+  // Get length alpha
+  const lengthAlphaResponse = await fetchDataPlot(
+    normalizeIndices(uri + lengthAlphaPath),
+  );
+  const lengthAlphaVector = lengthAlphaResponse.data.value as number[][];
+
+  // Get length beta
+  const lengthBetaResponse = await fetchDataPlot(
+    normalizeIndices(uri + lengthBetaPath),
+  );
+  const lengthBetaVector = lengthBetaResponse.data.value as number[][];
+
+  // Get alpha
+  const alphaResponse = await fetchDataPlot(normalizeIndices(uri + alphaPath));
+  const alphaVector = alphaResponse.data.value as number[][];
+
+  // Get beta
+  const betaResponse = await fetchDataPlot(normalizeIndices(uri + betaPath));
+  const betaVector = betaResponse.data.value as number[][];
+  const obliqueGeometry: Geometry[] = [];
+  const lastCoord =
+    zResponse.data.coordinates[zResponse.data.coordinates.length - 1];
+  for (const [coordIndex] of lastCoord.value.entries()) {
+    if (
+      rVector[coordIndex][0] === -9e40 ||
+      zVector[coordIndex][0] === -9e40 ||
+      lengthAlphaVector[coordIndex][0] === -9e40 ||
+      lengthBetaVector[coordIndex][0] === -9e40 ||
+      alphaVector[coordIndex][0] === -9e40 ||
+      betaVector[coordIndex][0] === -9e40
+    ) {
+      // Data equals to -9e+40 are unexpected
+      continue;
+    }
+
+    // Format (x,y) points with oblique rule
+    let x, y: number[];
+
+    const r = rVector[coordIndex][0];
+    const z = zVector[coordIndex][0];
+
+    const alphaLength = lengthAlphaVector[coordIndex][0];
+    const betaLength = lengthBetaVector[coordIndex][0];
+
+    const alpha = alphaVector[coordIndex][0];
+    const beta = betaVector[coordIndex][0];
+
+    // alpha: R axis reference
+    const vxAlpha = alphaLength * Math.cos(alpha);
+    const vyAlpha = alphaLength * Math.sin(alpha);
+
+    // beta: Z axis reference
+    const vxBeta = -betaLength * Math.sin(beta);
+    const vyBeta = betaLength * Math.cos(beta);
+
+    const p0 = { x: r, y: z };
+
+    const p1 = {
+      x: r + vxAlpha,
+      y: z + vyAlpha,
+    };
+
+    const p2 = {
+      x: r + vxBeta,
+      y: z + vyBeta,
+    };
+
+    const p3 = {
+      x: p1.x + vxBeta,
+      y: p1.y + vyBeta,
+    };
+
+    x = [p0.x, p1.x, p3.x, p2.x, p0.x];
+
+    y = [p0.y, p1.y, p3.y, p2.y, p0.y];
+
+    // Close x & y vectors
+    x.push(x[0]);
+    y.push(y[0]);
+
+    if (shouldSwitchAxis) {
+      const tempX = x;
+      x = y;
+      y = tempX;
+    }
+
+    // Get legend name
+    const groupLegend =
+      path.slice(1).split('/')[0] + '/' + path.slice(1).split('/')[1];
+
+    // Add a oblique
+    obliqueGeometry.push({
+      x: [...x],
+      y: [...y],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'orange', width: 2 },
+      geometry_node: uri + path,
+      nodeUris: [
+        uri + rPath,
+        uri + zPath,
+        uri + lengthAlphaPath,
+        uri + lengthBetaPath,
+        uri + alphaPath,
+        uri + betaPath,
+      ],
+      name: groupLegend,
+      legendgroup: groupLegend,
+      showlegend: false,
+      fill: 'toself',
+    } as Geometry);
+  }
+  // Return oblique list
+  return obliqueGeometry;
+};
+
+export const fetchGeometries = async (
+  wantedGeometryPath: string,
+  dataPlot: DataGridPlot,
+  updatedCheckedNodeURI?: URITreeNodeData[],
+  geometryInfos?: GeometryInfos,
+  dataURI?: URIData[],
+) => {
+  try {
+    // Replace uri name by real uri if needed
+    if (wantedGeometryPath.split('#')[0].includes('URI-')) {
+      const uriName = wantedGeometryPath.split('#')[0];
+      const realUri = dataURI.find((uri) => uri.name === uriName)?.uri;
+      if (realUri) {
+        wantedGeometryPath = realUri + '#' + wantedGeometryPath.split('#')[1];
+      }
+    }
+
+    const uri = wantedGeometryPath.split('#')[0];
+    const path = '#' + wantedGeometryPath.split('#')[1];
+
+    const shouldSwitchAxis =
+      dataPlot.coordinates.findIndex((coord) => coord.axeIndex === 0) === 1;
+
+    const pathSplitted = wantedGeometryPath.split('/');
+    const typeOfGeometry = pathSplitted[pathSplitted.length - 2];
+
+    if (typeOfGeometry === 'outline') {
+      // Get outline
+      const contourGeometry = await fetchGeometryOutline(
+        uri,
+        path,
+        shouldSwitchAxis,
+      );
+      dataPlot.geometries.push(contourGeometry);
+    } else if (typeOfGeometry === 'geometry') {
+      const types = Array.from(
+        new Set([
+          ...geometryInfos.parameters.map((param) => param.split('/')[0]),
+        ]),
+      );
+
+      for (const type of types) {
+        if (type === 'rectangle') {
+          // Get rectangle
+          const rectangleGeometry = await fetchGeometryRectangle(
+            uri,
+            path + type + '/',
+            shouldSwitchAxis,
+          );
+          dataPlot.geometries = [...dataPlot.geometries, ...rectangleGeometry];
+        } else if (type === 'oblique') {
+          // Get oblique
+          const obliqueGeometry = await fetchGeometryOblique(
+            uri,
+            path + type + '/',
+            shouldSwitchAxis,
+          );
+          dataPlot.geometries = [...dataPlot.geometries, ...obliqueGeometry];
+        }
+      }
+    } else {
+      showNotification({
+        title: `Unable to plot ${typeOfGeometry} geometry`,
+        message: `${typeOfGeometry} geometries are not implemented yet`,
+        color: 'yellow',
+      });
+      return;
+    }
+
+    if (dataPlot?.geometries) {
+      const displayedLegendGroups: string[] = [];
+      // Show each group in legend
+      for (const geometry of dataPlot.geometries) {
+        if (!displayedLegendGroups.find((lg) => lg === geometry.legendgroup)) {
+          displayedLegendGroups.push(geometry.legendgroup);
+          geometry.showlegend = true;
+        }
+      }
+    }
+
+    if (dataPlot.isEditing && dataPlot?.geometries && updatedCheckedNodeURI) {
+      // Check geometries in tree
+      for (const geometry of dataPlot.geometries) {
+        for (const uriOfGeo of geometry.nodeUris) {
+          const newCheckedNode = {
+            name: dataPlot.plot[0].labelUri,
+            uri: normalizeIndices(uriOfGeo),
+            type: NodeInfoTypeEnum.FLOAT,
+            is_geometry_node: true,
+          } as URITreeNodeData;
+          const exists = updatedCheckedNodeURI.some(
+            (node) =>
+              node.name === newCheckedNode.name &&
+              node.uri === newCheckedNode.uri,
+          );
+          if (!exists) {
+            updatedCheckedNodeURI.push(newCheckedNode);
+          }
+        }
+      }
+    }
+
+    // Return dataPlot list with all geometries
+    return dataPlot;
+  } catch (error) {
+    console.error('Error getting geometries:', error);
+    showNotification({
+      title: 'Geometry',
+      message: 'Failed to get geometry',
+      color: 'red',
+    });
   }
 };
 
@@ -1002,8 +1417,8 @@ const formatErrorBandLayout = (
     }
   }
   const errBandPartPlot: Partial<ScatterData> = {
-    x: mainPlot.x,
-    y: yErrBandPart,
+    x: [...mainPlot.x],
+    y: [...yErrBandPart],
     type: 'scatter',
     mode: 'lines',
     line: { width: 0, shape: lineShape },
@@ -1209,6 +1624,7 @@ export function formatConfigBeforeLoadingURIs(
           unit: '',
         } as DataPlotly;
       }),
+      geometries: (data?.geometries as Geometry[]) || [],
       synchronizedGrids: data?.synchronizedGrids
         ? data.synchronizedGrids
         : { color: '', list: [] },
@@ -1262,6 +1678,7 @@ function formatCoordinates(
  */
 export async function plotNodeUriLoaded(
   dataGridPlot: DataGridPlot[],
+  dataURI: URIData[],
 ): Promise<DataGridPlot[]> {
   try {
     let errorHasOccurred = false;
@@ -1443,6 +1860,29 @@ export async function plotNodeUriLoaded(
           dataGridUpdated.coordinates = transposedDataPlot.coordinates;
           dataGridUpdated.plot = transposedDataPlot.plot;
         }
+
+        // Retrieve saved geometries
+        if (dataGridUpdated.geometries.length) {
+          const listOfGeometries: GeometryInfos[] =
+            dataGridUpdated.geometries.map((geo) => ({
+              geometry_node: geo.geometry_node,
+              parameters: geo.nodeUris,
+            }));
+          dataGridUpdated.geometries = [];
+          for (const geometry of listOfGeometries) {
+            const geometryToDisplay = listOfGeometries.find(
+              (g) => g.geometry_node === geometry.geometry_node,
+            );
+            await fetchGeometries(
+              geometry.geometry_node,
+              dataGridUpdated,
+              undefined,
+              geometryToDisplay,
+              dataURI,
+            );
+          }
+        }
+
         return dataGridUpdated;
       }),
     );
@@ -1851,6 +2291,15 @@ export const swapAxis = async (
 
   // Limit coordinate sliders to the max of their new shape
   limitSlidersToMaxLength(updatedDataPlot.coordinates);
+
+  if (updatedDataPlot.geometries) {
+    // Swap geometries x & y in the case we swap x & y coordinates
+    for (const geo of updatedDataPlot.geometries) {
+      const tempX = geo.x;
+      geo.x = geo.y;
+      geo.y = tempX;
+    }
+  }
 
   if (active && updatedConfiguration) {
     const updatedActive = {
@@ -2446,4 +2895,44 @@ export async function applyRangeInPlot(
       updatedPlot.error_bands = swapped_error_bands;
     }
   }
+}
+
+export function formatGeometriesToSave(
+  geometries: Geometry[],
+  dataURI: URIData[],
+): Partial<Geometry>[] {
+  const result: Partial<Geometry>[] = [];
+  const geometryMap = new Map<string, Set<string>>();
+
+  for (const geom of geometries) {
+    const splittedUri = geom.geometry_node.split('#');
+
+    const normalizedUri =
+      splittedUri.length >= 0
+        ? `${dataURI.find((uri) => uri.uri === splittedUri[0]).name}#${splittedUri[1]}`
+        : geom.geometry_node;
+
+    const match = normalizedUri.match(/(.*\/geometry\/)([^/]+)\/?$/);
+
+    if (match) {
+      const [, baseUri, parameter] = match;
+
+      if (!geometryMap.has(baseUri)) {
+        geometryMap.set(baseUri, new Set());
+      }
+
+      geometryMap.get(baseUri)!.add(parameter);
+    } else {
+      result.push({ geometry_node: normalizedUri, nodeUris: [] });
+    }
+  }
+
+  for (const [geometry_node, parameters] of geometryMap.entries()) {
+    result.push({
+      geometry_node,
+      nodeUris: [...parameters],
+    });
+  }
+
+  return result;
 }

@@ -12,6 +12,7 @@ export type NodeInfoChildrenResponse = {
   ndim: number;
   type: NodeInfoTypeEnum;
   has_data: boolean | null;
+  is_geometry_node: boolean;
 };
 
 export type NodeInfoResponse = NodeInfoChildrenResponse & {
@@ -22,5 +23,9 @@ export type NodeInfoResponse = NodeInfoChildrenResponse & {
 };
 
 export type SearchNodeResponse = {
-  paths: string[];
+  paths: {
+    has_data: boolean | null;
+    is_geometry_node: boolean;
+    path: string;
+  }[];
 };

@@ -7,6 +7,7 @@ import {
   DataGridPlot,
   DataPlotly,
   GridLayoutPlotProps,
+  NodeInfoTypeEnum,
   URITreeNodeData,
 } from '../../../renderer/types';
 import { Center, Container, Text } from '@mantine/core';
@@ -35,7 +36,9 @@ export const GridLayoutPlot = ({
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
   const [is3DView, setIs3DView] = useState<boolean>(
-    data?.selectedPlotMode === 'Heatmap' ? true : false,
+    data?.selectedPlotMode === 'Heatmap' || data?.selectedPlotMode === 'Contour'
+      ? true
+      : false,
   );
   const [active3DTab, setActive3DTab] = useState<string>('0');
   const [metadataTabsValue, setMetadataTabsValue] = useState<string>(
@@ -146,8 +149,8 @@ export const GridLayoutPlot = ({
 
               return {
                 ...plotItem,
-                x: newXData,
-                y: newYData,
+                x: [...newXData],
+                y: [...newYData],
                 customdata: customdata,
                 error_bands: updated_error_bands,
                 nodeUri: updatedNodeUri,
@@ -156,8 +159,8 @@ export const GridLayoutPlot = ({
             } else {
               return {
                 ...plotItem,
-                x: newXData,
-                y: newYData,
+                x: [...newXData],
+                y: [...newYData],
                 nodeUri: updatedNodeUri,
                 path: updatedPath,
               };
@@ -180,6 +183,8 @@ export const GridLayoutPlot = ({
   };
 
   useEffect(() => {
+    let forceToDisplayMetadata = false;
+
     // Rule to force to show metadata when y data is of type string
     let isYDataString = false;
     for (const plot of data.plot) {
@@ -190,7 +195,15 @@ export const GridLayoutPlot = ({
         }
       }
     }
-    setShouldDisplayMetadata(isYDataString);
+
+    // Rule to force to show metadata when y data is a geometry
+    let isGeometry = false;
+    if (data.is_geometry_node === true) {
+      isGeometry = true;
+    }
+
+    forceToDisplayMetadata = isYDataString || isGeometry;
+    setShouldDisplayMetadata(forceToDisplayMetadata);
   }, [data.plot.length]);
 
   /**
@@ -215,7 +228,12 @@ export const GridLayoutPlot = ({
   }, [data.plot]);
 
   useEffect(() => {
-    setIs3DView(data?.selectedPlotMode === 'Heatmap' ? true : false);
+    setIs3DView(
+      data?.selectedPlotMode === 'Heatmap' ||
+        data?.selectedPlotMode === 'Contour'
+        ? true
+        : false,
+    );
   }, [data.selectedPlotMode]);
 
   /**
@@ -281,6 +299,7 @@ export const GridLayoutPlot = ({
             uri: normalizeIndices(item.nodeUri),
             name: item.labelUri,
             type: findPlot.dataType,
+            is_geometry_node: findPlot.is_geometry_node,
           }))
         : [];
 
@@ -295,6 +314,7 @@ export const GridLayoutPlot = ({
               name: plot.labelUri,
               uri: normalizeIndices(error_band.path),
               type: findPlot.dataType,
+              is_geometry_node: findPlot.is_geometry_node,
             };
             const exists = checkedNodeURI.some(
               (node) =>
@@ -304,6 +324,28 @@ export const GridLayoutPlot = ({
             if (!exists) {
               // Check from tree selected error bands to plot
               checkedNodeURI.push(newCheckedNode);
+            }
+          }
+        }
+
+        if (findPlot?.geometries) {
+          // Check geometries in tree
+          for (const geometry of findPlot.geometries) {
+            for (const uriOfGeo of geometry.nodeUris) {
+              const newCheckedNode = {
+                name: findPlot.plot[0].labelUri,
+                uri: normalizeIndices(uriOfGeo),
+                type: NodeInfoTypeEnum.FLOAT,
+                is_geometry_node: true,
+              } as URITreeNodeData;
+              const exists = checkedNodeURI.some(
+                (node) =>
+                  node.name === newCheckedNode.name &&
+                  node.uri === newCheckedNode.uri,
+              );
+              if (!exists) {
+                checkedNodeURI.push(newCheckedNode);
+              }
             }
           }
         }
@@ -376,6 +418,7 @@ export const GridLayoutPlot = ({
             return (
               index.toString() === active3DTab && (
                 <MetaDataInfos
+                  key={`metadata_${data.i}`}
                   gridLayoutKey={data.i}
                   data={plot}
                   yAxis={plot.yaxis !== '' ? data.y2AxisData : data.yAxisData}

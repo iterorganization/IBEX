@@ -30,8 +30,9 @@ import {
   CustomizeInterpolation,
   CustomizeSmoothing,
   CustomizeUnaryOperations,
+  CustomizeGeometry,
 } from './customizableElements';
-import { IconLink } from '@tabler/icons-react';
+import { IconGeometry, IconLink } from '@tabler/icons-react';
 import { initPlotColors } from '../../utils';
 
 export const DataplotCustomization = () => {
@@ -273,7 +274,8 @@ export const DataplotCustomization = () => {
                   {tabsValue === item.name && (
                     <Grid type="container" ref={customContainerRef}>
                       <Grid.Col span={6}>
-                        {selectedAccordion === 'Heatmap' ? (
+                        {selectedAccordion === 'Heatmap' ||
+                        selectedAccordion === 'Geometry' ? (
                           <Heatmap2D
                             itemDataGrid={customizedDataGrid}
                             width={WIDTH_PLOT}
@@ -282,6 +284,11 @@ export const DataplotCustomization = () => {
                               .findIndex((data) => data.name === item.name)
                               .toString()}
                             showSliders={false}
+                            forcedPlotType={
+                              selectedAccordion === 'Heatmap'
+                                ? 'heatmap'
+                                : 'contour'
+                            }
                           />
                         ) : (
                           <SimplePlotly
@@ -405,6 +412,26 @@ const Customization = ({
       ),
       disabled: customizedDataGrid.coordinates.length < 2,
       tooltip: "This grid can't display heatmap",
+    },
+    {
+      value: 'Geometry',
+      component: (
+        <CustomizeGeometry
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+      icon: (
+        <ActionIcon
+          variant="filled"
+          component="span"
+          disabled={customizedDataGrid.coordinates.length < 2}
+        >
+          <IconGeometry width={20} />
+        </ActionIcon>
+      ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't have geometries",
     },
     {
       value: 'Axis range',

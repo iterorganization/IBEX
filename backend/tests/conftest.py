@@ -11,12 +11,15 @@ pytest.test_client = TestClient(app)
 @pytest.fixture(scope="session")
 def interpolation_entry_path_directory(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("interpolation_testdb")
+    rand_generator = np.random.default_rng(2137)
 
     with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_1", mode="w") as entry:
         eq = entry.factory.equilibrium()
 
         eq.ids_properties.homogeneous_time = 1
         eq.time = np.asarray([1, 2, 3, 4], dtype=float)
+        eq.vacuum_toroidal_field.r0 = 1.0
+        eq.vacuum_toroidal_field.b0 = np.asarray([0.1, 0.2, 0.3, 0.4], dtype=float)
         eq.time_slice.resize(4)
         for ts in eq.time_slice:
             ts.profiles_1d.psi = np.asarray([1.0, 1.2, 1.3, 1.4, 1.5, 1.6])
@@ -29,7 +32,7 @@ def interpolation_entry_path_directory(tmp_path_factory):
 
             ts.profiles_2d.resize(2)
             for p2d in ts.profiles_2d:
-                p2d.psi = np.asarray(np.random.rand(3, 3))
+                p2d.psi = np.asarray(rand_generator.random((3, 3)))
                 p2d.grid.dim1 = np.asarray([1.0, 2.0, 3.0], dtype=float)
                 p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0], dtype=float)
         entry.put(eq)
@@ -65,6 +68,8 @@ def interpolation_entry_path_directory(tmp_path_factory):
 
         eq.ids_properties.homogeneous_time = 1
         eq.time = np.asarray([1, 2, 3], dtype=float)
+        eq.vacuum_toroidal_field.r0 = 1.0
+        eq.vacuum_toroidal_field.b0 = np.asarray([0.1, 0.2, 0.3], dtype=float)
         eq.time_slice.resize(3)
         for ts in eq.time_slice:
             ts.profiles_1d.psi = np.asarray([1.8, 1.9, 2.0, 2.1])
@@ -77,7 +82,7 @@ def interpolation_entry_path_directory(tmp_path_factory):
 
             ts.profiles_2d.resize(4)
             for p2d in ts.profiles_2d:
-                p2d.psi = np.asarray(np.random.rand(9, 3))
+                p2d.psi = np.asarray(rand_generator.random((9, 3)))
                 p2d.grid.dim1 = np.asarray([0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7], dtype=float)
                 p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0], dtype=float)
         entry.put(eq)
@@ -107,6 +112,21 @@ def interpolation_entry_path_directory(tmp_path_factory):
             p2d.grid.dim1 = np.array([0.0, 1.0, 2.0], dtype=float)
             p2d.grid.dim2 = np.array([0.0, 1.0, 2.0], dtype=float)
         entry.put(cp)
+
+        with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_3", mode="w") as entry:
+            eq = entry.factory.equilibrium()
+
+            eq.ids_properties.homogeneous_time = 1
+            eq.time = np.asarray([1, 2, 3, 4], dtype=float)
+
+            eq.time_slice.resize(4)
+            for ts in eq.time_slice:
+                ts.profiles_2d.resize(2)
+                for p2d in ts.profiles_2d:
+                    p2d.psi = np.asarray(rand_generator.random((3, 3)))
+                    p2d.grid.dim1 = np.asarray([11.0, 12.0, 13.0], dtype=float)
+                    p2d.grid.dim2 = np.asarray([11.0, 22.0, 33.0], dtype=float)
+            entry.put(eq)
 
     return tmp_path
 
@@ -156,6 +176,7 @@ def entry_path(tmp_path_factory):
 
     # ===== for data smoothing (must be time-based) =====
     core_profiles.global_quantities.ip = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    core_profiles.global_quantities.v_loop = np.array([11.0, 22.0, 33.0, 44.0, 55.0])
 
     # for coordinate aliases/units
     core_profiles.profiles_2d[0].grid_type = 1

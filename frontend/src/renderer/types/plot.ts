@@ -64,6 +64,25 @@ export interface BaseDataPlotly {
   operations?: UnaryOperation[];
 }
 
+export type Geometry = {
+  type: 'scatter';
+  mode: 'lines';
+  x: number[];
+  y: number[];
+  line: GeometryLine;
+  geometry_node: string;
+  nodeUris: string[];
+  name: string;
+  legendgroup: string;
+  showlegend: boolean;
+  fill?: 'toself';
+};
+
+type GeometryLine = {
+  color: string;
+  width: number;
+};
+
 export type DataPlotly = BaseDataPlotly &
   Data & {
     x: (string | number)[];
@@ -122,16 +141,33 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   isEditing: boolean;
   dataType?: NodeInfoTypeEnum;
   coordinates?: Coordinates[];
-  selectedPlotMode?: 'Heatmap' | '1D';
+  downsampled_method?: string;
+  downsampled_size?: number;
+  selectedPlotMode?: PlotType;
+  geometries: Geometry[];
+  is_geometry_node: boolean;
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
   dataType: NodeInfoTypeEnum;
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
+  is_geometry_node: boolean;
+  geometries: Partial<Geometry>[];
 }
 
 export type synchronizedList = {
   color: string;
   list: string[];
+};
+
+export type PlotType = '1D' | 'Heatmap' | 'Contour';
+
+export type GeometryInfos = {
+  geometry_node: string;
+  parameters: string[];
+};
+
+export type GeometryInfosResponse = {
+  outline_nodes: GeometryInfos[];
 };
