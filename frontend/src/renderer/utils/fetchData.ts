@@ -13,6 +13,8 @@ import {
   NodeInfoTypeEnum,
   PlotDataResponse,
   SearchNodeResponse,
+  SmoothingParams,
+  UnaryOperation,
   URDataEntriesResponse,
   URIExistsResponse,
   URIFromPathResponse,
@@ -205,6 +207,101 @@ export const getInterpolationMethods = async (): Promise<
   );
 };
 
+export const getSmoothingMethods = async (): Promise<OptionWithTooltip[]> => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const smoothing = methodsRes.data_manipulation_methods.find(
+    (m) => m.name === 'Data smoothing/denoising',
+  );
+  const param = smoothing?.method_parameters.find(
+    (p) => p.name === 'smoothing_method',
+  );
+  return (
+    param?.possible_values?.map((item) => ({
+      value: item.value,
+      tooltip: item.description,
+    })) ?? []
+  );
+};
+
+export const getOperationMethods = async (): Promise<
+  { value: string; label: string }[]
+> => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const operations = methodsRes.data_manipulation_methods.find(
+    (m) => m.name === 'Simple Data Operations',
+  );
+  const operationsParam = operations?.method_parameters.find(
+    (p) => p.name === 'operations',
+  );
+  const typeField = operationsParam?.fields?.find(
+    (f) => f.name === 'operation_type',
+  );
+  // Display the human-readable description as the label while keeping the raw
+  // operation value (e.g. "add") for the fetchDataPlot request.
+  return (
+    typeField?.possible_values?.map((item) => ({
+      value: item.value,
+      label: item.description,
+    })) ?? []
+  );
+};
+
+// Smoothing methods
+export const GAUSSIAN_FILTER = 'gaussian_filter';
+export const SAVGOL_FILTER = 'savitzky-golay_filter';
+
+// Default smoothing parameters, reused for input display and request building
+export const DEFAULT_GAUSSIAN_SMOOTHING_SIGMA = 1;
+export const DEFAULT_SAVGOL_WINDOW_LENGTH = 5;
+export const DEFAULT_SAVGOL_POLYORDER = 2;
+export const DEFAULT_SAVGOL_DERIV = 0;
+export const DEFAULT_SAVGOL_DELTA = 1.0;
+export const DEFAULT_SAVGOL_MODE = 'interp';
+export const DEFAULT_SAVGOL_CVAL = 0.0;
+
+/**
+ * Build a clean, complete SmoothingParams for the selected method (unedited fields
+ * filled with their defaults), or undefined when no method is set.
+ */
+export const buildSmoothingRequest = (
+  smoothing?: SmoothingParams,
+): SmoothingParams | undefined => {
+  if (smoothing?.smoothing_method === GAUSSIAN_FILTER) {
+    return {
+      smoothing_method: GAUSSIAN_FILTER,
+      gaussian_smoothing_sigma:
+        smoothing.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SMOOTHING_SIGMA,
+    };
+  }
+  if (smoothing?.smoothing_method === SAVGOL_FILTER) {
+    return {
+      smoothing_method: SAVGOL_FILTER,
+      savgol_smoothing_window_length:
+        smoothing.savgol_smoothing_window_length ??
+        DEFAULT_SAVGOL_WINDOW_LENGTH,
+      savgol_smoothing_polyorder:
+        smoothing.savgol_smoothing_polyorder ?? DEFAULT_SAVGOL_POLYORDER,
+      savgol_smoothing_deriv:
+        smoothing.savgol_smoothing_deriv ?? DEFAULT_SAVGOL_DERIV,
+      savgol_smoothing_delta:
+        smoothing.savgol_smoothing_delta ?? DEFAULT_SAVGOL_DELTA,
+      savgol_smoothing_mode:
+        smoothing.savgol_smoothing_mode ?? DEFAULT_SAVGOL_MODE,
+      savgol_smoothing_cval:
+        smoothing.savgol_smoothing_cval ?? DEFAULT_SAVGOL_CVAL,
+    };
+  }
+  return undefined;
+};
+
+/**
+ * Build the ordered "type:value" list from operation rows (dropping rows without a type).
+ */
+export const formatOperations = (operations?: UnaryOperation[]): string[] =>
+  (operations ?? [])
+    .filter((operation) => operation.type)
+    .map((operation) => `${operation.type}:${operation.value}`);
+
 /**
  * Retrieves plot data for a given URI.
  */
@@ -215,6 +312,8 @@ export const fetchDataPlot = async (
   type?: NodeInfoTypeEnum,
   interpolateOver?: string[],
   interpolationMethod?: string,
+  smoothing?: SmoothingParams,
+  operations?: string[],
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
@@ -243,16 +342,34 @@ export const fetchDataPlot = async (
     encodedInterpolateOver += `&interpolation_method=${encodeURIComponent(interpolationMethod)}`;
   }
 
+  // Provide smoothing params if needed
+  let encodedSmoothing: string = '';
+  if (smoothing?.smoothing_method) {
+    for (const [key, value] of Object.entries(smoothing)) {
+      if (value != null) {
+        encodedSmoothing += `&${key}=${encodeURIComponent(value)}`;
+      }
+    }
+  }
+
+  // Provide operations param if needed
+  let encodedOperations: string = '';
+  if (operations) {
+    for (const operation of operations) {
+      encodedOperations += `&operations=${encodeURIComponent(operation)}`;
+    }
+  }
+
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}`,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}`,
         5000,
       );
     } catch (error) {
@@ -277,7 +394,7 @@ export const fetchDataPlot = async (
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}`,
         );
       }
     }

@@ -54,12 +54,17 @@ type DataManipulationParameterResponse = {
   human_readable_name: string;
   name: string;
   description: string;
-  possible_values: DataManipulationMethodResponse[];
+  type?: string;
+  default?: unknown;
+  possible_values: DataManipulationMethodResponse[] | null;
+  group_label?: string | null;
+  fields?: DataManipulationParameterResponse[] | null;
 };
 
 type DataManipulationMethodResponse = {
   value: string;
   description: string;
+  additional_parameters?: DataManipulationParameterResponse[] | null;
 };
 
 export type ArraySummaryResponse = {

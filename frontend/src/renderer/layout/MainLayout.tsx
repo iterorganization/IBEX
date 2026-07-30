@@ -144,6 +144,8 @@ export function MainLayout() {
             line: plot?.line || {},
             customPreferences: plot?.customPreferences || {},
             mode: plot?.mode || 'line',
+            smoothing: plot?.smoothing,
+            operations: plot?.operations,
           };
         }),
       }),

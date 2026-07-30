@@ -28,6 +28,8 @@ import {
   CustomizeDataRange,
   CustomizeSynchronization,
   CustomizeInterpolation,
+  CustomizeSmoothing,
+  CustomizeUnaryOperations,
   CustomizeGeometry,
 } from './customizableElements';
 import { IconGeometry, IconLink } from '@tabler/icons-react';
@@ -477,6 +479,26 @@ const Customization = ({
       component: (
         <CustomizeInterpolation
           customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Data smoothing',
+      component: (
+        <CustomizeSmoothing
+          customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Unary operations',
+      component: (
+        <CustomizeUnaryOperations
+          customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />
       ),
