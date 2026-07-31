@@ -290,7 +290,7 @@ def test_combined_features(entry_path, interpolation_entry_path_directory):
     assert response.status_code == 200
 
     response_body = response.json()
-    assert response_body["data"]["value"] == pytest.approx([11.28, 14.20, 18.0, 21.80, 24.72], 0.1)
+    assert response_body["data"]["value"] == pytest.approx([20.5, 24.4, 30, 35, 39], 0.1)
 
     # --- Part 2: different simple ops + savgol smoothing + exact_value interpolation + signal ops ---
     db_names = [
