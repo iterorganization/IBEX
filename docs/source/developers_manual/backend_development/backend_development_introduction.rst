@@ -66,7 +66,13 @@ On the SDCC machine, these packages are available through environment modules an
 
 .. code-block:: bash
 
-    module load IMAS-Python IDStools
+    module load IMAS-Python/2.3.0-intel-2025b IDStools/2.4.1-intel-2025b
+
+.. caution::
+
+   Always pin the module versions. An unversioned ``module load`` follows the cluster default,
+   which moved from the 2023b to the 2025b toolchain on 2025-07-31 — taking Python from 3.11 to
+   3.13 and breaking every virtual environment built before that date.
 
 For local development, these packages must be installed manually by the developer.
 

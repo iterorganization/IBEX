@@ -13,7 +13,10 @@ You can load the module on ITER cluster by running the following command:
 
 .. code-block:: bash
 
-  module load nodejs
+  module load nodejs/22.17.1-GCCcore-14.3.0
+
+Pin the version: an unversioned ``module load nodejs`` follows the cluster default, which moved
+from Node 20 to Node 22 with the 2025b toolchain on 2025-07-31.
 
 
 Clone

@@ -14,8 +14,8 @@ IBEX (IMAS variaBles EXplorer) is a general purpose graphical tool for exploring
 ## Quick Start
 
 ### Prerequisites
-- Python 3.9+
-- Node.js 16+
+- Python 3.10+ (3.13 via the `IMAS-Python/2.3.0-intel-2025b` module on ITER systems)
+- Node.js 16+ (22.17.1 via the `nodejs/22.17.1-GCCcore-14.3.0` module on ITER systems)
 
 ### Installation & Build
 

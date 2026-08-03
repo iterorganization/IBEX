@@ -7,13 +7,17 @@
 Load required modules
 
 ```commandline
-module load IDStools IMAS-Python
+module load IMAS-Python/2.3.0-intel-2025b IDStools/2.4.1-intel-2025b
 ```
+
+Pin the versions. An unversioned `module load` follows the cluster default, which moved from the
+2023b to the 2025b toolchain on 2025-07-31 (Python 3.11 -> 3.13) and breaks virtual environments
+built against the older toolchain.
 
 ## Development setup
 
 ```commandline
-python -m venv venv
+python -m venv --system-site-packages venv
 . venv/bin/activate
 
 # in `backend` directory

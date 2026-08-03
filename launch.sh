@@ -28,12 +28,30 @@ get_free_ports() {
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "0. Load modules..."
-module purge
-module load IMAS-Python IDStools nodejs
+# Pinned to the SDCC 2025b toolchain. Do NOT drop the versions: unversioned
+# `module load` follows the cluster default, which moved from 2023b to 2025b
+# on 2025-07-31 and broke every venv built before that date.
+IBEX_MODULES=(
+  IMAS-Python/2.3.0-intel-2025b
+  IDStools/2.4.1-intel-2025b
+  nodejs/22.17.1-GCCcore-14.3.0
+)
 
-PYTHON_VERSION=$(python --version | cut -d ' ' -f 2 | cut -d '.' -f1,2)
-export PYTHONPATH=${SCRIPT_DIR}/ibex_venv/lib/python${PYTHON_VERSION}/site-packages:${PYTHONPATH}
+echo "0. Load modules..."
+# `module` is an exported shell function; re-source it when it is missing
+# (e.g. when the script is run from a non-login shell).
+command -v module >/dev/null 2>&1 || source /etc/profile.d/modules.sh
+module purge
+module load "${IBEX_MODULES[@]}"
+
+# Activate the venv rather than deriving its site-packages path from the live
+# interpreter: that guess silently pointed at a non-existent
+# lib/python<version>/site-packages whenever the module Python moved.
+if [ ! -f "$SCRIPT_DIR/ibex_venv/bin/activate" ]; then
+  echo "No virtual environment at $SCRIPT_DIR/ibex_venv - run ./install.sh first." >&2
+  exit 1
+fi
+source "$SCRIPT_DIR/ibex_venv/bin/activate"
 
 echo "1. Launch backend server..."
 
