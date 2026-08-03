@@ -28,12 +28,52 @@ get_free_ports() {
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "1. Loading required modules..."
-module load IMAS-Python IDStools nodejs
+# Recreate the venv if it was created with a different Python (major.minor)
+# version than the one currently loaded, to avoid stale-interpreter failures
+# when the user switches Python versions (e.g. module load) between runs.
+ensure_compatible_venv() {
+  local venv_dir="$1"
+  local current_version
+  current_version=$(python -c 'import platform; v = platform.python_version_tuple(); print(f"{v[0]}.{v[1]}")')
+
+  if [ -f "$venv_dir/pyvenv.cfg" ]; then
+    local venv_version
+    venv_version=$(awk -F '= ' '/^version/ {print $2}' "$venv_dir/pyvenv.cfg" | cut -d '.' -f1,2)
+
+    if [ -n "$venv_version" ] && [ "$venv_version" != "$current_version" ]; then
+      echo "WARNING: existing virtual environment at '$venv_dir' was created with Python $venv_version, but the currently loaded Python is $current_version."
+      echo "Recreating the virtual environment to match the current Python version..."
+      rm -rf "$venv_dir"
+    fi
+  fi
+}
+
+# Check that a given environment module is currently loaded (by name prefix,
+# ignoring version), without attempting to load it ourselves.
+is_module_loaded() {
+  local mod_name="$1"
+  module -t list 2>&1 | grep -qi "^${mod_name}\(/\|$\)"
+}
+
+echo "1. Checking required modules are loaded..."
+required_modules=(IMAS-Python IDStools nodejs)
+missing_modules=()
+for mod in "${required_modules[@]}"; do
+  if ! is_module_loaded "$mod"; then
+    missing_modules+=("$mod")
+  fi
+done
+
+if [ "${#missing_modules[@]}" -ne 0 ]; then
+  echo "ERROR: the following required module(s) are not loaded: ${missing_modules[*]}" >&2
+  echo "Please load them first, e.g.: module load ${missing_modules[*]}" >&2
+  exit 1
+fi
 
 echo "2. Setting up Python virtual environment..."
 mkdir -p ~/.config/ibex
 cd ~/.config/ibex
+ensure_compatible_venv "$(pwd)/ibex_venv"
 python -m venv ibex_venv
 source ibex_venv/bin/activate
 
