@@ -66,5 +66,6 @@ npm run package
     cd ibex
     
     # this script creates venv, installs python package in editable mode and runs fronend
+	module load IMAS-Python IDStools nodejs
     ./launch-dev.sh
 ```
