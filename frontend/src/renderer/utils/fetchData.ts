@@ -291,6 +291,10 @@ export const SAVGOL_FILTER = 'savitzky-golay_filter';
 
 // Default smoothing parameters, reused for input display and request building
 export const DEFAULT_GAUSSIAN_SMOOTHING_SIGMA = 1;
+// Sigma is expressed in samples. A null or negative sigma leaves the data
+// untouched, so the gaussian filter would silently do nothing: keep the input
+// at or above this floor
+export const MIN_GAUSSIAN_SMOOTHING_SIGMA = 0.1;
 export const DEFAULT_SAVGOL_WINDOW_LENGTH = 5;
 export const DEFAULT_SAVGOL_POLYORDER = 2;
 export const DEFAULT_SAVGOL_DERIV = 0;

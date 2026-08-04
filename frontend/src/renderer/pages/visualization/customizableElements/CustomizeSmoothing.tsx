@@ -18,6 +18,7 @@ import {
   getSmoothingMethods,
   getUrisToInterpolate,
   getVectorData,
+  MIN_GAUSSIAN_SMOOTHING_SIGMA,
   normalizeIndices,
   reapplyAxisOrder,
   SAVGOL_FILTER,
@@ -50,6 +51,14 @@ export const CustomizeSmoothing = ({
   // Source of truth is the selected plot's own smoothing config (persisted on the grid)
   const smoothing = selectedPlot?.smoothing;
   const smoothingMethod = smoothing?.smoothing_method ?? null;
+
+  const sigma = Number(
+    smoothing?.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SMOOTHING_SIGMA,
+  );
+  const isSigmaInvalid =
+    smoothingMethod === GAUSSIAN_FILTER &&
+    (!Number.isFinite(sigma) || sigma < MIN_GAUSSIAN_SMOOTHING_SIGMA);
+  const SIGMA_ERROR = `Sigma must be at least ${MIN_GAUSSIAN_SMOOTHING_SIGMA}`;
 
   /**
    * Persist the smoothing config onto the selected plot
@@ -183,6 +192,14 @@ export const CustomizeSmoothing = ({
       });
       return;
     }
+    if (isSigmaInvalid) {
+      showNotification({
+        title: 'Invalid sigma',
+        message: `${SIGMA_ERROR}.`,
+        color: 'red',
+      });
+      return;
+    }
     await updatePlotsData('apply', smoothingParams);
   };
 
@@ -238,12 +255,26 @@ export const CustomizeSmoothing = ({
               smoothing?.gaussian_smoothing_sigma ??
               DEFAULT_GAUSSIAN_SMOOTHING_SIGMA
             }
-            onChange={(value: number) =>
+            onChange={(value) =>
               updateSmoothingParam('gaussian_smoothing_sigma', value)
             }
+            onValueChange={(payload, context) => {
+              const isSteppedChange = (context.source as string) !== 'event';
+              if (
+                isSteppedChange &&
+                Number.isFinite(payload.floatValue) &&
+                payload.floatValue < MIN_GAUSSIAN_SMOOTHING_SIGMA
+              ) {
+                updateSmoothingParam(
+                  'gaussian_smoothing_sigma',
+                  MIN_GAUSSIAN_SMOOTHING_SIGMA,
+                );
+              }
+            }}
+            error={isSigmaInvalid ? SIGMA_ERROR : undefined}
             w="45%"
             maw={200}
-            min={0}
+            min={MIN_GAUSSIAN_SMOOTHING_SIGMA}
           />
         </Group>
       )}
@@ -346,7 +377,10 @@ export const CustomizeSmoothing = ({
           onClick={getSmoothedData}
           loading={loadingAction === 'apply'}
           disabled={
-            !selectedPlot || !smoothingMethod || loadingAction === 'restore'
+            !selectedPlot ||
+            !smoothingMethod ||
+            isSigmaInvalid ||
+            loadingAction === 'restore'
           }
         >
           Apply
