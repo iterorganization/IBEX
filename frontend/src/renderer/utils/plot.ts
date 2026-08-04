@@ -3,10 +3,12 @@ import {
   Axis,
   AxisData,
   BaseCoordinates,
+  BaseDataPlotly,
   Configuration,
   ConfigurationToSave,
   Coordinates,
   DataGridPlot,
+  DataOperation,
   DataPlotly,
   ErrorBandData,
   Geometry,
@@ -25,6 +27,8 @@ import {
   fetchDataPlot,
   fetchFieldValue,
   formatOperations,
+  formatSignalOperations,
+  isSignalOperation,
 } from './fetchData';
 import { generateNewGridPlot } from './grid';
 import {
@@ -1582,6 +1586,58 @@ export const initPlotColors = async (
 };
 
 /**
+ * @description Convert the operand URIs of the signal operations to the
+ * "<labelUri>#<path>" form used in saved configurations, mirroring the
+ * transformation applied to plot.nodeUri when saving.
+ * @param operations The operations of the plot being saved
+ * @param plots The plots of the grid, used to resolve the operand labelUri
+ */
+export const formatSignalOperandsToSave = (
+  operations: DataOperation[] | undefined,
+  plots: BaseDataPlotly[],
+): DataOperation[] | undefined =>
+  operations?.map((operation) => {
+    if (!isSignalOperation(operation) || !operation.value) return operation;
+    const operand = plots.find(
+      (plot) =>
+        normalizeIndices(plot.nodeUri) === normalizeIndices(operation.value),
+    );
+    // Keep the URI untouched when the operand plot is no longer in the grid
+    const separatorIndex = operation.value.indexOf('#');
+    if (!operand || separatorIndex === -1) return operation;
+    return {
+      ...operation,
+      value: `${operand.labelUri}${operation.value.slice(separatorIndex)}`,
+    };
+  });
+
+/**
+ * @description Restore the absolute operand URIs of the signal operations from
+ * the "<labelUri>#<path>" form stored in a saved configuration.
+ * @param operations The operations read from the saved configuration
+ * @param dataURI The data entries of the configuration being loaded
+ */
+export const formatSignalOperandsToLoad = (
+  operations: DataOperation[] | undefined,
+  dataURI: URIData[],
+): DataOperation[] | undefined =>
+  operations?.map((operation) => {
+    if (!isSignalOperation(operation) || !operation.value) return operation;
+    const separatorIndex = operation.value.indexOf('#');
+    if (separatorIndex === -1) return operation;
+    const label = operation.value.slice(0, separatorIndex);
+    const uriToApply = dataURI.find((uri) => uri.name === label)?.uri;
+    // Only remap when the prefix is a known data entry name, otherwise the
+    // operand URI is already absolute
+    return uriToApply
+      ? {
+          ...operation,
+          value: `${uriToApply}${operation.value.slice(separatorIndex)}`,
+        }
+      : operation;
+  });
+
+/**
  * @description Format config to allow to call plotNodeUriLoaded
  * @param activeConfiguration The configuration to format
  */
@@ -1618,6 +1674,10 @@ export function formatConfigBeforeLoadingURIs(
 
         return {
           ...plot,
+          operations: formatSignalOperandsToLoad(
+            plot.operations,
+            activeConfiguration.dataURI,
+          ),
           yData: [],
           x: [],
           y: [],
@@ -1713,6 +1773,7 @@ export async function plotNodeUriLoaded(
               dataGrid?.interpolated_method,
               buildSmoothingRequest(plot.smoothing),
               formatOperations(plot.operations),
+              formatSignalOperations(plot.operations),
             );
             if (!response || !response.data) {
               console.warn(`No data returned for nodeUri: ${plot.nodeUri}`);

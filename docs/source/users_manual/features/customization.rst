@@ -55,14 +55,32 @@ Applies a smoothing method to reduce noise while preserving the overall shape of
    :alt: Data smoothing section of the customization
    :align: center
 
-Unary operations
+Data operations
 --------------------
 
-Applies an ordered list of scalar operations to every data point of the plot:
+Applies an ordered list of operations to every data point of the plot. Each row
+has a **kind**, which decides what the plot is combined with:
 
-.. image:: images/customization_unary_operations.png
-   :alt: Unary operations section of the customization
+* **Constant**: a scalar value that you type in. Available operations are addition,
+  subtraction, multiplication, division, exponentiation and nth root.
+* **Signal**: another plot of the same graph, combined point by point. Available
+  operations are addition, subtraction, multiplication and division. This kind
+  requires at least two plots in the graph, otherwise it stays disabled.
+
+.. image:: images/customization_data_operations.png
+   :alt: Data operations section of the customization
    :align: center
+
+A few things to keep in mind when combining two signals:
+
+* All constant operations are applied before all signal operations, whatever the
+  order of the rows.
+* Both signals must share the same shape and the same coordinates. When they do
+  not, either select an interpolation method in the *Interpolation* section or
+  the server reports which of the two has to be interpolated.
+* An addition or a subtraction requires both signals to share the same unit,
+  while a multiplication or a division combines them (for example ``m`` and
+  ``s`` become ``m/s``).
 
 Visual customization
 ----------------------------

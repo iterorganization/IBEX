@@ -11,6 +11,7 @@ import {
   DEFAULT_SAVGOL_WINDOW_LENGTH,
   fetchDataPlot,
   formatOperations,
+  formatSignalOperations,
   GAUSSIAN_FILTER,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
@@ -110,6 +111,7 @@ export const CustomizeSmoothing = ({
         customizedDataGrid?.interpolated_method,
         smoothingParams,
         formatOperations(plot.operations),
+        formatSignalOperations(plot.operations),
       );
 
       // Realign coordinates with the returned data (a no-op when smoothing

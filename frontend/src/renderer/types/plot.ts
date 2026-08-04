@@ -37,10 +37,30 @@ export interface Coordinates extends BaseCoordinates {
   unit?: string;
 }
 
+export type OperationKind = 'unary' | 'signal';
+
+/**
+ * Scalar operation: the value is a constant applied to every data point.
+ * `kind` is optional because configurations saved before the "Data operations"
+ * panel store unary rows without it.
+ */
 export type UnaryOperation = {
+  kind?: 'unary';
   type: string | null;
   value: number;
 };
+
+/**
+ * Signal operation: the value is the nodeUri of another plot of the same grid,
+ * combined point by point with the edited plot.
+ */
+export type SignalOperation = {
+  kind: 'signal';
+  type: string | null;
+  value: string | null;
+};
+
+export type DataOperation = UnaryOperation | SignalOperation;
 
 export type SmoothingParams = {
   smoothing_method: string;
@@ -61,7 +81,7 @@ export interface BaseDataPlotly {
   line?: PlotLine;
   mode?: string;
   smoothing?: SmoothingParams;
-  operations?: UnaryOperation[];
+  operations?: DataOperation[];
 }
 
 export type Geometry = {

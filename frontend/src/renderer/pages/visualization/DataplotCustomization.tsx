@@ -29,7 +29,7 @@ import {
   CustomizeSynchronization,
   CustomizeInterpolation,
   CustomizeSmoothing,
-  CustomizeUnaryOperations,
+  CustomizeDataOperations,
   CustomizeGeometry,
 } from './customizableElements';
 import { IconGeometry, IconLink } from '@tabler/icons-react';
@@ -494,9 +494,9 @@ const Customization = ({
       ),
     },
     {
-      value: 'Unary operations',
+      value: 'Data operations',
       component: (
-        <CustomizeUnaryOperations
+        <CustomizeDataOperations
           customizedDataGrid={customizedDataGrid}
           selectedPlot={selectedPlot}
           setCustomizedDataGrid={setCustomizedDataGrid}
