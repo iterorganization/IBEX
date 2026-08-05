@@ -238,7 +238,11 @@ class IMASPythonSource(DataSourceInterface):
             # ========== check if node and it's children have data ==========
             try:
                 filled_paths = entry.list_filled_paths(ids, int(occurrence))
-            except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError, imas_core.exception.ImasCoreBackendException):
+            except (
+                AttributeError,
+                imas.backends.imas_core.imas_interface.LLInterfaceError,
+                imas_core.exception.ImasCoreBackendException,
+            ):
                 # AttributeError - current version of IMAS-Python doesn't support list_filled paths
                 # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
                 # ImasCoreBackendException - selected backend doesn't support list_filled paths
