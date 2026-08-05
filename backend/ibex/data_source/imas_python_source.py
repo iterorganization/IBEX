@@ -197,7 +197,7 @@ class IMASPythonSource(DataSourceInterface):
 
         node_type = getattr(metadata, "structure_reference", None)
         is_outline_static = node_type == "outline_2d_geometry_static"
-        is_outline_rz = "outline" in metadata.name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
+        is_outline_rz = "outline" in metadata.name and node_type == "rz1d_static"
 
         if is_outline_rz or is_outline_static:
             return True
