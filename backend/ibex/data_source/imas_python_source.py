@@ -3,6 +3,7 @@
 from typing import Optional, Sequence, List
 
 import imas  # type: ignore
+import imas_core
 import numpy as np  # type: ignore
 import re  # type: ignore
 from idstools.database import DBMaster  # type: ignore
@@ -237,9 +238,10 @@ class IMASPythonSource(DataSourceInterface):
             # ========== check if node and it's children have data ==========
             try:
                 filled_paths = entry.list_filled_paths(ids, int(occurrence))
-            except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+            except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError, imas_core.exception.ImasCoreBackendException):
                 # AttributeError - current version of IMAS-Python doesn't support list_filled paths
                 # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                # ImasCoreBackendException - selected backend doesn't support list_filled paths
                 ...  # proceed
             else:
                 metadata_dict["has_data"] = path_in_filled_paths(metadata.path_string, filled_paths)
