@@ -173,7 +173,6 @@ def test_geometry_overlay_nodes(entry_path):
         f"{entry_uri}#wall:0/description_2d[:]/vessel/unit[:]/annular/outline_inner",
         f"{entry_uri}#wall:0/description_2d[:]/vessel/unit[:]/annular/outline_outer",
         f"{entry_uri}#wall:0/description_2d[:]/vessel/unit[:]/element[:]/outline",
-        f"{entry_uri}#equilibrium:0/time_slice[:]/boundary/outline",
     ]
 
     leaf_nodes = ["r", "z"]
@@ -196,13 +195,6 @@ def test_geometry_overlay_nodes(entry_path):
     expected_result_only_filled_nodes = {
         "outline_nodes": unordered(
             [
-                {
-                    "geometry_node": f"{entry_uri}#equilibrium:0/time_slice[:]/boundary/outline",
-                    "parameters": [
-                        "r",
-                        "z",
-                    ],
-                },
                 {
                     "geometry_node": f"{entry_uri}#wall:0/description_2d[:]/limiter/unit[:]/outline",
                     "parameters": unordered(["r", "z"]),
