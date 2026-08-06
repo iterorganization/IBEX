@@ -198,7 +198,7 @@ export const SimplePlotly = ({
       title: { text: title },
     }));
 
-    if (!itemDataGrid.isEditing) {
+    if (!itemDataGrid.isEditing || title === itemDataGrid.title) {
       return;
     }
 
