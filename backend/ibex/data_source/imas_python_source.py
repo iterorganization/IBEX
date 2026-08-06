@@ -774,13 +774,8 @@ class IMASPythonSource(DataSourceInterface):
             :param show_error_bars: whether to include error bar parameter names (e.g. ``_error_upper``)
             :param filled_paths: optional list of filled paths; when given, only nodes with filled parameters are collected
             """
-            node_name = metadata.name
-            node_type = getattr(metadata, "structure_reference", None)
 
-            is_outline_static = node_type == "outline_2d_geometry_static"
-            is_outline_rz = "outline" in node_name and node_type in {"rz1d_static", "rz1d_dynamic_aos"}
-
-            if is_outline_static or is_outline_rz:
+            if self._is_geometry_node(metadata):
                 tensorized_path = self._add_index_to_aos_in_path(root_metadata, metadata.path_string)
                 full_uri_with_path = f"{uri}#{ids}:{occurrence}/{tensorized_path}"
                 parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
