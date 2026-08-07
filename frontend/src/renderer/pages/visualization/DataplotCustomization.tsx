@@ -62,6 +62,9 @@ export const DataplotCustomization = () => {
         downsampled_method: customizedDataGrid?.downsampled_method,
         interpolated_method: customizedDataGrid.interpolated_method,
         plot: customizedDataGrid?.plot,
+        // A data operation can change a unit and move a plot to the second axis
+        yAxisData: customizedDataGrid?.yAxisData,
+        y2AxisData: customizedDataGrid?.y2AxisData,
       } as DataGridPlot;
       setDataGridLayout(updatedDataGridLayout);
       setSelectedPlot(

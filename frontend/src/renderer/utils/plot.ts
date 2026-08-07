@@ -42,7 +42,7 @@ import {
   getFirstArrayValueFromShape,
 } from './matrix';
 import * as tf from '@tensorflow/tfjs';
-import { containsFloat, rgbToRgba } from './functions';
+import { containsFloat, removeSuffix, rgbToRgba } from './functions';
 
 const defaultColorsRGB = [
   'rgb(31, 119, 180)',
@@ -687,6 +687,66 @@ export const handleExistingPlot = async (
 };
 
 /**
+ * @description When every plot of the grid sits on the same y axis, promote that
+ * axis to the primary one and drop the secondary one.
+ * @param dataGrid The grid to collapse, updated in place
+ */
+export const collapseYAxes = (dataGrid: DataGridPlot) => {
+  const plots = dataGrid.plot;
+  if (!plots?.length) return;
+  if (!plots.every((plot) => plot.yaxis === plots[0].yaxis)) return;
+
+  dataGrid.yAxisData =
+    plots[0].yaxis === 'y2' ? dataGrid.y2AxisData : dataGrid.yAxisData;
+  dataGrid.y2AxisData = undefined;
+
+  for (const plot of plots) {
+    plot.yaxis = '';
+  }
+};
+
+/**
+ * @description Re-assign a plot to a y axis after its unit changed, following the
+ * same rule as when a plot is added from the tree: keep it on the axis carrying
+ * its unit, or open the secondary axis when it is still free.
+ * @param dataGrid The grid to update in place
+ * @param plot The plot whose unit changed, updated in place
+ * @param newUnit The unit returned by the back-end
+ * @returns false when a third y axis would be needed, the grid is then untouched
+ */
+export const resolveYAxisForUnit = (
+  dataGrid: DataGridPlot,
+  plot: DataPlotly,
+  newUnit: string,
+): boolean => {
+  if (newUnit === dataGrid.yAxisData?.unit) {
+    plot.yaxis = '';
+  } else if (dataGrid.y2AxisData && newUnit === dataGrid.y2AxisData.unit) {
+    plot.yaxis = 'y2';
+  } else if (!dataGrid.y2AxisData) {
+    dataGrid.y2AxisData = {
+      // A name is required, the axis title is not displayed without it
+      name: removeSuffix(plot.name, '_' + plot.labelUri),
+      unit: newUnit,
+    };
+    plot.yaxis = 'y2';
+  } else {
+    // Both axes are taken by other units: the grid is limited to two of them
+    return false;
+  }
+
+  plot.unit = newUnit;
+  collapseYAxes(dataGrid);
+
+  // Hand back new axis objects: the axis titles are rebuilt by effects watching
+  // the identity of yAxisData / y2AxisData, not the y axis of each plot
+  dataGrid.yAxisData = dataGrid.yAxisData && { ...dataGrid.yAxisData };
+  dataGrid.y2AxisData = dataGrid.y2AxisData && { ...dataGrid.y2AxisData };
+
+  return true;
+};
+
+/**
  * @description Updates existing plot if deselected nodes match the plot's nodes.
  * @param nodes The nodes to update plots for.
  * @param findDataPlot The data plot to find and update.
@@ -715,20 +775,9 @@ const deleteExistingPlot = async (
       ),
   );
 
-  /**
-   * If all plots have the same y axis with reference(plots[0]), we can set the reference y axis for all plots and remove y2AxisData
-   */
-  if (plots.every((plot) => plot.yaxis === plots[0].yaxis)) {
-    findDataPlot.yAxisData =
-      plots[0].yaxis == 'y2' ? findDataPlot.y2AxisData : findDataPlot.yAxisData;
-    findDataPlot.y2AxisData = undefined;
-
-    for (const plot of plots) {
-      plot.yaxis = '';
-    }
-  }
-
   findDataPlot.plot = plots;
+  collapseYAxes(findDataPlot);
+
   findDataPlot.title = findDataPlot.isTitleOverwritten
     ? findDataPlot.title
     : plots.map((plot) => plot.name).join('/');

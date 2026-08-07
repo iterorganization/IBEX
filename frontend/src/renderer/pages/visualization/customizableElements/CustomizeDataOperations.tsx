@@ -23,6 +23,7 @@ import {
   isSignalOperation,
   normalizeIndices,
   reapplyAxisOrder,
+  resolveYAxisForUnit,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import {
@@ -258,8 +259,18 @@ export const CustomizeDataOperations = ({
       plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotOperated.data.value;
       plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
-      // A multiplication or a division between signals changes the unit
-      plot.unit = dataPlotOperated.data.unit;
+      // A multiplication or a division between signals changes the unit, which
+      // may require moving the plot to the secondary y axis
+      const newUnit = dataPlotOperated.data.unit;
+      if (!resolveYAxisForUnit(updatedDataPlot, plot, newUnit)) {
+        showNotification({
+          title: 'Too many units',
+          message: `This operation produces data in "${newUnit}", but the graph already uses two y axes. Remove a signal from the graph or change the operation.`,
+          color: 'red',
+        });
+        return;
+      }
+
       if (action === 'restore') {
         plot.operations = undefined;
       }
@@ -275,6 +286,8 @@ export const CustomizeDataOperations = ({
         ...customizedDataGrid,
         coordinates: updatedDataPlot.coordinates,
         plot: updatedDataPlot.plot,
+        yAxisData: updatedDataPlot.yAxisData,
+        y2AxisData: updatedDataPlot.y2AxisData,
       });
     } catch (error) {
       console.error('Error getting plot data: ', error);
