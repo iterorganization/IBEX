@@ -795,17 +795,14 @@ class IMASPythonSource(DataSourceInterface):
                         error_node in param for error_node in ["_error_upper", "_error_lower", "_error_index"]
                     )
                     if show_error_bars or not is_error_node:
-                        parameters_entry["parameters"].append(param)
+                        if filled_paths is not None:
+                            node = f"{metadata.path_string}/{param}"
+                            if node in filled_paths:
+                                parameters_entry["parameters"].append(param)
+                        else:
+                            parameters_entry["parameters"].append(param)
 
-                if filled_paths is not None:
-                    node_filled = any(
-                        path_in_filled_paths(f"{metadata.path_string}/{parameter}", filled_paths)
-                        for parameter in parameters_entry["parameters"]
-                    )
-
-                    if node_filled and parameters_entry["parameters"]:  # don't put structures with empty "parameters"
-                        results.append(parameters_entry)
-                elif parameters_entry["parameters"]:  # don't put structures with empty "parameters"
+                if parameters_entry["parameters"]:  # don't put structures with empty "parameters"
                     results.append(parameters_entry)
 
             else:
