@@ -101,6 +101,7 @@ export const TabsListCustom = ({
                 value={item}
                 ref={setControlRef(item)}
                 className={classes.tab}
+                data-testid={`customization-tab-${item}`}
               >
                 {item}
               </Tabs.Tab>

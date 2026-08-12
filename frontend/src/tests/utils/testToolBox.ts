@@ -169,6 +169,178 @@ export async function findTextElementAndClickIt(
   await button.click();
 }
 
+/**
+ * Opens a Mantine `Select` identified by its test id and clicks the option
+ * matching `optionValue`.
+ *
+ * Mantine forwards the option `value` onto the rendered node, so the option is
+ * looked up by that attribute first and only falls back to its visible label.
+ * Matching by text alone is not enough here: the operand select lists plot
+ * names, which also appear in the Plotly legend and in the customization tabs.
+ */
+export async function selectMantineOption(
+  selectTestId: string,
+  optionValue: string,
+  timeout = 10000,
+) {
+  await retryOnStale(async () => {
+    const select = await getCssElementFromDataTestId(selectTestId, timeout);
+    await getDriver().wait(until.elementIsEnabled(select), timeout);
+    await select.click();
+
+    // The dropdown is portalled outside the select, so it is looked up globally
+    await getDriver().wait(
+      until.elementLocated(By.css('[data-combobox-option]')),
+      timeout,
+      `Dropdown of "${selectTestId}" did not open`,
+    );
+
+    const options = await getDriver().findElements(
+      By.css('[data-combobox-option]'),
+    );
+    for (const option of options) {
+      // Closed dropdowns keep their options in the DOM, and several selects of
+      // the page offer the same values: only the visible ones belong to the
+      // dropdown that was just opened
+      if (!(await option.isDisplayed())) continue;
+
+      const value = await option.getAttribute('value');
+      const label = (await option.getText()).trim();
+      if (value === optionValue || label === optionValue) {
+        await option.click();
+        return;
+      }
+    }
+
+    throw new Error(
+      `Option "${optionValue}" not found in the open dropdown of "${selectTestId}"`,
+    );
+  });
+}
+
+/**
+ * Clicks a Mantine `Button` that switches to its loading state and waits until
+ * it settles back.
+ *
+ * The button is first given a short window to enter the loading state, so that
+ * the wait cannot succeed before React has even rendered it.
+ */
+export async function clickAndAwaitLoading(testId: string, timeout = 30000) {
+  await findCssElementAndClickIt(testId);
+
+  const isLoading = async () =>
+    (await getCssElementFromDataTestId(testId, timeout)).getAttribute(
+      'data-loading',
+    );
+
+  // Entering the loading state is best effort: a request answered instantly
+  // never shows it, and that is not a failure.
+  const enteredLoadingDeadline = Date.now() + 2000;
+  while (Date.now() < enteredLoadingDeadline) {
+    if ((await isLoading()) !== null) break;
+    await new Promise((res) => setTimeout(res, 50));
+  }
+
+  await getDriver().wait(
+    async () => (await isLoading()) === null,
+    timeout,
+    `Button "${testId}" stayed in loading state`,
+  );
+}
+
+/**
+ * Clicks a control that disables itself while it works, and waits until it
+ * accepts input again.
+ *
+ * Used for actions whose only progress signal is the disabled state, such as
+ * adding a URI while the back-end verifies it.
+ */
+export async function clickAndAwaitEnabled(testId: string, timeout = 60000) {
+  await findCssElementAndClickIt(testId);
+
+  const isEnabled = async () =>
+    (await getCssElementFromDataTestId(testId, timeout)).isEnabled();
+
+  // Entering the busy state is best effort: an action answered instantly never
+  // shows it, and that is not a failure.
+  const busyDeadline = Date.now() + 2000;
+  while (Date.now() < busyDeadline) {
+    if (!(await isEnabled())) break;
+    await new Promise((res) => setTimeout(res, 50));
+  }
+
+  await getDriver().wait(
+    async () => await isEnabled(),
+    timeout,
+    `Control "${testId}" stayed disabled`,
+  );
+}
+
+/**
+ * Reads every Mantine notification currently displayed.
+ */
+export async function readNotifications(): Promise<
+  { title: string; description: string }[]
+> {
+  return await getDriver().executeScript(() =>
+    Array.from(document.querySelectorAll('.mantine-Notification-root')).map(
+      (notification) => ({
+        title:
+          notification.querySelector('.mantine-Notification-title')
+            ?.textContent ?? '',
+        description:
+          notification.querySelector('.mantine-Notification-description')
+            ?.textContent ?? '',
+      }),
+    ),
+  );
+}
+
+/**
+ * Waits for a notification carrying `title` and returns its description.
+ *
+ * Notifications close on their own after a few seconds, so this polls fast and
+ * must be called right after the action that raises it.
+ */
+export async function waitForNotification(
+  title: string,
+  timeout = 15000,
+): Promise<string> {
+  const deadline = Date.now() + timeout;
+  let seen: string[] = [];
+
+  while (Date.now() < deadline) {
+    const notifications = await readNotifications();
+    const match = notifications.find(
+      (notification) => notification.title === title,
+    );
+    if (match) return match.description;
+    seen = notifications.map((notification) => notification.title);
+    await new Promise((res) => setTimeout(res, 100));
+  }
+
+  throw new Error(
+    `Notification "${title}" never appeared. Last seen: ${JSON.stringify(seen)}`,
+  );
+}
+
+/**
+ * Asserts that no notification carrying `title` shows up during `durationMs`.
+ */
+export async function expectNoNotification(title: string, durationMs = 2500) {
+  const deadline = Date.now() + durationMs;
+
+  while (Date.now() < deadline) {
+    const notifications = await readNotifications();
+    const match = notifications.find(
+      (notification) => notification.title === title,
+    );
+    expect(match, `Unexpected notification "${title}": ${match?.description}`)
+      .to.be.undefined;
+    await new Promise((res) => setTimeout(res, 100));
+  }
+}
+
 export async function waitForValue<T>(
   checkDescription: string,
   callback: () => Promise<T>,

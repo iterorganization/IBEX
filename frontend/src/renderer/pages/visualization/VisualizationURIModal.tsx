@@ -596,10 +596,10 @@ export const VisualizationURIModal = ({
                 aria-label="Add URI"
                 component="button"
                 type="submit"
+                data-testid="config-uri-selection-modal-add-uri-button"
                 disabled={isLoading || isLoadingDbEntries}
               >
                 <IconPlus
-                  data-testid="config-uri-selection-modal-add-uri-button"
                   style={{ width: '70%', height: '70%' }}
                   stroke={1.5}
                 />

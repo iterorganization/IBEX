@@ -1,17 +1,17 @@
-import { By, until } from 'selenium-webdriver';
 import {
   startApp,
   getDriver,
   stopApp,
   waitForApi,
-  setTestState,
   getTestState,
 } from './setup';
 import {
+  clickAndAwaitEnabled,
   ensureCssElementIsDisplayed,
   findCssElementAndClickIt,
   findTextElementAndClickIt,
   getCssElementFromDataTestId,
+  resetAppState,
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
@@ -34,24 +34,15 @@ describe('UI Tests for plotted data', function () {
     await stopApp();
   });
 
-  afterEach(async () => {
-    await setTestState({ configurations: [], active: null });
+  // The Electron instance is shared with the other specs and survives between
+  // runs, so each test starts by clearing whatever the previous one left behind.
+  // A modal left open would otherwise intercept every click of the next test.
+  beforeEach(async () => {
+    await resetAppState();
+  });
 
-    try {
-      const overlay = await getDriver().findElement(
-        By.css('.mantine-Modal-overlay'),
-      );
-      const displayed = await overlay.isDisplayed();
-      if (displayed) {
-        const close = await getDriver().findElement(
-          By.css('[data-testid="modal-close-button"]'),
-        );
-        await close.click();
-        await getDriver().wait(until.stalenessOf(overlay), 10000);
-      }
-    } catch {
-      // no modal to close
-    }
+  afterEach(async () => {
+    await resetAppState();
   });
 
   it('Should create a new configuration, and plot data on it', async () => {
@@ -92,11 +83,10 @@ describe('UI Tests for plotted data', function () {
       'config-uri-selection-modal-uri-text-input',
       dataPath1,
     );
-    const buttonSavingUris = await ensureCssElementIsDisplayed(
-      'config-uri-selection-modal-add-uri-button',
-    );
-    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
-    await waitForElementToDisappear(buttonSavingUris);
+    // Adding a URI is asynchronous: the button disables itself while the
+    // back-end verifies it, and typing the next URI before it completes would
+    // race the form
+    await clickAndAwaitEnabled('config-uri-selection-modal-add-uri-button');
     /// Add the URI 2 of iter_disruption_113112_1.nc to test interpolation later
     const dataPath2: string = await (
       await getDriver()
@@ -111,14 +101,16 @@ describe('UI Tests for plotted data', function () {
       dataPath2,
       true,
     );
-    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
-    await waitForElementToDisappear(buttonSavingUris);
+    await clickAndAwaitEnabled('config-uri-selection-modal-add-uri-button');
 
     await findCssElementAndClickIt(
       'config-uri-selection-modal-validate-button',
       100,
       300,
     );
+    // Building the tree of both datasets takes a while, the biggest one weighs
+    // more than 170 MB
+    await ensureCssElementIsDisplayed(`uriAccordion-${dataPath1}`, 600, 100);
     await findCssElementAndClickIt(`uriAccordion-${dataPath1}`, 200, 100);
     await findCssElementAndClickIt(
       `folder-${dataPath1}#equilibrium:0/`,

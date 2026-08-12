@@ -231,6 +231,7 @@ export const CustomizeSmoothing = ({
           value={smoothingMethod}
           data={smoothingMethods.map((meth) => meth.value)}
           onChange={updateSmoothingMethod}
+          data-testid="data-smoothing-method"
           renderOption={(option) => {
             const selectedOption = smoothingMethods.find(
               (meth) => option.option.value === meth.value,
@@ -272,6 +273,7 @@ export const CustomizeSmoothing = ({
               }
             }}
             error={isSigmaInvalid ? SIGMA_ERROR : undefined}
+            data-testid="data-smoothing-sigma"
             w="45%"
             maw={200}
             min={MIN_GAUSSIAN_SMOOTHING_SIGMA}
@@ -293,6 +295,7 @@ export const CustomizeSmoothing = ({
               onChange={(value: number) =>
                 updateSmoothingParam('savgol_smoothing_window_length', value)
               }
+              data-testid="data-smoothing-window-length"
               w="45%"
               maw={200}
               min={1}
@@ -309,6 +312,7 @@ export const CustomizeSmoothing = ({
               onChange={(value: number) =>
                 updateSmoothingParam('savgol_smoothing_polyorder', value)
               }
+              data-testid="data-smoothing-polyorder"
               w="45%"
               maw={200}
               min={0}
@@ -324,6 +328,7 @@ export const CustomizeSmoothing = ({
               onChange={(value: number) =>
                 updateSmoothingParam('savgol_smoothing_deriv', value)
               }
+              data-testid="data-smoothing-deriv"
               w="45%"
               maw={200}
               min={0}
@@ -337,6 +342,7 @@ export const CustomizeSmoothing = ({
               onChange={(value: number) =>
                 updateSmoothingParam('savgol_smoothing_delta', value)
               }
+              data-testid="data-smoothing-delta"
               w="45%"
               maw={200}
             />
@@ -354,6 +360,7 @@ export const CustomizeSmoothing = ({
                   value ?? DEFAULT_SAVGOL_MODE,
                 )
               }
+              data-testid="data-smoothing-mode"
               w="45%"
               maw={200}
             />
@@ -365,6 +372,7 @@ export const CustomizeSmoothing = ({
               onChange={(value: number) =>
                 updateSmoothingParam('savgol_smoothing_cval', value)
               }
+              data-testid="data-smoothing-cval"
               w="45%"
               maw={200}
             />
@@ -382,6 +390,7 @@ export const CustomizeSmoothing = ({
             isSigmaInvalid ||
             loadingAction === 'restore'
           }
+          data-testid="data-smoothing-apply-button"
         >
           Apply
         </Button>
@@ -391,6 +400,7 @@ export const CustomizeSmoothing = ({
           disabled={!selectedPlot || loadingAction === 'apply'}
           variant="outline"
           leftSection={<IconRestore size={20} />}
+          data-testid="data-smoothing-restore-button"
         >
           Restore
         </Button>
