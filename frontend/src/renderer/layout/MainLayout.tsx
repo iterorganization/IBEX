@@ -17,6 +17,7 @@ import { PreferenceModal } from '../components/preferences/PreferenceModal';
 import {
   updateIbexConfig,
   formatConfigBeforeLoadingURIs,
+  formatSignalOperandsToSave,
   plotNodeUriLoaded,
   updateCustomDataTree,
   readIbexConfig,
@@ -144,6 +145,13 @@ export function MainLayout() {
             line: plot?.line || {},
             customPreferences: plot?.customPreferences || {},
             mode: plot?.mode || 'line',
+            smoothing: plot?.smoothing,
+            // Signal operands are stored the same way as nodeUri, so that they
+            // are remapped onto the selected data entries when reloading
+            operations: formatSignalOperandsToSave(
+              plot?.operations,
+              dataGrid.plot,
+            ),
           };
         }),
       }),

@@ -265,10 +265,11 @@ export const VisualizationMetaData = () => {
       );
       if (data) {
         setDataGridLayout(data);
-        setTabsValue(data.plot[0]?.name || null);
-        const findPlot = data.plot.find(
-          (item) => item.name === data.plot[0]?.name,
-        );
+        const selectedName = data.plot.some((item) => item.name === tabsValue)
+          ? tabsValue
+          : data.plot[0]?.name || null;
+        setTabsValue(selectedName);
+        const findPlot = data.plot.find((item) => item.name === selectedName);
         if (findPlot) {
           setItemDataGrid({
             ...data,

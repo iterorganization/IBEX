@@ -10,15 +10,21 @@ import {
   GeometryInfosResponse,
   InfoVersionResponse,
   NodeInfoResponse,
+  DataOperation,
   NodeInfoTypeEnum,
+  OperationKind,
   PlotDataResponse,
   SearchNodeResponse,
+  SignalOperation,
+  SmoothingParams,
+  UnaryOperation,
   URDataEntriesResponse,
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
 import { getTensorizedMatrix, transformComplexData } from './plot';
 import { replaceNullsWithNaN } from './functions';
+import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';
 
 /**
@@ -34,6 +40,18 @@ const getConfig = async () => {
     throw error;
   }
 };
+
+/**
+ * Error already reported to the user by handleError.
+ */
+type NotifiedError = Error & { notified?: boolean };
+
+/**
+ * Tells whether the user has already been notified of this error, so that
+ * callers can skip their own generic notification.
+ */
+export const isNotifiedError = (error: unknown): boolean =>
+  Boolean((error as NotifiedError)?.notified);
 
 /**
  * Handles API errors.
@@ -63,6 +81,9 @@ const handleError = (error: unknown, context: string, code?: number) => {
         !code || (code >= 400 && code < 500) ? error.message : 'Internal error',
       color: 'red',
     });
+    // Flag the error so that callers do not stack a second, generic notification
+    // on top of the detailed message coming from the server.
+    (error as NotifiedError).notified = true;
   }
   console.error(`Error in ${context}:`, error);
   throw error;
@@ -205,6 +226,156 @@ export const getInterpolationMethods = async (): Promise<
   );
 };
 
+export const getSmoothingMethods = async (): Promise<OptionWithTooltip[]> => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const smoothing = methodsRes.data_manipulation_methods.find(
+    (m) => m.name === 'Data smoothing/denoising',
+  );
+  const param = smoothing?.method_parameters.find(
+    (p) => p.name === 'smoothing_method',
+  );
+  return (
+    param?.possible_values?.map((item) => ({
+      value: item.value,
+      tooltip: item.description,
+    })) ?? []
+  );
+};
+
+/**
+ * Read the operation types exposed by a data manipulation method.
+ * Both "Simple Data Operations" and "Signal Data Operations" expose a parameter
+ * named "operations", so the method name is the only discriminator.
+ */
+const getOperationTypeOptions = async (
+  methodName: string,
+): Promise<{ value: string; label: string }[]> => {
+  const methodsRes = await fetchDataManipulationMethods();
+  const operations = methodsRes.data_manipulation_methods.find(
+    (m) => m.name === methodName,
+  );
+  const operationsParam = operations?.method_parameters.find(
+    (p) => p.name === 'operations',
+  );
+  const typeField = operationsParam?.fields?.find(
+    (f) => f.name === 'operation_type',
+  );
+  // Display the human-readable description as the label while keeping the raw
+  // operation value (e.g. "add") for the fetchDataPlot request.
+  return (
+    typeField?.possible_values?.map((item) => ({
+      value: item.value,
+      label: item.description,
+    })) ?? []
+  );
+};
+
+/**
+ * Operation types available for a scalar (unary) operation.
+ */
+export const getOperationMethods = async (): Promise<
+  { value: string; label: string }[]
+> => getOperationTypeOptions('Simple Data Operations');
+
+/**
+ * Operation types available for a signal (binary) operation. The back-end
+ * exposes fewer types here than for scalar operations (no pow / root).
+ */
+export const getSignalOperationMethods = async (): Promise<
+  { value: string; label: string }[]
+> => getOperationTypeOptions('Signal Data Operations');
+
+// Smoothing methods
+export const GAUSSIAN_FILTER = 'gaussian_filter';
+export const SAVGOL_FILTER = 'savitzky-golay_filter';
+
+// Default smoothing parameters, reused for input display and request building
+export const DEFAULT_GAUSSIAN_SMOOTHING_SIGMA = 1;
+// Sigma is expressed in samples. A null or negative sigma leaves the data
+// untouched, so the gaussian filter would silently do nothing: keep the input
+// at or above this floor
+export const MIN_GAUSSIAN_SMOOTHING_SIGMA = 0.1;
+export const DEFAULT_SAVGOL_WINDOW_LENGTH = 5;
+export const DEFAULT_SAVGOL_POLYORDER = 2;
+export const DEFAULT_SAVGOL_DERIV = 0;
+export const DEFAULT_SAVGOL_DELTA = 1.0;
+export const DEFAULT_SAVGOL_MODE = 'interp';
+export const DEFAULT_SAVGOL_CVAL = 0.0;
+
+/**
+ * Build a clean, complete SmoothingParams for the selected method (unedited fields
+ * filled with their defaults), or undefined when no method is set.
+ */
+export const buildSmoothingRequest = (
+  smoothing?: SmoothingParams,
+): SmoothingParams | undefined => {
+  if (smoothing?.smoothing_method === GAUSSIAN_FILTER) {
+    return {
+      smoothing_method: GAUSSIAN_FILTER,
+      gaussian_smoothing_sigma:
+        smoothing.gaussian_smoothing_sigma ?? DEFAULT_GAUSSIAN_SMOOTHING_SIGMA,
+    };
+  }
+  if (smoothing?.smoothing_method === SAVGOL_FILTER) {
+    return {
+      smoothing_method: SAVGOL_FILTER,
+      savgol_smoothing_window_length:
+        smoothing.savgol_smoothing_window_length ??
+        DEFAULT_SAVGOL_WINDOW_LENGTH,
+      savgol_smoothing_polyorder:
+        smoothing.savgol_smoothing_polyorder ?? DEFAULT_SAVGOL_POLYORDER,
+      savgol_smoothing_deriv:
+        smoothing.savgol_smoothing_deriv ?? DEFAULT_SAVGOL_DERIV,
+      savgol_smoothing_delta:
+        smoothing.savgol_smoothing_delta ?? DEFAULT_SAVGOL_DELTA,
+      savgol_smoothing_mode:
+        smoothing.savgol_smoothing_mode ?? DEFAULT_SAVGOL_MODE,
+      savgol_smoothing_cval:
+        smoothing.savgol_smoothing_cval ?? DEFAULT_SAVGOL_CVAL,
+    };
+  }
+  return undefined;
+};
+
+/**
+ * Tell apart the two kinds of rows stored in `plot.operations`. Rows saved
+ * before the "Data operations" panel have no `kind` and are scalar operations.
+ */
+export const isSignalOperation = (
+  operation: DataOperation,
+): operation is SignalOperation => operation.kind === 'signal';
+
+export const getOperationKind = (operation: DataOperation): OperationKind =>
+  operation.kind ?? 'unary';
+
+/**
+ * Build the ordered "type:value" list from scalar operation rows
+ * (dropping rows without a type or without a usable number).
+ */
+export const formatOperations = (operations?: DataOperation[]): string[] =>
+  (operations ?? [])
+    .filter(
+      (operation): operation is UnaryOperation => !isSignalOperation(operation),
+    )
+    .filter((operation) => operation.type && Number.isFinite(operation.value))
+    .map((operation) => `${operation.type}:${operation.value}`);
+
+/**
+ * Build the ordered "type:uri" list from signal operation rows (dropping
+ * incomplete rows). URIs are normalized so that they match the entries sent in
+ * `interpolate_over`: the back-end reuses an already interpolated signal only
+ * when both strings are identical.
+ */
+export const formatSignalOperations = (
+  operations?: DataOperation[],
+): string[] =>
+  (operations ?? [])
+    .filter(isSignalOperation)
+    .filter((operation) => operation.type && operation.value)
+    .map(
+      (operation) => `${operation.type}:${normalizeIndices(operation.value)}`,
+    );
+
 /**
  * Retrieves plot data for a given URI.
  */
@@ -215,6 +386,9 @@ export const fetchDataPlot = async (
   type?: NodeInfoTypeEnum,
   interpolateOver?: string[],
   interpolationMethod?: string,
+  smoothing?: SmoothingParams,
+  operations?: string[],
+  signalOperations?: string[],
 ) => {
   const downsampled_size = downsamplingSize || 1000;
   let response: PlotDataResponse;
@@ -243,16 +417,42 @@ export const fetchDataPlot = async (
     encodedInterpolateOver += `&interpolation_method=${encodeURIComponent(interpolationMethod)}`;
   }
 
+  // Provide smoothing params if needed
+  let encodedSmoothing: string = '';
+  if (smoothing?.smoothing_method) {
+    for (const [key, value] of Object.entries(smoothing)) {
+      if (value != null) {
+        encodedSmoothing += `&${key}=${encodeURIComponent(value)}`;
+      }
+    }
+  }
+
+  // Provide operations param if needed
+  let encodedOperations: string = '';
+  if (operations) {
+    for (const operation of operations) {
+      encodedOperations += `&operations=${encodeURIComponent(operation)}`;
+    }
+  }
+
+  // Provide signal_operations param if needed
+  let encodedSignalOperations: string = '';
+  if (signalOperations) {
+    for (const signalOperation of signalOperations) {
+      encodedSignalOperations += `&signal_operations=${encodeURIComponent(signalOperation)}`;
+    }
+  }
+
   if (downsamplingMethod) {
     // Get downsampled data plot
     response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
     );
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}`,
+        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
         5000,
       );
     } catch (error) {
@@ -277,8 +477,13 @@ export const fetchDataPlot = async (
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
         response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}`,
+          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
         );
+      } else {
+        // Any other error (e.g. a 466 raised when a signal operation cannot be
+        // applied) has already been notified by handleError: propagate it
+        // instead of falling through with an undefined response.
+        throw error;
       }
     }
   }

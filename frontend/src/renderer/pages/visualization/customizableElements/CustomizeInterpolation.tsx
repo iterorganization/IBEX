@@ -9,6 +9,7 @@ import {
   normalizeIndices,
   getInterpolationMethods,
   getUrisToInterpolate,
+  reapplyAxisOrder,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Group, Loader, Select, Stack } from '@mantine/core';
@@ -117,6 +118,13 @@ export const CustomizeInterpolation = ({
 
         plotIndex++;
       }
+
+      // Re-apply axis transposition: the back-end returns data in default axis
+      // order, so restore the user's transposition after the fetch
+      const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
+        (coord) => coord.axeIndex,
+      );
+      await reapplyAxisOrder(updatedDataPlot, wantedAxeIndexOrder);
 
       // Save new configuration with interpolated data
       setCustomizedDataGrid({

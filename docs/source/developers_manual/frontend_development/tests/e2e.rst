@@ -19,6 +19,9 @@ End-to-End (E2E) Tests
 * Navigation through the application.
 * Browsing and selecting datasets from HDF5 files.
 * Generating plots based on selected data.
+* Manipulating plotted data: smoothing (gaussian and Savitzky-Golay filters) and
+  data operations (constant and signal), including the unit produced by an
+  operation being reported on a second Y axis.
 * Verifying UI components render correctly with Mantine styles.
 
 **Prerequisites to run:**
