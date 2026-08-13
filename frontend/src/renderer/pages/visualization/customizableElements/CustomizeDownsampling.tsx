@@ -202,9 +202,9 @@ export const CustomizeDownsampling = ({
           maw={200}
         />
         <NumberInput
-          label="Size"
-          description="Update the size"
-          placeholder="Update the size"
+          label="Size of the leaf node"
+          description="Number of elements to retain in the leaf node"
+          placeholder="Enter the size of the leaf node"
           value={downsamplingSize}
           onChange={(value: number) => setDownsamplingSize(value)}
           w="45%"
