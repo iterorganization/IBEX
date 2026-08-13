@@ -1,7 +1,6 @@
 import {
   By,
   error as seleniumError,
-  Key,
   until,
   WebElement,
 } from 'selenium-webdriver';
@@ -112,20 +111,77 @@ export async function writeTextInCssElement(
   text: string,
   clearText: boolean = false,
 ) {
-  await retryOnStale(async () => {
-    const input = await getCssElementFromDataTestId(cssElementDataTestIdName);
-    if (clearText) {
-      if (
-        (await input.getAttribute('value')) != undefined &&
-        (await input.getAttribute('value'))?.length > 0
-      ) {
-        while ((await input.getAttribute('value')).length > 0) {
-          await input.sendKeys(Key.BACK_SPACE);
-        }
+  const typeText = () =>
+    retryOnStale(async () => {
+      const input = await getCssElementFromDataTestId(cssElementDataTestIdName);
+      if (!clearText) {
+        await input.sendKeys(text);
+        return;
       }
-    }
-    await input.sendKeys(text);
-  });
+
+      // Replacing the content through the DOM setter, then firing the event
+      // React listens to.
+      //
+      // Typing it out cannot work on these fields. They are controlled, and
+      // emptying a Mantine `NumberInput` makes its `onChange` write a default
+      // straight back into it: `Number('')` is `0`, which is finite, so
+      // `data-operation-value-*` returns to "0" after every keystroke and
+      // deleting one character at a time never ends. Overwriting a selection
+      // instead does terminate, but only updates the field on screen: the
+      // component keeps its own state, and the operation was still applied
+      // with its default value.
+      await getDriver().executeScript(
+        (element: HTMLInputElement, value: string) => {
+          const setter = Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            'value',
+          )?.set;
+          setter?.call(element, value);
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+        input,
+        text,
+      );
+    });
+
+  await typeText();
+
+  // Only a cleared field has a known expected value, so only that case can be
+  // checked.
+  if (!clearText) return;
+
+  /**
+   * Waits for the field to settle, and reports what it holds.
+   *
+   * These inputs are controlled by React: a re-render landing while the field
+   * is being emptied puts the previous value back, which then gets prefixed to
+   * the text being typed. The resulting URI is silently rejected by the
+   * back-end, so the failure only surfaces much later as a button that never
+   * becomes enabled.
+   */
+  const settledValue = async () => {
+    let value: string;
+    const deadline = Date.now() + 1000;
+    do {
+      value = await retryOnStale(async () =>
+        (
+          await getCssElementFromDataTestId(cssElementDataTestIdName)
+        ).getAttribute('value'),
+      );
+      if (value === text) return value;
+      await new Promise((res) => setTimeout(res, 100));
+    } while (Date.now() < deadline);
+    return value;
+  };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if ((await settledValue()) === text) return;
+    await typeText();
+  }
+
+  expect(await settledValue(), `Field "${cssElementDataTestIdName}"`).to.equal(
+    text,
+  );
 }
 
 export async function findCssElementAndClickIt(
@@ -139,7 +195,11 @@ export async function findCssElementAndClickIt(
       retries * delayMs,
     );
 
-    await getDriver().wait(until.elementIsEnabled(button), retries * delayMs);
+    await getDriver().wait(
+      until.elementIsEnabled(button),
+      retries * delayMs,
+      `Control "${cssElementDataTestIdName}" never became enabled`,
+    );
 
     expect(
       await button.isDisplayed(),
@@ -183,39 +243,71 @@ export async function selectMantineOption(
   optionValue: string,
   timeout = 10000,
 ) {
-  await retryOnStale(async () => {
-    const select = await getCssElementFromDataTestId(selectTestId, timeout);
-    await getDriver().wait(until.elementIsEnabled(select), timeout);
-    await select.click();
+  /** Opens the dropdown, clicks the option, and returns its visible label. */
+  const pickOption = () =>
+    retryOnStale(async () => {
+      const select = await getCssElementFromDataTestId(selectTestId, timeout);
+      await getDriver().wait(until.elementIsEnabled(select), timeout);
+      await select.click();
 
-    // The dropdown is portalled outside the select, so it is looked up globally
-    await getDriver().wait(
-      until.elementLocated(By.css('[data-combobox-option]')),
-      timeout,
-      `Dropdown of "${selectTestId}" did not open`,
-    );
+      // The dropdown is portalled outside the select, so it is looked up
+      // globally
+      await getDriver().wait(
+        until.elementLocated(By.css('[data-combobox-option]')),
+        timeout,
+        `Dropdown of "${selectTestId}" did not open`,
+      );
 
-    const options = await getDriver().findElements(
-      By.css('[data-combobox-option]'),
-    );
-    for (const option of options) {
-      // Closed dropdowns keep their options in the DOM, and several selects of
-      // the page offer the same values: only the visible ones belong to the
-      // dropdown that was just opened
-      if (!(await option.isDisplayed())) continue;
+      const options = await getDriver().findElements(
+        By.css('[data-combobox-option]'),
+      );
+      for (const option of options) {
+        // Closed dropdowns keep their options in the DOM, and several selects
+        // of the page offer the same values: only the visible ones belong to
+        // the dropdown that was just opened
+        if (!(await option.isDisplayed())) continue;
 
-      const value = await option.getAttribute('value');
-      const label = (await option.getText()).trim();
-      if (value === optionValue || label === optionValue) {
-        await option.click();
-        return;
+        const value = await option.getAttribute('value');
+        const label = (await option.getText()).trim();
+        if (value === optionValue || label === optionValue) {
+          await option.click();
+          return label;
+        }
       }
-    }
 
-    throw new Error(
-      `Option "${optionValue}" not found in the open dropdown of "${selectTestId}"`,
-    );
-  });
+      throw new Error(
+        `Option "${optionValue}" not found in the open dropdown of "${selectTestId}"`,
+      );
+    });
+
+  /**
+   * Waits for the field to display the choice.
+   *
+   * A panel that finishes loading its grid re-renders its rows and drops a
+   * selection made a moment earlier, without any error: the field simply goes
+   * back to being empty. Only what the field shows tells the choice was kept.
+   */
+  const isSelected = async (label: string) => {
+    const deadline = Date.now() + 2000;
+    do {
+      const shown = await retryOnStale(async () =>
+        (await getCssElementFromDataTestId(selectTestId, timeout)).getAttribute(
+          'value',
+        ),
+      );
+      if (shown === label || shown === optionValue) return true;
+      await new Promise((res) => setTimeout(res, 100));
+    } while (Date.now() < deadline);
+    return false;
+  };
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (await isSelected(await pickOption())) return;
+  }
+
+  throw new Error(
+    `Option "${optionValue}" never stuck in the select "${selectTestId}"`,
+  );
 }
 
 /**
@@ -226,23 +318,40 @@ export async function selectMantineOption(
  * the wait cannot succeed before React has even rendered it.
  */
 export async function clickAndAwaitLoading(testId: string, timeout = 30000) {
-  await findCssElementAndClickIt(testId);
+  await findCssElementAndClickIt(testId, Math.ceil(timeout / 100), 100);
 
-  const isLoading = async () =>
-    (await getCssElementFromDataTestId(testId, timeout)).getAttribute(
-      'data-loading',
+  /**
+   * `null` while idle, the string of the `data-loading` attribute while busy,
+   * and `undefined` once the button is gone.
+   */
+  const loadingState = async () => {
+    const [button] = await getDriver().findElements(
+      By.css(`[data-testid="${testId}"]`),
     );
+    if (!button) return undefined;
+    try {
+      return await button.getAttribute('data-loading');
+    } catch (err) {
+      if (err instanceof seleniumError.StaleElementReferenceError) {
+        return undefined;
+      }
+      throw err;
+    }
+  };
 
   // Entering the loading state is best effort: a request answered instantly
   // never shows it, and that is not a failure.
   const enteredLoadingDeadline = Date.now() + 2000;
   while (Date.now() < enteredLoadingDeadline) {
-    if ((await isLoading()) !== null) break;
+    if ((await loadingState()) !== null) break;
     await new Promise((res) => setTimeout(res, 50));
   }
 
   await getDriver().wait(
-    async () => (await isLoading()) === null,
+    async () => {
+      const state = await loadingState();
+      return state === null || state === undefined;
+    },
     timeout,
     `Button "${testId}" stayed in loading state`,
   );
@@ -256,7 +365,7 @@ export async function clickAndAwaitLoading(testId: string, timeout = 30000) {
  * adding a URI while the back-end verifies it.
  */
 export async function clickAndAwaitEnabled(testId: string, timeout = 60000) {
-  await findCssElementAndClickIt(testId);
+  await findCssElementAndClickIt(testId, Math.ceil(timeout / 100), 100);
 
   const isEnabled = async () =>
     (await getCssElementFromDataTestId(testId, timeout)).isEnabled();
@@ -341,12 +450,16 @@ export async function expectNoNotification(title: string, durationMs = 2500) {
   }
 }
 
+/**
+ * Polls `callback` until it satisfies `comparator`, then asserts it one last
+ * time.
+ */
 export async function waitForValue<T>(
   checkDescription: string,
   callback: () => Promise<T>,
   expected: T,
   comparator: (actual: T, expected: T) => boolean = (a, b) => a === b,
-  retries = 5,
+  retries = 100,
   delayMs = 300,
 ): Promise<void> {
   for (let i = 0; i < retries; i++) {

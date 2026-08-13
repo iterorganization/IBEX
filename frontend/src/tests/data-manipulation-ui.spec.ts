@@ -84,6 +84,8 @@ describe('UI Tests for data manipulation', function () {
       async () => (await readPlotlyTraces())[0].y[0],
       grid.rawY[0][0],
       (actual, expected) => actual !== expected,
+      100,
+      300,
     );
 
     await saveCustomization();
@@ -132,7 +134,10 @@ describe('UI Tests for data manipulation', function () {
     // `window_length=3` / `polyorder=2` fit reproduces the input exactly.
     await writeTextInCssElement('data-smoothing-window-length', '3', true);
     await writeTextInCssElement('data-smoothing-polyorder', '1', true);
-    await writeTextInCssElement('data-smoothing-deriv', '0', true);
+    // `deriv` must differ from its default: an untouched field never fires its
+    // `onChange`, so the parameter would simply not be persisted. A non-zero
+    // deriv is also what makes `delta` meaningful for the back-end.
+    await writeTextInCssElement('data-smoothing-deriv', '1', true);
     await writeTextInCssElement('data-smoothing-delta', '2', true);
     await selectMantineOption('data-smoothing-mode', 'nearest');
     await writeTextInCssElement('data-smoothing-cval', '5', true);
@@ -143,6 +148,8 @@ describe('UI Tests for data manipulation', function () {
       async () => (await readPlotlyTraces())[0].y[0],
       grid.rawY[0][0],
       (actual, expected) => actual !== expected,
+      100,
+      300,
     );
 
     await saveCustomization();
@@ -152,7 +159,7 @@ describe('UI Tests for data manipulation', function () {
       smoothing_method: 'savitzky-golay_filter',
       savgol_smoothing_window_length: 3,
       savgol_smoothing_polyorder: 1,
-      savgol_smoothing_deriv: 0,
+      savgol_smoothing_deriv: 1,
       savgol_smoothing_delta: 2,
       savgol_smoothing_mode: 'nearest',
       savgol_smoothing_cval: 5,
@@ -210,7 +217,17 @@ describe('UI Tests for data manipulation', function () {
     await clickAndAwaitLoading('data-operations-apply-button');
 
     // Asserted on the rendered graph: the panel is kept open to chain the second
-    // row, since each open/save round trip is by far the slowest step here
+    // row, since each open/save round trip is by far the slowest step here.
+    // Plotly re-renders a moment after the request settles, so the trace has to
+    // be awaited rather than read straight away.
+    await waitForValue(
+      'Multiplication changed the rendered trace',
+      async () => (await readPlotlyTraces())[0].y[0],
+      grid.rawY[0][0] * 2,
+      (actual, expected) => actual === expected,
+      100,
+      300,
+    );
     const multiplied = await readPlotlyTraces();
     multiplied[0].y.forEach((value, index) =>
       expect(value, `multiplied point ${index}`).to.equal(
@@ -229,6 +246,9 @@ describe('UI Tests for data manipulation', function () {
       'Chained operations changed the rendered trace',
       async () => (await readPlotlyTraces())[0].y[0],
       grid.rawY[0][0] * 2 + 1000,
+      (actual, expected) => actual === expected,
+      100,
+      300,
     );
 
     await saveCustomization();
@@ -348,6 +368,9 @@ describe('UI Tests for data manipulation', function () {
       'Operation applied on top of the smoothing',
       async () => (await readPlotlyTraces())[0].y[0],
       gaussY[0] * 2,
+      (actual, expected) => actual === expected,
+      100,
+      300,
     );
     await saveCustomization();
 
@@ -408,6 +431,9 @@ describe('UI Tests for data manipulation', function () {
       'Operation applied on the second plot',
       async () => (await readPlotlyTraces())[1].y[0],
       grid.rawY[1][0] * 3,
+      (actual, expected) => actual === expected,
+      100,
+      300,
     );
 
     await saveCustomization();

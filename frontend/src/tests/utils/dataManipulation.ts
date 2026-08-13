@@ -1,4 +1,5 @@
 import { By } from 'selenium-webdriver';
+import { expect } from 'chai';
 import { getDriver, getTestState, setTestState } from '../setup';
 // Declares `window.api`, used to resolve the dataset path from inside the app
 import '../../config/bridge';
@@ -69,7 +70,29 @@ export async function resetAppState() {
     }
   }
 
-  await setTestState({ configurations: [], active: null });
+  const isEmpty = async () => {
+    const state = await getTestState();
+    return (state?.configurations?.length ?? 0) === 0 && !state?.active;
+  };
+
+  /**
+   * Clears the store and checks it stays cleared.
+   */
+  const clearAndConfirm = async (steadyMs: number) => {
+    await setTestState({ configurations: [], active: null });
+    const deadline = Date.now() + steadyMs;
+    while (Date.now() < deadline) {
+      if (!(await isEmpty())) return false;
+      await new Promise((res) => setTimeout(res, 150));
+    }
+    return true;
+  };
+
+  let cleared = false;
+  for (let attempt = 0; attempt < 5 && !cleared; attempt++) {
+    cleared = await clearAndConfirm(1500);
+  }
+  expect(cleared, 'The application state kept being written back').to.be.true;
 
   for (let attempt = 0; attempt < 20; attempt++) {
     const overlays = await getDriver().findElements(
@@ -78,6 +101,40 @@ export async function resetAppState() {
     if (overlays.length === 0) return;
     await new Promise((res) => setTimeout(res, 250));
   }
+}
+
+/**
+ * Adds the URI currently typed in the selection modal, and waits until its row
+ * is listed as selected.
+ */
+export async function addUriAndAwaitSelection(uri: string) {
+  const isSelected = async () =>
+    await getDriver().executeScript((target: string) => {
+      const modal = document.querySelector(
+        '[data-testid="config-uri-selection-modal"]',
+      );
+      return Array.from(modal?.querySelectorAll('tbody tr') ?? []).some(
+        (row) => {
+          const uriCell = row.querySelectorAll('td')[2];
+          const box = row.querySelector(
+            'input[type="checkbox"]',
+          ) as HTMLInputElement;
+          return uriCell?.textContent?.trim() === target && box?.checked;
+        },
+      );
+    }, uri);
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    // The button disables itself while the back-end verifies the URI, and the
+    // input is disabled with it: typing anything before it settles would throw
+    await clickAndAwaitEnabled('config-uri-selection-modal-add-uri-button');
+    for (let poll = 0; poll < 25; poll++) {
+      if (await isSelected()) return;
+      await new Promise((res) => setTimeout(res, 200));
+    }
+  }
+
+  throw new Error(`URI "${uri}" was never listed as selected`);
 }
 
 /**
@@ -124,8 +181,7 @@ export async function setupGrid(setup: GridSetup): Promise<GridHandle> {
     dataPath,
     true,
   );
-  // The button disables itself while the back-end verifies the URI
-  await clickAndAwaitEnabled('config-uri-selection-modal-add-uri-button');
+  await addUriAndAwaitSelection(dataPath);
   await findCssElementAndClickIt(
     'config-uri-selection-modal-validate-button',
     100,
@@ -164,16 +220,21 @@ export async function setupGrid(setup: GridSetup): Promise<GridHandle> {
 }
 
 /**
- * Opens the "Data manipulation" panel and unfolds the requested accordion.
- *
- * No hover is needed: `generateNewGrid` marks tree-created grids as editing, so
- * the action buttons stay mounted.
+ * Opens a grid customization panel and unfolds one of its sections.
+ * @param accessButtonTestId Button opening the panel, on the grid itself.
+ * @param section Accordion section to unfold, as displayed.
+ * @param sectionContentTestId A control the section owns. Only its presence
+ *   proves the section is usable: `aria-expanded` flips one render before the
+ *   content is mounted.
  */
-export async function openDataCustomization(
-  panel: 'Data smoothing' | 'Data operations',
+export async function openCustomization(
+  accessButtonTestId: string,
+  section: string,
+  sectionContentTestId: string,
 ) {
-  const accordionTestId = `customization-${panel}-accordion`;
+  const accordionTestId = `customization-${section}-accordion`;
   const accordionSelector = By.css(`[data-testid="${accordionTestId}"]`);
+  const applyButtonSelector = By.css(`[data-testid="${sectionContentTestId}"]`);
 
   const isPanelOpen = async () =>
     Boolean((await getTestState()).active?.customizedGridLayout);
@@ -186,8 +247,16 @@ export async function openDataCustomization(
         configurations: state.configurations,
         active: { ...state.active, customizedGridLayout: null },
       });
+      // The renderer applies the message after `setTestState` has resolved
+      await waitForValue(
+        'Customization panel closed through the store',
+        isPanelOpen,
+        false,
+        (actual, expected) => actual === expected,
+        50,
+        100,
+      );
     }
-    await new Promise((res) => setTimeout(res, 500));
   };
 
   /** Clicks the access button until the store reports the panel as open. */
@@ -196,11 +265,7 @@ export async function openDataCustomization(
       if (await isPanelOpen()) return true;
       // A click landing on a node React is about to replace, as happens while
       // the grid re-renders after a save, is simply lost
-      await findCssElementAndClickIt(
-        'data-customization-access-button',
-        200,
-        100,
-      );
+      await findCssElementAndClickIt(accessButtonTestId, 200, 100);
       for (let poll = 0; poll < 20; poll++) {
         await new Promise((res) => setTimeout(res, 150));
         if (await isPanelOpen()) return true;
@@ -209,26 +274,50 @@ export async function openDataCustomization(
     return false;
   };
 
+  /** True while the section is open and its controls are mounted. */
+  const isSectionUsable = async () => {
+    const [control] = await getDriver().findElements(accordionSelector);
+    if (!control || !(await control.isDisplayed())) return false;
+    if ((await control.getAttribute('aria-expanded')) !== 'true') return false;
+    const [applyButton] = await getDriver().findElements(applyButtonSelector);
+    return Boolean(applyButton && (await applyButton.isDisplayed()));
+  };
+
   /**
-   * Waits for the accordion to be both rendered and expanded.
+   * Waits for the accordion to be expanded and to stay that way.
    *
    * The control is a toggle and the accordion remembers its opened section, so
    * it is clicked only while collapsed. Every step re-locates the node: the
-   * preview plot underneath re-renders and detaches it without warning.
+   * preview plot underneath re-renders and detaches it without warning, and
+   * that same re-render collapses a section that had just been opened. Handing
+   * back a section that is merely open right now would leave the caller
+   * clicking a button about to be unmounted, so it has to hold.
    */
   const expandAccordion = async (timeoutMs: number) => {
     const deadline = Date.now() + timeoutMs;
+    const requiredStablePolls = 7;
+    let stablePolls = 0;
+
     while (Date.now() < deadline) {
       try {
-        const [control] = await getDriver().findElements(accordionSelector);
-        if (control && (await control.isDisplayed())) {
-          if ((await control.getAttribute('aria-expanded')) === 'true') {
-            return true;
+        if (await isSectionUsable()) {
+          stablePolls += 1;
+          if (stablePolls >= requiredStablePolls) return true;
+        } else {
+          stablePolls = 0;
+          const [control] = await getDriver().findElements(accordionSelector);
+          if (
+            control &&
+            (await control.isDisplayed()) &&
+            (await control.getAttribute('aria-expanded')) !== 'true'
+          ) {
+            // Never click while it is open, that would collapse it
+            await control.click();
           }
-          await control.click();
         }
       } catch {
         // Detached mid-interaction: retry with a fresh lookup
+        stablePolls = 0;
       }
       await new Promise((res) => setTimeout(res, 300));
     }
@@ -239,13 +328,26 @@ export async function openDataCustomization(
   // and then renders its tab bar without any accordion: remount it in that case
   for (let round = 0; round < 3; round++) {
     if (!(await clickUntilOpen())) {
-      throw new Error('The data manipulation panel never opened');
+      throw new Error(`The panel of "${accessButtonTestId}" never opened`);
     }
     if (await expandAccordion(20000)) return;
     await closePanel();
   }
 
-  throw new Error(`Accordion "${panel}" never expanded`);
+  throw new Error(`Accordion "${section}" never expanded`);
+}
+
+/** Opens the "Data manipulation" panel on one of its two sections. */
+export async function openDataCustomization(
+  panel: 'Data smoothing' | 'Data operations',
+) {
+  await openCustomization(
+    'data-customization-access-button',
+    panel,
+    panel === 'Data smoothing'
+      ? 'data-smoothing-apply-button'
+      : 'data-operations-apply-button',
+  );
 }
 
 /**

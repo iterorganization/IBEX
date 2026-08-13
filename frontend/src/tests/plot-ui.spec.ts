@@ -6,8 +6,9 @@ import {
   getTestState,
 } from './setup';
 import {
-  clickAndAwaitEnabled,
+  addUriAndAwaitSelection,
   ensureCssElementIsDisplayed,
+  openCustomization,
   findCssElementAndClickIt,
   findTextElementAndClickIt,
   getCssElementFromDataTestId,
@@ -82,11 +83,12 @@ describe('UI Tests for plotted data', function () {
     await writeTextInCssElement(
       'config-uri-selection-modal-uri-text-input',
       dataPath1,
+      true,
     );
     // Adding a URI is asynchronous: the button disables itself while the
     // back-end verifies it, and typing the next URI before it completes would
     // race the form
-    await clickAndAwaitEnabled('config-uri-selection-modal-add-uri-button');
+    await addUriAndAwaitSelection(dataPath1);
     /// Add the URI 2 of iter_disruption_113112_1.nc to test interpolation later
     const dataPath2: string = await (
       await getDriver()
@@ -101,7 +103,7 @@ describe('UI Tests for plotted data', function () {
       dataPath2,
       true,
     );
-    await clickAndAwaitEnabled('config-uri-selection-modal-add-uri-button');
+    await addUriAndAwaitSelection(dataPath2);
 
     await findCssElementAndClickIt(
       'config-uri-selection-modal-validate-button',
@@ -238,6 +240,8 @@ describe('UI Tests for plotted data', function () {
     await findCssElementAndClickIt(
       `checkbox-${dataPath2}#equilibrium:0/time_slice[:]/profiles_1d/psi`,
     );
+    // Interpolating across the two datasets is a back-end round trip, well
+    // beyond the 1.5 s the default retries allow for
     await waitForValue(
       'Shape of interpolated psi/pressure plot',
       async () => {
@@ -246,6 +250,8 @@ describe('UI Tests for plotted data', function () {
       },
       [4, 298],
       (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected),
+      100,
+      300,
     );
   });
 
@@ -288,7 +294,7 @@ describe('UI Tests for plotted data', function () {
       dataPath,
       true,
     );
-    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
+    await addUriAndAwaitSelection(dataPath);
     await findCssElementAndClickIt(
       'config-uri-selection-modal-validate-button',
       100,
@@ -370,8 +376,11 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 2 - Enter the data range, apply a range, confirm the change, and check the values
-    await findCssElementAndClickIt('visual-customization-access-button');
-    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await openCustomization(
+      'visual-customization-access-button',
+      'Axis range',
+      'data-range-apply-input',
+    );
     await writeTextInCssElement('data-range-min-input', '0.2', true);
     await writeTextInCssElement('data-range-max-input', '0.8', true);
     await findCssElementAndClickIt('data-range-apply-input');
@@ -411,8 +420,11 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 3 - Enter the data range, apply a second range, confirm the change, and check the values
-    await findCssElementAndClickIt('visual-customization-access-button');
-    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await openCustomization(
+      'visual-customization-access-button',
+      'Axis range',
+      'data-range-apply-input',
+    );
     await writeTextInCssElement('data-range-min-input', '0.4', true);
     await writeTextInCssElement('data-range-max-input', '0.6', true);
     await findCssElementAndClickIt('data-range-apply-input');
@@ -452,8 +464,11 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 4 - Enter the data range, apply a third, wider range, confirm the change, and check the values
-    await findCssElementAndClickIt('visual-customization-access-button');
-    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await openCustomization(
+      'visual-customization-access-button',
+      'Axis range',
+      'data-range-apply-input',
+    );
     await writeTextInCssElement('data-range-min-input', '0.2', true);
     await writeTextInCssElement('data-range-max-input', '0.8', true);
     await findCssElementAndClickIt('data-range-apply-input');
@@ -501,8 +516,11 @@ describe('UI Tests for plotted data', function () {
     );
 
     // Step 5 - Enter the data range, restore the range, confirm the change, and check if the values have returned to their original state
-    await findCssElementAndClickIt('visual-customization-access-button');
-    await findCssElementAndClickIt('customization-Axis range-accordion');
+    await openCustomization(
+      'visual-customization-access-button',
+      'Axis range',
+      'data-range-apply-input',
+    );
     await findCssElementAndClickIt('data-range-restore-input');
     await waitForValue(
       'Restore button finished loading',
@@ -596,7 +614,7 @@ describe('UI Tests for plotted data', function () {
       dataPath,
       true,
     );
-    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
+    await addUriAndAwaitSelection(dataPath);
     await findCssElementAndClickIt(
       'config-uri-selection-modal-validate-button',
       100,
@@ -715,7 +733,9 @@ describe('UI Tests for plotted data', function () {
       'imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3',
       true,
     );
-    await findCssElementAndClickIt('config-uri-selection-modal-add-uri-button');
+    await addUriAndAwaitSelection(
+      'imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3',
+    );
     await findCssElementAndClickIt(
       'config-uri-selection-modal-validate-button',
       100,
