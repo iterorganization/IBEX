@@ -11,7 +11,8 @@ import {
   applyRange,
   updateIndexFieldName,
   getLastIndexedField,
-  swapAxis,
+  transposeDataGrid,
+  getUrisToInterpolate,
 } from '../../../utils';
 import {
   Button,
@@ -162,20 +163,27 @@ export const CustomizeDataRange = ({
 
     const restoreRange = async () => {
       try {
-        const updatedDataPlot = JSON.parse(
-          JSON.stringify(customizedDataGrid),
+        const updatedDataPlot = structuredClone(
+          customizedDataGrid,
         ) as DataGridPlot;
         // Step 1 => get full original data (coordinates + plots) && applyRange in coordinates having range (not main range since we'll delete it)
         let plotIndex = 0;
         for (const plot of updatedDataPlot.plot) {
           // Get original data for each plot
+          const urisToInterpolate = getUrisToInterpolate(
+            plot.nodeUri,
+            updatedDataPlot.plot,
+          );
           const dataRestored = await fetchDataPlot(
             normalizeIndices(plot.nodeUri),
             updatedDataPlot?.downsampled_method,
             updatedDataPlot?.downsampled_size,
+            updatedDataPlot?.dataType,
+            urisToInterpolate,
+            updatedDataPlot?.interpolated_method,
           );
 
-          if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {
+          if (plot?.error_bands?.length > 0) {
             // Downsample restored error bands with latest parameters used if error bands exists for this plot
             await fetchErrorBands(updatedDataPlot, plot.nodeUri);
           }
@@ -215,37 +223,13 @@ export const CustomizeDataRange = ({
         const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
           (coord) => coord.axeIndex,
         );
-        let actualAxeIndexOrder = (
-          JSON.parse(
-            JSON.stringify(updatedDataPlot.coordinates),
-          ) as Coordinates[]
-        ).map((coord) => coord.axeIndex);
-        if (
-          JSON.stringify(wantedAxeIndexOrder) !==
-          JSON.stringify(actualAxeIndexOrder)
-        ) {
-          // Get transposed order
-          let swappedDataPlot = JSON.parse(
-            JSON.stringify(updatedDataPlot),
-          ) as DataGridPlot;
-          let index = 0;
-          for (const wantedAxeIndex of wantedAxeIndexOrder) {
-            if (wantedAxeIndex !== actualAxeIndexOrder[index]) {
-              const newSwappedDataPlot = await swapAxis(
-                swappedDataPlot,
-                wantedAxeIndex,
-                actualAxeIndexOrder[index],
-              );
-              actualAxeIndexOrder = newSwappedDataPlot.coordinates.map(
-                (coord) => coord.axeIndex,
-              );
-              swappedDataPlot = newSwappedDataPlot;
-            }
-            index++;
-          }
-          updatedDataPlot.coordinates = swappedDataPlot.coordinates;
-          updatedDataPlot.plot = swappedDataPlot.plot;
-        }
+
+        const transposedDataPlot = await transposeDataGrid(
+          updatedDataPlot,
+          wantedAxeIndexOrder,
+        );
+        updatedDataPlot.coordinates = transposedDataPlot.coordinates;
+        updatedDataPlot.plot = transposedDataPlot.plot;
 
         // Apply ranges
         const updatedCoord = updatedDataPlot.coordinates.find(
@@ -305,8 +289,8 @@ export const CustomizeDataRange = ({
 
         const newCustomizedDataGrid = {
           ...customizedDataGrid,
-          coordinates: updatedDataPlot.coordinates,
-          plot: updatedDataPlot.plot,
+          coordinates: [...updatedDataPlot.coordinates],
+          plot: [...updatedDataPlot.plot],
         } as DataGridPlot;
         setCustomizedDataGrid(newCustomizedDataGrid);
         return newCustomizedDataGrid;
@@ -328,6 +312,9 @@ export const CustomizeDataRange = ({
                 onChange={(value: number) => setTypedMinRange(value)}
                 w={150}
                 hideControls
+                data-testid={
+                  coordinate.axeIndex === 0 ? 'data-range-min-input' : undefined
+                }
               />
               <NumberInput
                 label="Max"
@@ -337,6 +324,9 @@ export const CustomizeDataRange = ({
                 onChange={(value: number) => setTypedMaxRange(value)}
                 w={150}
                 hideControls
+                data-testid={
+                  coordinate.axeIndex === 0 ? 'data-range-max-input' : undefined
+                }
               />
             </>
           ) : (
@@ -377,6 +367,9 @@ export const CustomizeDataRange = ({
             }
             loading={isLoadingApply}
             leftSection={<IconCheck size={20} />}
+            data-testid={
+              coordinate.axeIndex === 0 ? 'data-range-apply-input' : undefined
+            }
           >
             Apply
           </Button>
@@ -386,6 +379,9 @@ export const CustomizeDataRange = ({
             loading={isLoadingRestore}
             variant="outline"
             leftSection={<IconRestore size={20} />}
+            data-testid={
+              coordinate.axeIndex === 0 ? 'data-range-restore-input' : undefined
+            }
           >
             Restore
           </Button>

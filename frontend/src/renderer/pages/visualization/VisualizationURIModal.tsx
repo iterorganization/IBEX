@@ -26,6 +26,7 @@ import {
   fetchURIExists,
   fetchURIFromPath,
   formatConfigBeforeLoadingURIs,
+  getColorRandom,
   plotNodeUriLoaded,
   updateCustomDataTree,
 } from '../../utils';
@@ -39,10 +40,6 @@ interface VisualizationSelectIDSModalProps {
 interface FormIDS {
   file: File;
   uri: string;
-}
-
-function getColorRandom(): string {
-  return `#${Math.floor(Math.random() * 16777215).toString(16)}`;
 }
 
 export const VisualizationURIModal = ({
@@ -225,22 +222,24 @@ export const VisualizationURIModal = ({
       <Table.Th>Select</Table.Th>
       <Table.Th>Name</Table.Th>
       <Table.Th>URI</Table.Th>
-      <Table.Td>
-        {dataDbEntries.length && (
-          <ActionIcon
-            variant="filled"
-            size="lg"
-            color="red"
-            onClick={() => setIsDeletingAllUri(true)}
-          >
-            <IconX
-              color="white"
-              style={{ width: '70%', height: '70%' }}
-              stroke={1.5}
-            />
-          </ActionIcon>
-        )}
-      </Table.Td>
+      {dataDbEntries.length ? (
+        <Table.Th>
+          <Tooltip label="Delete all URIs" openDelay={300}>
+            <ActionIcon
+              variant="filled"
+              size="lg"
+              color="red"
+              onClick={() => setIsDeletingAllUri(true)}
+            >
+              <IconX
+                color="white"
+                style={{ width: '70%', height: '70%' }}
+                stroke={1.5}
+              />
+            </ActionIcon>
+          </Tooltip>
+        </Table.Th>
+      ) : undefined}
     </Table.Tr>
   );
 
@@ -265,23 +264,25 @@ export const VisualizationURIModal = ({
       <Table.Td>{element.name}</Table.Td>
       <Table.Td>{element.uri}</Table.Td>
       <Table.Td>
-        <ActionIcon
-          variant="transparent"
-          aria-label="Remove URI"
-          component="button"
-          type="button"
-          onClick={() =>
-            setDataDbEntries((entries) =>
-              entries.filter((entry) => entry.uri !== element.uri),
-            )
-          }
-        >
-          <IconX
-            color="red"
-            style={{ width: '70%', height: '70%' }}
-            stroke={1.5}
-          />
-        </ActionIcon>
+        <Tooltip label="Delete the URI" openDelay={300}>
+          <ActionIcon
+            variant="transparent"
+            aria-label="Remove URI"
+            component="button"
+            type="button"
+            onClick={() =>
+              setDataDbEntries((entries) =>
+                entries.filter((entry) => entry.uri !== element.uri),
+              )
+            }
+          >
+            <IconX
+              color="red"
+              style={{ width: '70%', height: '70%' }}
+              stroke={1.5}
+            />
+          </ActionIcon>
+        </Tooltip>
       </Table.Td>
     </Table.Tr>
   ));
@@ -333,7 +334,10 @@ export const VisualizationURIModal = ({
 
     // Get new data from BE
     const newListDataGridPlot = formatConfigBeforeLoadingURIs(active);
-    const wantedDataPlot = await plotNodeUriLoaded(newListDataGridPlot);
+    const wantedDataPlot = await plotNodeUriLoaded(
+      newListDataGridPlot,
+      active.dataURI,
+    );
     active.dataPlot = wantedDataPlot;
 
     const updatedActive: Configuration = {
@@ -386,7 +390,7 @@ export const VisualizationURIModal = ({
         uri.name = getNextAvailableUriName(
           dataDbEntries.map((value) => value.name),
         );
-        setDataDbEntries(JSON.parse(JSON.stringify(dataDbEntries)));
+        setDataDbEntries(structuredClone(dataDbEntries));
       }
       return;
     }
@@ -428,7 +432,6 @@ export const VisualizationURIModal = ({
    *
    */
   async function fetchDataIDSFromURI() {
-    // ? function write/paste
     if (!formURI.values.uri) {
       console.error('URI is empty.');
       formURI.setFieldError('uri', 'Please provide a valid URI');
@@ -546,6 +549,9 @@ export const VisualizationURIModal = ({
       size="90%"
       centered
       data-testid="config-uri-selection-modal"
+      {...(window.env.E2E_TEST === 'true' && {
+        transitionProps: { duration: 0 },
+      })}
     >
       <Group justify="space-between" mb={10}>
         <FileInput
@@ -590,10 +596,10 @@ export const VisualizationURIModal = ({
                 aria-label="Add URI"
                 component="button"
                 type="submit"
+                data-testid="config-uri-selection-modal-add-uri-button"
                 disabled={isLoading || isLoadingDbEntries}
               >
                 <IconPlus
-                  data-testid="config-uri-selection-modal-add-uri-button"
                   style={{ width: '70%', height: '70%' }}
                   stroke={1.5}
                 />

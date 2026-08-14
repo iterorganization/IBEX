@@ -1,11 +1,11 @@
 [build-system]
 # Minimum requirements for the build system to execute.
-requires = ["setuptools>=61", "wheel", "packaging", "tomli;python_version<'3.11'", "versioneer[toml]"]
+requires = ["setuptools>=61", "wheel", "setuptools_scm[toml]>=6.2"]
 
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ibex"
+name = "imas-ibex"
 authors = [
   {name = "IBEX Developers"},
   {name = "Olivier Hoenen", email = "olivier.hoenen@iter.org"}
@@ -13,7 +13,7 @@ authors = [
 description = "Data visualization for IMAS IDS data"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.7"
-license-files = ["LICENSE.txt"]
+license = {text = "LGPL-3.0-only"}
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -32,16 +32,17 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Software Development :: Libraries",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"
+    "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 dynamic = ["version"]
 dependencies = [
-    "imas-python",
     "imas-idstools",
     "click",
     "uvicorn",
@@ -50,27 +51,31 @@ dependencies = [
     "tsdownsample",
     "orjson",
     "autodoc_pydantic",
+    "scipy",
 ]
 
 [project.optional-dependencies]
 # these self-dependencies are available since pip 21.2
 all = [
-    "ibex[test]",
-    "ibex[linting]",
-    "ibex[docs]",
+    "imas-ibex[test]",
+    "imas-ibex[linting]",
+    "imas-ibex[docs]",
 ]
 
 test = [
     "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pytest-unordered",
 ]
 
 linting = [
-    "ruff",
+    "ruff==0.15.22",
 ]
 
 docs =[
-    "sphinx",
-    "sphinx-autosummary-accessors",
+    "sphinx>=7,<9",
+    "sphinx-autosummary-accessors==2025.3.1",
     "sphinx_immaterial",
 ]
 
@@ -81,6 +86,10 @@ benchmark = [
 [project.urls]
 homepage = "https://github.com/iterorganization/IBEX"
 
+[tool.setuptools]
+# license-files must be here, not in [project], for setuptools <77 compatibility
+license-files = ["LICENSE.txt"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["ibex*"]
@@ -90,18 +99,18 @@ minversion = "6.0"
 addopts = "--strict-markers"
 testpaths = "tests"
 
-[tool.versioneer]
-VCS = "git"
-style = "pep440"
-versionfile_source = "ibex/_version.py"
-versionfile_build = "ibex/_version.py"
-tag_prefix = ""
-parentdir_prefix = ""
+[tool.setuptools_scm]
+write_to = "ibex/_version.py"
+local_scheme = "no-local-version"
+search_parent_directories = true
 
 [tool.ruff]
 # Set the maximum line length to 120.
 line-length = 120
-exclude = ["venv", "_version.py", "versioneer.py"]
+exclude = ["venv", "_version.py"]
+
+[tool.ruff.lint]
+extend-select = ["RUF001", "RUF002", "RUF003"]
 
 [tool.coverage.run]
 omit = [

@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Axis,
   Configuration,
   Coordinates,
+  CustomizedGridType,
   DataGridPlot,
   DataPlotly,
   GridLayoutPlotProps,
+  NodeInfoTypeEnum,
   URITreeNodeData,
 } from '../../../renderer/types';
 import { Center, Container, Text } from '@mantine/core';
 import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import {
-  containsFloat,
   getArrayValueFromDependance,
   getErrorYVectors,
   getLastIndexedField,
@@ -34,7 +35,11 @@ export const GridLayoutPlot = ({
     data.h * rowHeight + (23 * (data.h * rowHeight)) / 100,
   );
   const [widthGrid, setWidthGrid] = useState(Math.floor(data.w * colWidth));
-  const [is3DView, setIs3DView] = useState<boolean>(false);
+  const [is3DView, setIs3DView] = useState<boolean>(
+    data?.selectedPlotMode === 'Heatmap' || data?.selectedPlotMode === 'Contour'
+      ? true
+      : false,
+  );
   const [active3DTab, setActive3DTab] = useState<string>('0');
   const [metadataTabsValue, setMetadataTabsValue] = useState<string>(
     data.plot[0]?.path || '',
@@ -53,40 +58,49 @@ export const GridLayoutPlot = ({
     if (!lastTargetLastName)
       return console.warn('No indexed field found in target');
 
-    // Update coordinates targets & paths with new valueIndex
-    const updatedCoordinatesValue = data.coordinates.map((item) => {
-      const lastTargetLastName = getLastIndexedField(coordinate.target);
-
-      const updatedPath = updateIndexFieldName(
-        item.path,
-        lastTargetLastName,
-        valueIndex,
-      );
-      const updatedTarget = updateIndexFieldName(
-        item.target,
-        lastTargetLastName,
-        valueIndex,
-      );
-
-      return {
-        ...item,
-        path: updatedPath,
-        target: updatedTarget,
-        valueIndex:
-          item.name === coordinate.name ? valueIndex : item.valueIndex,
-      };
-    }) as Coordinates[];
-
-    limitSlidersToMaxLength(updatedCoordinatesValue);
-
     const updatedActive: Configuration = {
       ...active,
       dataPlot: active.dataPlot.map((item: DataGridPlot) => {
-        if (item.i === data.i) {
+        const mainDataGrid = item.i === data.i;
+        const isSynchronized = data.synchronizedGrids.list.includes(item.i);
+        const coordWithSameName = item.coordinates.find(
+          (ic) => ic.name === coordinate.name,
+        );
+        const sameCoordinate =
+          coordWithSameName &&
+          JSON.stringify(coordinate.data) ===
+            JSON.stringify(coordWithSameName.data);
+
+        if (mainDataGrid || (isSynchronized && sameCoordinate)) {
+          // Update main slider with new valueIndex & update synchronized ones matching with the same coordinate
+          const updatedCoordinatesValue = item.coordinates.map((coordItem) => {
+            const updatedPath = updateIndexFieldName(
+              coordItem.path,
+              lastTargetLastName,
+              valueIndex,
+            );
+            const updatedTarget = updateIndexFieldName(
+              coordItem.target,
+              lastTargetLastName,
+              valueIndex,
+            );
+
+            return {
+              ...coordItem,
+              path: updatedPath,
+              target: updatedTarget,
+              valueIndex:
+                coordItem.name === coordinate.name
+                  ? valueIndex
+                  : coordItem.valueIndex,
+            };
+          }) as Coordinates[];
+          limitSlidersToMaxLength(updatedCoordinatesValue);
+
           const updatedXAxisData: Axis = {
-            ...data.xAxisData,
+            ...item.xAxisData,
             path: updateIndexFieldName(
-              data.xAxisData?.path || '',
+              item.xAxisData?.path || '',
               lastTargetLastName,
               valueIndex,
             ),
@@ -98,7 +112,7 @@ export const GridLayoutPlot = ({
             0,
           );
 
-          const updatedPlot = data.plot.map((plotItem) => {
+          const updatedPlot = item.plot.map((plotItem) => {
             const updatedNodeUri = updateIndexFieldName(
               plotItem.nodeUri,
               lastTargetLastName,
@@ -117,23 +131,36 @@ export const GridLayoutPlot = ({
             );
 
             if (plotItem?.error_bands?.length) {
-              const updated_error_y = getErrorYVectors(
+              const updated_error_bands = getErrorYVectors(
                 plotItem,
                 updatedCoordinatesValue,
               );
+              let customdata;
+              if (plotItem.error_bands.length === 2) {
+                customdata = plotItem.error_bands[0].array.map((v, i) => [
+                  plotItem.error_bands[0].array[i],
+                  plotItem.error_bands[1].array[i],
+                ]);
+              } else {
+                customdata = plotItem.error_bands[0].array.map((v, i) => [
+                  plotItem.error_bands[0].array[i],
+                ]);
+              }
+
               return {
                 ...plotItem,
-                x: newXData,
-                y: newYData,
-                error_y: updated_error_y,
+                x: [...newXData],
+                y: [...newYData],
+                customdata: customdata,
+                error_bands: updated_error_bands,
                 nodeUri: updatedNodeUri,
                 path: updatedPath,
               };
             } else {
               return {
                 ...plotItem,
-                x: newXData,
-                y: newYData,
+                x: [...newXData],
+                y: [...newYData],
                 nodeUri: updatedNodeUri,
                 path: updatedPath,
               };
@@ -141,7 +168,7 @@ export const GridLayoutPlot = ({
           });
 
           return {
-            ...data,
+            ...item,
             coordinates: updatedCoordinatesValue,
             plot: updatedPlot,
             xAxisData: updatedXAxisData,
@@ -156,6 +183,8 @@ export const GridLayoutPlot = ({
   };
 
   useEffect(() => {
+    let forceToDisplayMetadata = false;
+
     // Rule to force to show metadata when y data is of type string
     let isYDataString = false;
     for (const plot of data.plot) {
@@ -166,7 +195,15 @@ export const GridLayoutPlot = ({
         }
       }
     }
-    setShouldDisplayMetadata(isYDataString);
+
+    // Rule to force to show metadata when y data is a geometry
+    let isGeometry = false;
+    if (data.is_geometry_node === true) {
+      isGeometry = true;
+    }
+
+    forceToDisplayMetadata = isYDataString || isGeometry;
+    setShouldDisplayMetadata(forceToDisplayMetadata);
   }, [data.plot.length]);
 
   /**
@@ -190,48 +227,14 @@ export const GridLayoutPlot = ({
     }
   }, [data.plot]);
 
-  const updateSelectedPlotMode = (is3DView: boolean, active: Configuration) => {
-    const updatedDataPlot: DataGridPlot[] = JSON.parse(
-      JSON.stringify(active.dataPlot),
-    );
-    const selectedDataPlot = updatedDataPlot.find(
-      (dataPlot) => dataPlot.i === data.i,
-    );
-    if (selectedDataPlot?.selectedPlotMode) {
-      selectedDataPlot.selectedPlotMode = is3DView ? 'Heatmap' : '1D';
-    } else {
-      selectedDataPlot.selectedPlotMode =
-        data.coordinates.length >= 2 &&
-        containsFloat(
-          data.coordinates.find((coord) => coord.axeIndex === 1).data,
-        )
-          ? 'Heatmap'
-          : '1D';
-    }
-
-    const updatedActive: Configuration = {
-      ...active,
-      dataPlot: updatedDataPlot,
-    };
-    updatedConfiguration(updatedActive);
-  };
-
-  useLayoutEffect(() => {
-    if (data?.selectedPlotMode) {
-      setIs3DView(data.selectedPlotMode === 'Heatmap');
-    } else {
-      setIs3DView(
-        data.coordinates.length >= 2 &&
-          containsFloat(
-            data.coordinates.find((coord) => coord.axeIndex === 1).data,
-          ),
-      );
-    }
-  }, []);
-
   useEffect(() => {
-    updateSelectedPlotMode(is3DView, active);
-  }, [is3DView]);
+    setIs3DView(
+      data?.selectedPlotMode === 'Heatmap' ||
+        data?.selectedPlotMode === 'Contour'
+        ? true
+        : false,
+    );
+  }, [data.selectedPlotMode]);
 
   /**
    * Handle the delete grid event
@@ -250,6 +253,27 @@ export const GridLayoutPlot = ({
       dataPlot: newDataPlot,
       checkedNodeURI: checkedNodeURI,
     };
+
+    // Remove from synchronized relations deleted dataGrid
+    const oldDataPlot = active.dataPlot.find(
+      (item: DataGridPlot) => item.i === id,
+    );
+    for (const synchronizedId of oldDataPlot.synchronizedGrids.list) {
+      const dataPlotToUpdate = newDataPlot.find(
+        (dp) => synchronizedId === dp.i,
+      );
+      const updatedList = dataPlotToUpdate.synchronizedGrids.list.filter(
+        (id) => id !== oldDataPlot.i,
+      );
+      dataPlotToUpdate.synchronizedGrids = {
+        color:
+          updatedList.length > 0
+            ? dataPlotToUpdate.synchronizedGrids.color
+            : '',
+        list: updatedList,
+      };
+    }
+
     updatedConfiguration(newActive);
   }, []);
 
@@ -275,6 +299,7 @@ export const GridLayoutPlot = ({
             uri: normalizeIndices(item.nodeUri),
             name: item.labelUri,
             type: findPlot.dataType,
+            is_geometry_node: findPlot.is_geometry_node,
           }))
         : [];
 
@@ -289,6 +314,7 @@ export const GridLayoutPlot = ({
               name: plot.labelUri,
               uri: normalizeIndices(error_band.path),
               type: findPlot.dataType,
+              is_geometry_node: findPlot.is_geometry_node,
             };
             const exists = checkedNodeURI.some(
               (node) =>
@@ -298,6 +324,28 @@ export const GridLayoutPlot = ({
             if (!exists) {
               // Check from tree selected error bands to plot
               checkedNodeURI.push(newCheckedNode);
+            }
+          }
+        }
+
+        if (findPlot?.geometries) {
+          // Check geometries in tree
+          for (const geometry of findPlot.geometries) {
+            for (const uriOfGeo of geometry.nodeUris) {
+              const newCheckedNode = {
+                name: findPlot.plot[0].labelUri,
+                uri: normalizeIndices(uriOfGeo),
+                type: NodeInfoTypeEnum.FLOAT,
+                is_geometry_node: true,
+              } as URITreeNodeData;
+              const exists = checkedNodeURI.some(
+                (node) =>
+                  node.name === newCheckedNode.name &&
+                  node.uri === newCheckedNode.uri,
+              );
+              if (!exists) {
+                checkedNodeURI.push(newCheckedNode);
+              }
             }
           }
         }
@@ -333,10 +381,10 @@ export const GridLayoutPlot = ({
    * Customize plot
    */
   const handleCustomization = useCallback(
-    (id: string) => {
+    (id: string, typeOfEdition: CustomizedGridType) => {
       const updatedActive: Configuration = {
         ...active,
-        customizedGridLayout: id,
+        customizedGridLayout: { id: id, type: typeOfEdition },
       };
       updatedConfiguration(updatedActive);
     },
@@ -354,7 +402,6 @@ export const GridLayoutPlot = ({
           handleCustomization={handleCustomization}
           handleDeleteGrid={handleDeleteGrid}
           is3DView={is3DView}
-          setIs3DView={setIs3DView}
           active3DTab={active3DTab}
           setActive3DTab={setActive3DTab}
         />
@@ -371,6 +418,7 @@ export const GridLayoutPlot = ({
             return (
               index.toString() === active3DTab && (
                 <MetaDataInfos
+                  key={`metadata_${data.i}`}
                   gridLayoutKey={data.i}
                   data={plot}
                   yAxis={plot.yaxis !== '' ? data.y2AxisData : data.yAxisData}

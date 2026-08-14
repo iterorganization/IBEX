@@ -22,7 +22,11 @@ import {
   Axis,
   PlotDataResponse,
 } from 'src/renderer/types';
-import { fetchArraySummary, fetchDataPlot } from '../../utils';
+import {
+  fetchArraySummary,
+  fetchDataPlot,
+  getUrisToInterpolate,
+} from '../../utils';
 
 interface MetaDataInfosProps {
   gridLayoutKey: string;
@@ -125,7 +129,11 @@ const RenderMetaDataCoordinates = ({
         {coordinates.length === 0 ? (
           'N/A'
         ) : (
-          <Accordion chevronPosition="left" variant="filled">
+          <Accordion
+            chevronPosition="left"
+            variant="filled"
+            {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+          >
             {coordinates.map((coordinate, index) => (
               <Accordion.Item key={index} value={coordinate.name}>
                 <AccordionControl>{coordinate.name}</AccordionControl>
@@ -157,13 +165,21 @@ export const MetaDataInfos = ({
       try {
         if (tabsSelected === data.name) {
           // Force with downsampled method if selected by user
-          const downsampled_method = active.dataPlot.find(
+          const selectedDataPlot = active.dataPlot.find(
             (gridLayout) => gridLayout.i === gridLayoutKey,
-          )?.downsampled_method;
+          );
 
+          const urisToInterpolate = getUrisToInterpolate(
+            data.nodeUri,
+            selectedDataPlot.plot,
+          );
           const response: PlotDataResponse = await fetchDataPlot(
             data.nodeUri,
-            downsampled_method,
+            selectedDataPlot?.downsampled_method,
+            selectedDataPlot?.downsampled_size,
+            selectedDataPlot?.dataType,
+            urisToInterpolate,
+            selectedDataPlot.interpolated_method,
           );
 
           setCoordinates(response.data.coordinates);
@@ -249,10 +265,11 @@ export const VisualizationMetaData = () => {
       );
       if (data) {
         setDataGridLayout(data);
-        setTabsValue(data.plot[0]?.name || null);
-        const findPlot = data.plot.find(
-          (item) => item.name === data.plot[0]?.name,
-        );
+        const selectedName = data.plot.some((item) => item.name === tabsValue)
+          ? tabsValue
+          : data.plot[0]?.name || null;
+        setTabsValue(selectedName);
+        const findPlot = data.plot.find((item) => item.name === selectedName);
         if (findPlot) {
           setItemDataGrid({
             ...data,
@@ -330,7 +347,7 @@ export const VisualizationMetaData = () => {
         {dataGridLayout &&
           dataGridLayout.plot.map((item: DataPlotly, index) => {
             // force to have only one axis in metadata plot
-            const itemWithoutY2axis = JSON.parse(JSON.stringify(item));
+            const itemWithoutY2axis = structuredClone(item);
             if (item.yaxis != '') {
               delete itemWithoutY2axis.yaxis;
             }

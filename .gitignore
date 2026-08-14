@@ -97,7 +97,7 @@ venv4linting/
 *.swo
 
 # SCM setuptools
-backend/ibex/version.py
+backend/ibex/_version.py
 
 # Saxon symlink or downloaded file
 saxon*.jar
@@ -106,3 +106,6 @@ saxon*.jar
 /.asv
 
 .idea/
+
+# Local folder for E2E tests
+e2e_datasets

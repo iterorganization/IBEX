@@ -2,10 +2,13 @@ from typing import List  # type: ignore
 from enum import Enum  # type: ignore
 
 from tsdownsample import MinMaxDownsampler, M4Downsampler, LTTBDownsampler, MinMaxLTTBDownsampler  # type: ignore
+from ibex.data_source.exception import InvalidParametersException
 from imas.ids_primitive import IDSNumericArray
 from ibex.data_source.exception import NotAnArrayException
 
 import numpy as np  # type: ignore
+from dataclasses import dataclass
+import re
 
 
 def find_first_value_in_list(data: list):
@@ -116,16 +119,19 @@ class DownsamplingMethods(Enum):
         "name": "Min-Max",
         "description": "Selects the minimum and maximum value in each bin",
         "function": MinMaxDownsampler().downsample,
+        "validation": (lambda target_size: target_size % 2 == 0, "Min-Max downsampling target size must be even"),
     }
     M4 = {
         "name": "M4",
         "description": "Selects the minimum, maximum, first, and last value in each bin",
         "function": M4Downsampler().downsample,
+        "validation": (lambda target_size: target_size % 4 == 0, "M4 downsampling target size must be divisible by 4"),
     }
     LTTB = {
         "name": "LTTB",
         "description": "Implements the Largest Triangle Three Buckets (LTTB) algorithm",
         "function": LTTBDownsampler().downsample,
+        "validation": (lambda target_size: target_size >= 3, "Minimum downsampling size for LTTB is 3"),
     }
     MIN_MAX_LTTB = {
         "name": "Min-Max LTTB",
@@ -142,6 +148,12 @@ class DownsamplingMethods(Enum):
                 return method
         raise ValueError(f"Downsampling method: {name} is not recognised by IBEX backend")
 
+    @classmethod
+    def validate_downsampling_target_size(cls, method: dict, target_size: int):
+        if "validation" in method.keys():
+            if not method["validation"][0](target_size):
+                raise InvalidParametersException(method["validation"][1])
+
 
 def downsample_data(data: List, target_size: int, method: str | None = None, x=None, single_x_axis=True):
     """
@@ -155,6 +167,7 @@ def downsample_data(data: List, target_size: int, method: str | None = None, x=N
     Returns tuple (downsapled_coordinate, downsampled_data)
     """
     method = DownsamplingMethods(method)
+    DownsamplingMethods.validate_downsampling_target_size(method.value, target_size)
 
     if method is None or method == DownsamplingMethods.NONE:
         return x, data
@@ -202,3 +215,62 @@ def downsample_data(data: List, target_size: int, method: str | None = None, x=N
             return x, data[s_ds]
 
     return x, data[s_ds]
+
+
+@dataclass
+class IMAS_URI:
+    """
+    Helper class to extract arguments from imas uri
+    """
+
+    #: Full URI containing pulse file identifier, ids name and path to node
+    full_uri: str = ""
+
+    #: pulse file identifier extracted from full URI
+    uri_entry_identifiers: str = ""
+    #: fragment part from full URI containing ids name and path to node
+    uri_fragment: str = ""
+    #: ids name extracted from full URI
+    ids_name: str = ""
+    #: path to node extracted from full URI
+    node_path: str = ""
+    #: ids occurrence number extracted from full URI
+    occurrence: int = 0
+
+    def __init__(self, full_uri):
+        """
+        IMAS_URI constructor
+        :param full_uri: pulsefile uri along with #fragment part
+        """
+
+        self.full_uri = full_uri
+
+        if "#" not in self.full_uri:
+            self.uri_entry_identifiers = self.full_uri
+            return
+
+        self.uri_entry_identifiers, self.uri_fragment = self.full_uri.split("#", 1)
+
+        pattern = r"^(?P<idsname>[^:/]+)(?::(?P<occurrence>\d*))?(?:/(?P<node_path>.*))?$"
+
+        match = re.match(pattern, self.uri_fragment)
+
+        if not match:
+            raise InvalidParametersException(
+                f"Invalid IMAS URI fragment: '{self.uri_fragment}'. "
+                "Expected format: ids_name:occurrence/node_path (occurrence and node_path are optional)"
+            )
+
+        self.ids_name = match.group("idsname") if match.group("idsname") else ""
+        self.occurrence = int(match.group("occurrence")) if match.group("occurrence") else 0
+        self.node_path = match.group("node_path") if match.group("node_path") else ""
+
+    def __str__(self):
+        return (
+            f"FULL URI   : {self.full_uri}\n"
+            f"URI        : {self.uri_entry_identifiers}\n"
+            f"FRAGMENT   : {self.uri_fragment}\n"
+            f"IDS        : {self.ids_name}\n"
+            f"OCCURRENCE : {self.occurrence}\n"
+            f"NODE_PATH  : {self.node_path}\n"
+        )

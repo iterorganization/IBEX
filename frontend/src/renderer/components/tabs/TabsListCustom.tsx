@@ -52,6 +52,7 @@ export const TabsListCustom = ({
               <ActionIcon
                 variant="filled"
                 aria-label="Metadatas"
+                data-testid="customization-save-button"
                 color="yellow"
                 onClick={() => saveAndClose()}
               >
@@ -100,6 +101,7 @@ export const TabsListCustom = ({
                 value={item}
                 ref={setControlRef(item)}
                 className={classes.tab}
+                data-testid={`customization-tab-${item}`}
               >
                 {item}
               </Tabs.Tab>

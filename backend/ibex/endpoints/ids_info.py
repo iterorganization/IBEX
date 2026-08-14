@@ -3,7 +3,12 @@
 from fastapi import APIRouter  # type: ignore
 
 from ibex.core import ibex_service
-from ibex.endpoints.schemas.ids_info_schemas import NodeInfoResponse, FindPathsResponse, ArraySummaryResponse
+from ibex.endpoints.schemas.response_ids_info_schemas import (
+    NodeInfoResponse,
+    FindPathsResponse,
+    ArraySummaryResponse,
+    GeometryOverlayNodesResponse,
+)
 
 router = APIRouter()
 
@@ -29,6 +34,7 @@ def node_info(uri: str, show_error_bars: bool = False) -> dict:
     |     "type": <type_of_data (str)>,
     |     "ndim": <number_of_data_dimensions (int)>,
     |     "shape": <data_shape (list(int))>,
+    |     "has_data": <True if node has data inside (bool)>
     |     "children": <node_info_of_children_nodes (list(dict))>,
     |     "coordinates": <coordinates_names (list(str))>
     | }
@@ -58,10 +64,10 @@ def find_field(uri: str, searched_node: str, show_error_bars: bool = False) -> d
     | Response JSON is constructed as follows:
     | {
     |   "paths": [
-    |   <path_1 (str)>,
-    |   <path_2 (str)>,
+    |   {"path" : <path_1 (str)>, "has_data" : <has_data (bool)>},
+    |   {"path" : <path_2 (str)>, "has_data" : <has_data (bool)>},
     |   ...
-    |   <path_N (str)>,
+    |   {"path" : <path_N (str)>, "has_data" : <has_data (bool)>},
     |   ]
     | }
 
@@ -107,3 +113,34 @@ def array_summary(uri: str) -> dict:
 
     """
     return ibex_service.array_summary(uri.strip())
+
+
+@router.get(
+    "/ids_info/geometry_overlay_nodes",
+    status_code=200,
+    response_model=GeometryOverlayNodesResponse,
+    responses={
+        200: {"description": "Geometry overlay nodes returned successfully"},
+    },
+    description="Returns geometry overlay nodes metadata",
+)
+@ibex_service.measure_execution_time
+def geometry_overlay_nodes(uri: str, show_empty_nodes: bool = False, show_error_bars: bool = False) -> dict:
+    """
+    IBEX endpoint. Returns paths to geometry overlay nodes.
+
+    | Response JSON is constructed as follows:
+    | {
+    | "outline_nodes" : [<node1>, <node2>, ...]
+    | }
+
+    :param uri: IMAS URI
+    :param show_empty_nodes: switch used to hide empty nodes
+    :param show_error_bars: switch used to hide _error* nodes
+    :rtype: dict (automatically converted to JSON by FastAPI)
+    :return: JSON response
+
+    """
+    return ibex_service.get_geometry_overlay_nodes(
+        uri.strip(), show_empty_nodes=show_empty_nodes, show_error_bars=show_error_bars
+    )

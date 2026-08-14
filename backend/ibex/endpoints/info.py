@@ -5,7 +5,12 @@ from fastapi import APIRouter  # type: ignore
 from ibex.core import ibex_service
 from ibex.core.utils import DownsamplingMethods
 from ibex import __version__
-from ibex.endpoints.schemas.info_schemas import VersionResponse, DownsamplingMethodsResponse
+from ibex.endpoints.schemas.response_info_schemas import (
+    VersionResponse,
+    DownsamplingMethodsResponse,
+    DataManipulationMethodsResponse,
+)
+from ibex.core.data_manipulation_methods import available_methods
 
 router = APIRouter()
 
@@ -70,3 +75,25 @@ def downsampling_methods() -> dict:
     methods = [{"name": val.value["name"], "description": val.value["description"]} for val in DownsamplingMethods]
     res = {"downsampling_methods": methods}
     return res
+
+
+@router.get(
+    "/info/data_manipulation_methods",
+    status_code=200,
+    response_model=DataManipulationMethodsResponse,
+    responses={
+        200: {"description": "Data manipulation methods returned successfully"},
+    },
+    description="Returns list of available data manipulation methods provided by the server",
+)
+@ibex_service.measure_execution_time
+def data_manipulation_methods() -> dict:
+    """
+    IBEX endpoint. Returns list of available data manipulation methods to be passed to /data/plot_data endpoint as query argument.
+
+    :rtype: dict (automatically converted to JSON by FastAPI)
+    :return: JSON response
+
+    """
+
+    return available_methods

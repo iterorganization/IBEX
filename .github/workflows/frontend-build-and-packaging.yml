@@ -1,0 +1,29 @@
+name: frontend-build-and-packaging
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build-and-packaging:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout frontend sources
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Display Node version
+        run: node -v && npm -v
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run build and package
+        working-directory: frontend
+        run: npm run package

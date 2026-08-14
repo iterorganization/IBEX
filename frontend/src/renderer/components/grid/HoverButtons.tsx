@@ -1,5 +1,5 @@
 import classes from './HoverButtons.module.css';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Group,
   Tooltip,
@@ -8,16 +8,24 @@ import {
   Tabs,
   Switch,
   ScrollArea,
+  Menu,
 } from '@mantine/core';
 import {
   IconBrandDatabricks,
   IconCheck,
+  IconDatabaseEdit,
   IconEdit,
-  IconPalette,
+  IconEyeEdit,
   IconTrash,
+  IconTarget,
 } from '@tabler/icons-react';
-import { useHover } from '@mantine/hooks';
-import { Configuration, DataGridPlot } from '../../types';
+import { useElementSize, useHover, useMergedRef } from '@mantine/hooks';
+import {
+  Configuration,
+  CustomizedGridType,
+  DataGridPlot,
+  PlotType,
+} from '../../types';
 import { applyRange, fetchErrorBandsInConfig } from '../../utils';
 import { useIbexStore } from '../../stores';
 
@@ -26,10 +34,9 @@ interface HoverButtonsProps {
   shouldDisplayMetadata: boolean;
   handleEditGrid: (id: string) => void;
   handleInspectMetadata: (id: string) => void;
-  handleCustomization: (id: string) => void;
+  handleCustomization: (id: string, typeOfEdition: CustomizedGridType) => void;
   handleDeleteGrid: (id: string) => void;
   is3DView: boolean;
-  setIs3DView: React.Dispatch<React.SetStateAction<boolean>>;
   active3DTab: string;
   setActive3DTab: React.Dispatch<React.SetStateAction<string>>;
 }
@@ -43,18 +50,26 @@ export const HoverButtons = React.memo(
     handleCustomization,
     handleDeleteGrid,
     is3DView,
-    setIs3DView,
     active3DTab,
     setActive3DTab,
   }: HoverButtonsProps) => {
     const { active, updatedConfiguration } = useIbexStore();
     const { hovered, ref: hoverRef } = useHover();
+    const { ref: sizeRef, width: containerWidth } = useElementSize();
+    const containerRef = useMergedRef(hoverRef, sizeRef);
     const previousValueDisplayErrorBands = useRef<boolean | undefined>(
       undefined,
     );
+    const [plotMode, setPlotMode] = useState<PlotType>(
+      active.dataPlot.find((dataPlot) => dataPlot.i === data.i)
+        ?.selectedPlotMode,
+    );
+    const [plotTypeMenuOpened, setPlotTypeMenuOpened] = useState(false);
+    const [forcePlotTypeMenuOpened, setForcePlotTypeMenuOpened] =
+      useState(false);
 
     const heatmapLogo = (
-      <svg width="50" height="50" viewBox="0 0 50 50">
+      <svg width="20" height="20" viewBox="0 0 50 50">
         <rect x="0" y="0" width="15" height="15" fill="#440154" />
         <rect x="17" y="0" width="15" height="15" fill="#31688e" />
         <rect x="34" y="0" width="15" height="15" fill="#35b779" />
@@ -69,11 +84,18 @@ export const HoverButtons = React.memo(
       </svg>
     );
 
+    const modes: {
+      value: PlotType;
+      icon?: React.ReactNode;
+    }[] = [
+      { value: '1D' },
+      { value: 'Heatmap', icon: heatmapLogo },
+      { value: 'Contour', icon: <IconTarget width={22} /> },
+    ];
+
     const updateDisplayErrorBands = useCallback(
       (newValue: boolean) => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         const selectedDataPlot = updatedActive.dataPlot.find(
           (dataPlot) => dataPlot.i === data.i,
         );
@@ -96,7 +118,6 @@ export const HoverButtons = React.memo(
                 ?.includes(checkedNode.uri),
           );
           delete plot?.error_bands;
-          delete plot?.error_y;
         }
       },
       [active],
@@ -104,9 +125,7 @@ export const HoverButtons = React.memo(
 
     useEffect(() => {
       const updateErrorBands = async () => {
-        const updatedActive = JSON.parse(
-          JSON.stringify(active),
-        ) as Configuration;
+        const updatedActive = structuredClone(active) as Configuration;
         if (data.displayErrorBand) {
           if (
             (previousValueDisplayErrorBands.current === false ||
@@ -159,8 +178,27 @@ export const HoverButtons = React.memo(
       updateErrorBands();
     }, [data.displayErrorBand]);
 
+    const updateTypeOfPlot = async (wantedType: PlotType) => {
+      setPlotTypeMenuOpened(false);
+      setForcePlotTypeMenuOpened(false);
+      setPlotMode(wantedType);
+      const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
+      const selectedDataPlot = updatedDataPlot.find(
+        (dataPlot) => dataPlot.i === data.i,
+      );
+
+      // Update plot type
+      selectedDataPlot.selectedPlotMode = wantedType;
+
+      const updatedActive: Configuration = {
+        ...active,
+        dataPlot: updatedDataPlot,
+      };
+      updatedConfiguration(updatedActive);
+    };
+
     return (
-      <div ref={hoverRef} className={classes.containerButton}>
+      <div ref={containerRef} className={classes.containerButton}>
         <Group justify="space-between" h={'100%'}>
           {is3DView || !data.coordinates.length || shouldDisplayMetadata ? (
             <Tabs
@@ -173,10 +211,10 @@ export const HoverButtons = React.memo(
                 scrollbarSize={6}
                 offsetScrollbars
                 maw={
-                  hoverRef?.current?.offsetWidth
+                  containerWidth
                     ? !data.coordinates.length || shouldDisplayMetadata
-                      ? hoverRef.current.offsetWidth - 110
-                      : hoverRef.current.offsetWidth - 230
+                      ? containerWidth - 110
+                      : containerWidth - 280
                     : '100%'
                 }
               >
@@ -198,7 +236,10 @@ export const HoverButtons = React.memo(
             <div></div>
           )}
 
-          {hovered || data.isEditing ? (
+          {hovered ||
+          data.isEditing ||
+          plotTypeMenuOpened ||
+          forcePlotTypeMenuOpened ? (
             <Group pos="absolute" right={'1rem'} top={5}>
               {!is3DView && data.isEditing && !shouldDisplayMetadata && (
                 <Switch
@@ -211,16 +252,45 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length >= 2 && !shouldDisplayMetadata && (
-                <Tooltip label="Toggle 1D/Heatmap view">
-                  <ActionIcon
-                    variant="filled"
-                    aria-label="Toggle 1D/Heatmap view"
-                    onClick={() => setIs3DView((prev) => !prev)}
-                    className={classes.actionButton}
-                  >
-                    {is3DView ? <Text fw="bold">1D</Text> : heatmapLogo}
-                  </ActionIcon>
-                </Tooltip>
+                <Menu
+                  opened={plotTypeMenuOpened || forcePlotTypeMenuOpened}
+                  onChange={setPlotTypeMenuOpened}
+                  shadow="md"
+                  width={180}
+                  trigger="click-hover"
+                >
+                  <Menu.Target>
+                    <Tooltip label="Select plot mode">
+                      <ActionIcon
+                        onClick={() => setForcePlotTypeMenuOpened((o) => !o)}
+                        variant="filled"
+                        aria-label="Select plot mode"
+                        className={classes.actionButton}
+                      >
+                        {modes.find((m) => m.value === plotMode)?.icon || (
+                          <Text fw="bold">{plotMode}</Text>
+                        )}
+                      </ActionIcon>
+                    </Tooltip>
+                  </Menu.Target>
+
+                  <Menu.Dropdown>
+                    {modes.map((mode) => (
+                      <Menu.Item
+                        key={mode.value}
+                        onClick={() => updateTypeOfPlot(mode.value)}
+                        leftSection={mode.icon}
+                        rightSection={
+                          plotMode === mode.value ? (
+                            <IconCheck size={14} />
+                          ) : null
+                        }
+                      >
+                        {mode.value}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Dropdown>
+                </Menu>
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
@@ -244,15 +314,34 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
-                // Show customization button only if plottable
-                <Tooltip label="Customize the grid">
+                // Show data manipulation button only if plottable
+                <Tooltip label="Data manipulation">
                   <ActionIcon
                     variant="filled"
-                    aria-label="Metadatas"
-                    onClick={() => handleCustomization(data.i)}
+                    aria-label="Data manipulation"
+                    data-testid="data-customization-access-button"
+                    onClick={() => handleCustomization(data.i, 'data')}
                     className={classes.actionButton}
                   >
-                    <IconPalette
+                    <IconDatabaseEdit
+                      style={{ width: '70%', height: '70%' }}
+                      stroke={1.5}
+                    />
+                  </ActionIcon>
+                </Tooltip>
+              )}
+
+              {data.coordinates.length && !shouldDisplayMetadata && (
+                // Show visual customization button only if plottable
+                <Tooltip label="Visual customization">
+                  <ActionIcon
+                    variant="filled"
+                    aria-label="Visual customization"
+                    data-testid="visual-customization-access-button"
+                    onClick={() => handleCustomization(data.i, 'visual')}
+                    className={classes.actionButton}
+                  >
+                    <IconEyeEdit
                       style={{ width: '70%', height: '70%' }}
                       stroke={1.5}
                     />
@@ -261,11 +350,7 @@ export const HoverButtons = React.memo(
               )}
 
               <Tooltip
-                label={
-                  data.isEditing
-                    ? 'Validate/Close editing the grid'
-                    : 'Open editing the grid'
-                }
+                label={data.isEditing ? 'Save the edition' : 'Edit the grid'}
               >
                 <ActionIcon
                   variant="filled"

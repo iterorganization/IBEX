@@ -17,9 +17,11 @@ import { PreferenceModal } from '../components/preferences/PreferenceModal';
 import {
   updateIbexConfig,
   formatConfigBeforeLoadingURIs,
+  formatSignalOperandsToSave,
   plotNodeUriLoaded,
   updateCustomDataTree,
   readIbexConfig,
+  formatGeometriesToSave,
 } from '../utils';
 import { VisualizationURIModal } from '../pages';
 import { showNotification } from '@mantine/notifications';
@@ -102,8 +104,16 @@ export function MainLayout() {
         isTitleOverwritten: dataGrid.isTitleOverwritten,
         displayErrorBand: dataGrid.displayErrorBand,
         displayGrid: dataGrid.displayGrid,
+        forceXyRatio: dataGrid.forceXyRatio,
+        synchronizedGrids: dataGrid.synchronizedGrids,
         downsampled_method: dataGrid?.downsampled_method,
         downsampled_size: dataGrid?.downsampled_size,
+        interpolated_method: dataGrid.interpolated_method,
+        is_geometry_node: dataGrid.is_geometry_node,
+        geometries: formatGeometriesToSave(
+          dataGrid?.geometries,
+          active.dataURI,
+        ),
         xAxisData: dataGrid.xAxisData,
         yAxisData: dataGrid.yAxisData,
         y2AxisData: dataGrid?.y2AxisData,
@@ -115,6 +125,7 @@ export function MainLayout() {
         coordinates: dataGrid.coordinates.map(
           (coord: Coordinates): BaseCoordinates => {
             return {
+              axeIndex: coord.axeIndex,
               path: coord.path,
               target: coord.target,
               valueIndex: coord.valueIndex,
@@ -134,6 +145,13 @@ export function MainLayout() {
             line: plot?.line || {},
             customPreferences: plot?.customPreferences || {},
             mode: plot?.mode || 'line',
+            smoothing: plot?.smoothing,
+            // Signal operands are stored the same way as nodeUri, so that they
+            // are remapped onto the selected data entries when reloading
+            operations: formatSignalOperandsToSave(
+              plot?.operations,
+              dataGrid.plot,
+            ),
           };
         }),
       }),
@@ -233,7 +251,10 @@ export function MainLayout() {
         dataURI: newIbexState.dataURI,
         customDataTree: updateCustomDataTree([], newIbexState.dataURI),
         checkedNodeURI: [],
-        dataPlot: await plotNodeUriLoaded(newListDataGridPlot),
+        dataPlot: await plotNodeUriLoaded(
+          newListDataGridPlot,
+          newIbexState.dataURI,
+        ),
         saved: true,
         path: path,
       };

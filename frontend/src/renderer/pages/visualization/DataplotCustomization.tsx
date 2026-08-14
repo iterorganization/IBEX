@@ -15,33 +15,338 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SimplePlotly, Heatmap2D, TabsListCustom } from '../../components';
 import {
   Configuration,
+  CustomizedGridType,
   DataGridPlot,
   DataPlotly,
-  PlotLine,
-} from 'src/renderer/types';
-import { CustomizeDownsampling, CustomizeGlobal } from './customizableElements';
-import { CustomizeHeatmap } from './customizableElements/CustomizeHeatmap';
-import { Customize1DPlot } from './customizableElements/Customize1DPlot';
-import { CustomizeDataRange } from './customizableElements/CustomizeDataRange';
+  synchronizedList,
+} from '../../types';
+import {
+  CustomizeDownsampling,
+  CustomizeGlobal,
+  CustomizeHeatmap,
+  Customize1DPlot,
+  CustomizeDataRange,
+  CustomizeSynchronization,
+  CustomizeInterpolation,
+  CustomizeSmoothing,
+  CustomizeDataOperations,
+  CustomizeGeometry,
+} from './customizableElements';
+import { IconGeometry, IconLink } from '@tabler/icons-react';
+import { initPlotColors } from '../../utils';
+
+export const DataplotCustomization = () => {
+  const customContainerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const WIDTH_PLOT = Math.floor(containerWidth * (6 / 12));
+  const HEIGHT_PLOT = 390;
+  const { active, updatedConfiguration } = useIbexStore();
+  const [tabsValue, setTabsValue] = useState<string | null>();
+  const [customizedDataGrid, setCustomizedDataGrid] =
+    useState<DataGridPlot | null>(null);
+  const [dataGridLayout, setDataGridLayout] = useState<DataGridPlot | null>(
+    null,
+  );
+  const [selectedAccordion, setSelectedAccordion] = useState<string | null>(
+    null,
+  );
+  const [selectedPlot, setSelectedPlot] = useState<DataPlotly | null>(null);
+  const [applyToAllHeatmap, setApplyToAllHeatmap] = useState(true);
+
+  useEffect(() => {
+    if (customizedDataGrid) {
+      // Update dataGridLayout when customizedDataGrid changes
+      const updatedDataGridLayout = {
+        ...dataGridLayout,
+        title: customizedDataGrid?.title,
+        downsampled_method: customizedDataGrid?.downsampled_method,
+        interpolated_method: customizedDataGrid.interpolated_method,
+        plot: customizedDataGrid?.plot,
+        // A data operation can change a unit and move a plot to the second axis
+        yAxisData: customizedDataGrid?.yAxisData,
+        y2AxisData: customizedDataGrid?.y2AxisData,
+      } as DataGridPlot;
+      setDataGridLayout(updatedDataGridLayout);
+      setSelectedPlot(
+        updatedDataGridLayout.plot.find((data) => data.name === tabsValue),
+      );
+    }
+  }, [customizedDataGrid]);
+
+  /**
+   * Handle find grid layout corresponding to the selected tab
+   */
+  useEffect(() => {
+    if (active?.customizedGridLayout) {
+      const data = structuredClone(
+        active.dataPlot.find(
+          (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
+        ),
+      );
+      if (data) {
+        setDataGridLayout(data);
+        setCustomizedDataGrid(data);
+        setTabsValue(data.plot[0]?.name || null);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    initPlotColors(
+      customizedDataGrid,
+      customContainerRef,
+      setCustomizedDataGrid,
+    );
+  }, [customContainerRef.current]);
+
+  /**
+   * Handle the resizing of the width
+   */
+  useEffect(() => {
+    if (!customContainerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+
+    observer.observe(customContainerRef.current);
+    return () => observer.disconnect();
+  }, [tabsValue]);
+
+  /**
+   * Handle close of customization
+   */
+  const closeWithoutSaving = useCallback(() => {
+    const updatedActive: Configuration = structuredClone(
+      active,
+    ) as Configuration;
+    updatedActive.customizedGridLayout = null;
+    updatedConfiguration(updatedActive);
+  }, [active]);
+
+  /**
+   * Handle save & close of customization
+   */
+  const saveAndClose = useCallback(() => {
+    const updatedActive: Configuration = {
+      ...active,
+      customizedGridLayout: null,
+      saved: false,
+    };
+    const oldDataGrid = updatedActive.dataPlot.find(
+      (dp) => dp.i === active.customizedGridLayout.id,
+    );
+    const updatedDataPlot: DataGridPlot[] = [
+      ...updatedActive.dataPlot.filter(
+        (dp) => dp.i !== active.customizedGridLayout.id,
+      ),
+      customizedDataGrid,
+    ];
+
+    // Update synchronized grids dependencies
+    if (
+      structuredClone(oldDataGrid.synchronizedGrids.list).sort().toString() !==
+      structuredClone(customizedDataGrid.synchronizedGrids.list)
+        .sort()
+        .toString()
+    ) {
+      for (const [
+        index,
+        dataPlotDependency,
+      ] of updatedActive.dataPlot.entries()) {
+        if (dataPlotDependency.i !== customizedDataGrid.i) {
+          // Add & remove automatically dataPlots excepted the updated one
+          if (
+            !oldDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            ) &&
+            customizedDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            )
+          ) {
+            const newSynchronizedList = {
+              color: customizedDataGrid.synchronizedGrids.color,
+              list: [
+                customizedDataGrid.i,
+                ...customizedDataGrid.synchronizedGrids.list.filter(
+                  (i) => i !== dataPlotDependency.i,
+                ),
+              ],
+            } as synchronizedList;
+
+            // Reset synchronized list for deleted dependencies
+            for (const oldSyncIdFromNewDep of dataPlotDependency
+              .synchronizedGrids.list) {
+              const indexDPProbablyDesync = updatedActive.dataPlot.findIndex(
+                (dp) => oldSyncIdFromNewDep === dp.i,
+              );
+              if (
+                !newSynchronizedList.list.includes(
+                  updatedActive.dataPlot[indexDPProbablyDesync].i,
+                )
+              ) {
+                updatedActive.dataPlot[
+                  indexDPProbablyDesync
+                ].synchronizedGrids = { color: '', list: [] };
+              }
+            }
+
+            // Add in other grid the synchronized list and include the customized grid
+            updatedActive.dataPlot[index].synchronizedGrids =
+              newSynchronizedList;
+          } else if (
+            oldDataGrid.synchronizedGrids.list.includes(dataPlotDependency.i) &&
+            !customizedDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            )
+          ) {
+            // Remove synchronization for deleted dependencies
+            updatedActive.dataPlot[index].synchronizedGrids = {
+              color: '',
+              list: [],
+            };
+          } else if (
+            customizedDataGrid.synchronizedGrids.list.includes(
+              dataPlotDependency.i,
+            )
+          ) {
+            // Update relations of unchanged dataGrids
+            updatedActive.dataPlot[index].synchronizedGrids = {
+              color: customizedDataGrid.synchronizedGrids.color,
+              list: [
+                customizedDataGrid.i,
+                ...customizedDataGrid.synchronizedGrids.list.filter(
+                  (i) => i !== dataPlotDependency.i,
+                ),
+              ],
+            };
+          }
+        }
+      }
+    }
+
+    updatedConfiguration({ ...updatedActive, dataPlot: updatedDataPlot });
+  }, [active, customizedDataGrid]);
+
+  /**
+   * Handle selected tab change
+   */
+  const handleSelectedTab = useCallback(
+    (value: string | null) => {
+      setTabsValue(value);
+      if (dataGridLayout) {
+        const plotTab = dataGridLayout.plot.find((item) => item.name === value);
+        if (plotTab) {
+          setSelectedPlot(plotTab);
+        }
+      }
+    },
+    [dataGridLayout, setCustomizedDataGrid],
+  );
+
+  return (
+    <Container fluid pb={10}>
+      <Tabs value={tabsValue} onChange={(value) => handleSelectedTab(value)}>
+        <TabsListCustom
+          data={
+            dataGridLayout
+              ? dataGridLayout.plot
+                  .map((item) => item?.name || '')
+                  .filter((item) => item)
+              : []
+          }
+          value={tabsValue}
+          usedFor="personalization"
+          closeWithoutSaving={closeWithoutSaving}
+          saveAndClose={saveAndClose}
+        />
+
+        {dataGridLayout &&
+          dataGridLayout.plot.map((item: DataPlotly, index) => {
+            // force to have only one axis in metadata plot
+            const itemWithoutY2axis = structuredClone(item);
+            if (item.yaxis != '') {
+              delete itemWithoutY2axis.yaxis;
+            }
+
+            return (
+              item?.name && (
+                <Tabs.Panel key={index} value={item.name}>
+                  {tabsValue === item.name && (
+                    <Grid type="container" ref={customContainerRef}>
+                      <Grid.Col span={6}>
+                        {selectedAccordion === 'Heatmap' ||
+                        selectedAccordion === 'Geometry' ? (
+                          <Heatmap2D
+                            itemDataGrid={customizedDataGrid}
+                            width={WIDTH_PLOT}
+                            height={HEIGHT_PLOT}
+                            plotIndex={customizedDataGrid.plot
+                              .findIndex((data) => data.name === item.name)
+                              .toString()}
+                            showSliders={false}
+                            forcedPlotType={
+                              selectedAccordion === 'Heatmap'
+                                ? 'heatmap'
+                                : 'contour'
+                            }
+                          />
+                        ) : (
+                          <SimplePlotly
+                            itemDataGrid={customizedDataGrid}
+                            width={WIDTH_PLOT}
+                            height={HEIGHT_PLOT}
+                            showSliders={false}
+                          />
+                        )}
+                      </Grid.Col>
+                      <Grid.Col span={6}>
+                        <Customization
+                          customizedDataGrid={customizedDataGrid}
+                          customizedType={active.customizedGridLayout.type}
+                          selectedAccordion={selectedAccordion}
+                          selectedPlot={selectedPlot}
+                          applyToAllHeatmap={applyToAllHeatmap}
+                          customContainerRef={customContainerRef}
+                          setCustomizedDataGrid={setCustomizedDataGrid}
+                          setSelectedAccordion={setSelectedAccordion}
+                          setApplyToAllHeatmap={setApplyToAllHeatmap}
+                        />
+                      </Grid.Col>
+                    </Grid>
+                  )}
+                </Tabs.Panel>
+              )
+            );
+          })}
+      </Tabs>
+    </Container>
+  );
+};
+
 interface CustomizationProps {
   customizedDataGrid: DataGridPlot;
+  customizedType: CustomizedGridType;
   selectedAccordion: string | null;
   selectedPlot: DataPlotly | null;
   applyToAllHeatmap: boolean;
+  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
   setSelectedAccordion: React.Dispatch<React.SetStateAction<string | null>>;
   setApplyToAllHeatmap: React.Dispatch<React.SetStateAction<boolean>>;
-  initPlotColors: () => void;
 }
 const Customization = ({
   customizedDataGrid,
+  customizedType,
   selectedAccordion,
   selectedPlot,
   applyToAllHeatmap,
+  customContainerRef,
   setCustomizedDataGrid,
   setSelectedAccordion,
   setApplyToAllHeatmap,
-  initPlotColors,
 }: CustomizationProps) => {
   type accordionItemsType = {
     value: string;
@@ -50,7 +355,7 @@ const Customization = ({
     disabled?: boolean;
     tooltip?: string;
   };
-  const accordionItems: accordionItemsType[] = [
+  const visualAccordions: accordionItemsType[] = [
     {
       value: 'Global',
       component: (
@@ -66,8 +371,8 @@ const Customization = ({
         <Customize1DPlot
           customizedDataGrid={customizedDataGrid}
           selectedPlot={selectedPlot}
+          customContainerRef={customContainerRef}
           setCustomizedDataGrid={setCustomizedDataGrid}
-          initPlotColors={initPlotColors}
         />
       ),
       icon: (
@@ -112,6 +417,26 @@ const Customization = ({
       tooltip: "This grid can't display heatmap",
     },
     {
+      value: 'Geometry',
+      component: (
+        <CustomizeGeometry
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+      icon: (
+        <ActionIcon
+          variant="filled"
+          component="span"
+          disabled={customizedDataGrid.coordinates.length < 2}
+        >
+          <IconGeometry width={20} />
+        </ActionIcon>
+      ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't have geometries",
+    },
+    {
       value: 'Axis range',
       component: (
         <CustomizeDataRange
@@ -120,6 +445,29 @@ const Customization = ({
         />
       ),
     },
+    {
+      value: 'Dataplots synchronization',
+      component: (
+        <CustomizeSynchronization
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+      icon:
+        customizedDataGrid.synchronizedGrids.color !== '' ? (
+          <IconLink
+            size={20}
+            color={customizedDataGrid.synchronizedGrids.color}
+          />
+        ) : (
+          <IconLink size={20} />
+        ),
+      disabled: customizedDataGrid.coordinates.length < 2,
+      tooltip: "This grid can't be synchronized",
+    },
+  ];
+
+  const dataAccordions: accordionItemsType[] = [
     {
       value: 'Downsampling',
       component: (
@@ -130,13 +478,39 @@ const Customization = ({
       ),
     },
     {
-      value: 'Dataplots synchronization',
-      component: <></>,
-      disabled: true,
+      value: 'Interpolation',
+      component: (
+        <CustomizeInterpolation
+          customizedDataGrid={customizedDataGrid}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Data smoothing',
+      component: (
+        <CustomizeSmoothing
+          customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
+    },
+    {
+      value: 'Data operations',
+      component: (
+        <CustomizeDataOperations
+          customizedDataGrid={customizedDataGrid}
+          selectedPlot={selectedPlot}
+          setCustomizedDataGrid={setCustomizedDataGrid}
+        />
+      ),
     },
   ];
 
-  const items = accordionItems.map((item) => (
+  const items = (
+    customizedType === 'visual' ? visualAccordions : dataAccordions
+  ).map((item) => (
     <Tooltip
       key={item.value}
       label={
@@ -148,7 +522,11 @@ const Customization = ({
       opened={item?.disabled ? null : false}
     >
       <Accordion.Item value={item.value}>
-        <Accordion.Control icon={item.icon} disabled={item?.disabled || false}>
+        <Accordion.Control
+          icon={item.icon}
+          disabled={item?.disabled || false}
+          data-testid={`customization-${item.value}-accordion`}
+        >
           {item.value}
         </Accordion.Control>
         <Accordion.Panel>{item.component}</Accordion.Panel>
@@ -159,257 +537,19 @@ const Customization = ({
   return (
     <Stack gap={0}>
       <Title ta={'center'} order={3} pt={10}>
-        Customize plot parameters
+        {customizedType === 'visual'
+          ? 'Visual customization'
+          : 'Data manipulation'}
       </Title>
       <ScrollArea h="79vh">
-        <Accordion value={selectedAccordion} onChange={setSelectedAccordion}>
+        <Accordion
+          value={selectedAccordion}
+          onChange={setSelectedAccordion}
+          {...(window.env.E2E_TEST === 'true' && { transitionDuration: 0 })}
+        >
           {items}
         </Accordion>
       </ScrollArea>
     </Stack>
-  );
-};
-
-export const DataplotCustomization = () => {
-  const customContainerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const WIDTH_PLOT = Math.floor(containerWidth * (6 / 12));
-  const HEIGHT_PLOT = 390;
-  const { active, updatedConfiguration } = useIbexStore();
-  const [tabsValue, setTabsValue] = useState<string | null>();
-  const [customizedDataGrid, setCustomizedDataGrid] =
-    useState<DataGridPlot | null>(null);
-  const [dataGridLayout, setDataGridLayout] = useState<DataGridPlot | null>(
-    null,
-  );
-  const [selectedAccordion, setSelectedAccordion] = useState<string | null>(
-    null,
-  );
-  const [selectedPlot, setSelectedPlot] = useState<DataPlotly | null>(null);
-  const [applyToAllHeatmap, setApplyToAllHeatmap] = useState(true);
-
-  useEffect(() => {
-    if (customizedDataGrid) {
-      // Update dataGridLayout when customizedDataGrid changes
-      const updatedDataGridLayout = {
-        ...dataGridLayout,
-        title: customizedDataGrid?.title,
-        downsampled_method: customizedDataGrid?.downsampled_method,
-        plot: customizedDataGrid?.plot,
-      } as DataGridPlot;
-      setDataGridLayout(updatedDataGridLayout);
-      setSelectedPlot(
-        updatedDataGridLayout.plot.find((data) => data.name === tabsValue),
-      );
-    }
-  }, [customizedDataGrid]);
-
-  /**
-   * Handle find grid layout corresponding to the selected tab
-   */
-  useEffect(() => {
-    if (active?.customizedGridLayout) {
-      const data = JSON.parse(
-        JSON.stringify(
-          active.dataPlot.find(
-            (item: DataGridPlot) => item.i === active.customizedGridLayout,
-          ),
-        ),
-      );
-      if (data) {
-        setDataGridLayout(data);
-        setCustomizedDataGrid(data);
-        setTabsValue(data.plot[0]?.name || null);
-      }
-    }
-  }, []);
-
-  /**
-   * Init plots color by adding color in plot.line for each plot
-   */
-  const initPlotColors = () => {
-    // Get plot colors when select 1D plots accordion
-    const customContainer = customContainerRef.current;
-    if (!customContainer) return;
-    // Get child elements from the legend
-    const legends = customContainer.querySelectorAll<SVGGElement>('g.layers');
-
-    const updatedPlotColors = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
-    if (legends?.length) {
-      // When we have a color legend (so several plots)
-      let plotIndex = 0;
-      let shouldUpdateColors = false;
-      for (const plot of updatedPlotColors.plot) {
-        // Get from DOM & set color in plot.line for each plots
-        if (!plot?.line?.color) {
-          shouldUpdateColors = true;
-        }
-
-        const line = legends[plotIndex].querySelector<SVGGElement>(
-          'g.legendlines > path',
-        );
-        // We get color from point when plot.mode === "markers"
-        const point = legends[plotIndex].querySelector<SVGGElement>(
-          'g.legendpoints > path',
-        );
-        const colorFromDOM = line?.style?.stroke || point?.style?.fill;
-
-        if (!plot?.line) {
-          plot.line = { color: colorFromDOM } as PlotLine;
-        } else {
-          plot.line.color = colorFromDOM;
-        }
-        plotIndex++;
-      }
-      if (!shouldUpdateColors) {
-        return;
-      }
-    } else if (updatedPlotColors.plot.length === 1) {
-      // When we have only one plot, thee is no legend so we set manualy to the first plotly color
-      updatedPlotColors.plot[0].line = {
-        color: 'rgb(31, 119, 180)',
-      } as PlotLine;
-    }
-    setCustomizedDataGrid(updatedPlotColors);
-  };
-
-  useEffect(() => {
-    initPlotColors();
-  }, [customContainerRef.current]);
-
-  /**
-   * Handle the resizing of the width
-   */
-  useEffect(() => {
-    if (!customContainerRef.current) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
-
-    observer.observe(customContainerRef.current);
-    return () => observer.disconnect();
-  }, [tabsValue]);
-
-  /**
-   * Handle close of customization
-   */
-  const closeWithoutSaving = useCallback(() => {
-    const updatedActive: Configuration = JSON.parse(
-      JSON.stringify(active),
-    ) as Configuration;
-    updatedActive.customizedGridLayout = null;
-    updatedConfiguration(updatedActive);
-  }, [active]);
-
-  /**
-   * Handle save & close of customization
-   */
-  const saveAndClose = useCallback(() => {
-    const updatedActive: Configuration = {
-      ...active,
-      customizedGridLayout: null,
-      saved: false,
-    };
-    const updatedDataPlot: DataGridPlot[] = [
-      ...updatedActive.dataPlot.filter(
-        (dp) => dp.i !== active.customizedGridLayout,
-      ),
-      customizedDataGrid,
-    ];
-
-    updatedConfiguration({ ...updatedActive, dataPlot: updatedDataPlot });
-  }, [active, customizedDataGrid]);
-
-  /**
-   * Handle selected tab change
-   */
-  const handleSelectedTab = useCallback(
-    (value: string | null) => {
-      setTabsValue(value);
-      if (dataGridLayout) {
-        const plotTab = dataGridLayout.plot.find((item) => item.name === value);
-        if (plotTab) {
-          setSelectedPlot(plotTab);
-        }
-      }
-    },
-    [dataGridLayout, setCustomizedDataGrid],
-  );
-
-  return (
-    <Container fluid pb={10}>
-      <Tabs value={tabsValue} onChange={(value) => handleSelectedTab(value)}>
-        <TabsListCustom
-          data={
-            dataGridLayout
-              ? dataGridLayout.plot
-                  .map((item) => item?.name || '')
-                  .filter((item) => item)
-              : []
-          }
-          value={tabsValue}
-          usedFor="personalization"
-          closeWithoutSaving={closeWithoutSaving}
-          saveAndClose={saveAndClose}
-        />
-
-        {dataGridLayout &&
-          dataGridLayout.plot.map((item: DataPlotly, index) => {
-            // force to have only one axis in metadata plot
-            const itemWithoutY2axis = JSON.parse(JSON.stringify(item));
-            if (item.yaxis != '') {
-              delete itemWithoutY2axis.yaxis;
-            }
-
-            return (
-              item?.name && (
-                <Tabs.Panel key={index} value={item.name}>
-                  {tabsValue === item.name && (
-                    <Grid type="container" ref={customContainerRef}>
-                      <Grid.Col span={6}>
-                        {selectedAccordion === 'Heatmap' ? (
-                          <Heatmap2D
-                            itemDataGrid={customizedDataGrid}
-                            width={WIDTH_PLOT}
-                            height={HEIGHT_PLOT}
-                            plotIndex={customizedDataGrid.plot
-                              .findIndex((data) => data.name === item.name)
-                              .toString()}
-                            showSliders={false}
-                          />
-                        ) : (
-                          <SimplePlotly
-                            itemDataGrid={customizedDataGrid}
-                            width={WIDTH_PLOT}
-                            height={HEIGHT_PLOT}
-                            showSliders={false}
-                          />
-                        )}
-                      </Grid.Col>
-                      <Grid.Col span={6}>
-                        <Customization
-                          customizedDataGrid={customizedDataGrid}
-                          selectedAccordion={selectedAccordion}
-                          selectedPlot={selectedPlot}
-                          applyToAllHeatmap={applyToAllHeatmap}
-                          setCustomizedDataGrid={setCustomizedDataGrid}
-                          setSelectedAccordion={setSelectedAccordion}
-                          setApplyToAllHeatmap={setApplyToAllHeatmap}
-                          initPlotColors={initPlotColors}
-                        />
-                      </Grid.Col>
-                    </Grid>
-                  )}
-                </Tabs.Panel>
-              )
-            );
-          })}
-      </Tabs>
-    </Container>
   );
 };

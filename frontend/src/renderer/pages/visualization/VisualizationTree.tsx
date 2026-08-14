@@ -228,6 +228,7 @@ export const VisualizationTree = ({
               children: [],
               seeErrorBars: showErrorBars,
               uriLabel: dataUri.name,
+              is_geometry_node: false,
             });
           }
         }
@@ -275,11 +276,7 @@ export const VisualizationTree = ({
         (item) => item.uri === dataUri.uri,
       ).data;
 
-      const dataTree = buildTree(
-        customDataTreeUri,
-        dataUri,
-        searchResults.paths,
-      );
+      const dataTree = buildTree(customDataTreeUri, dataUri, searchResults);
 
       const updatedActive: Configuration = {
         ...active,
@@ -302,7 +299,7 @@ export const VisualizationTree = ({
 
   const getCurrentSelectedURI = useCallback(() => {
     return uriSelectedRef.current?.uri;
-  }, [uriSelected]);
+  }, [uriSelectedRef.current]);
 
   /**
    * Handle accordion change
@@ -366,6 +363,7 @@ export const VisualizationTree = ({
           type: child.type,
           children: [] as CustomTreeNodeData[],
           uriLabel: uriSelectedRef.current.name,
+          is_geometry_node: child.is_geometry_node,
         };
       },
     );
@@ -407,9 +405,7 @@ export const VisualizationTree = ({
     node: CustomTreeNodeData,
     seeErrorBars: boolean,
   ) => {
-    const oldChildren = JSON.parse(
-      JSON.stringify(node.children),
-    ) as CustomTreeNodeData[];
+    const oldChildren = structuredClone(node.children) as CustomTreeNodeData[];
     const cleanedNodeValue = node.value.endsWith('/')
       ? node.value.slice(0, -1)
       : node.value;
@@ -443,8 +439,8 @@ export const VisualizationTree = ({
    */
   const handleSeeErrorBars = useCallback(
     async (value: boolean) => {
-      const updatedCustomDataTree: CustomTreeData[] = JSON.parse(
-        JSON.stringify(active.customDataTree),
+      const updatedCustomDataTree: CustomTreeData[] = structuredClone(
+        active.customDataTree,
       );
 
       setShowErrorBars(value);

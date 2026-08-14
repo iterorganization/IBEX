@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter  # type: ignore
 
 from ibex.core import ibex_service
-from ibex.endpoints.schemas.data_entry_schemas import (
+from ibex.endpoints.schemas.response_data_entry_schemas import (
     UriFromPathResponse,
     ExistsResponse,
     ListIdsesResponse,

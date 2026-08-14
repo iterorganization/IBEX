@@ -3,12 +3,12 @@
 # The last match takes precedence over previous ones.
 # Do not edit unless specifically mandated to do so.
 
-backend/     @jwasikpsnc @olivhoenen
+backend/     @jwasikpsnc @prasad-sawantdesai @olivhoenen
 
-frontend/    @mfiaudrin-epsyl @deepakmaroo
+frontend/    @mfiaudrin-epsyl @prasad-sawantdesai
 
 # Global/fallback and technical modifications.
-*            @deepakmaroo @olivhoenen 
+*            @prasad-sawantdesai @olivhoenen 
 
 # Modifications to CODEOWNERS and action workflows 
 .github/     @SimonPinches @olivhoenen

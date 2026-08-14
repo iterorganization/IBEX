@@ -227,6 +227,11 @@ export class BackendManager {
   }
 
   async stopBackend(): Promise<void> {
+    if (this.remoteBackendUrl) {
+      console.info('Remote backend configured, not stopping it.');
+      return;
+    }
+
     if (this.backendProcess) {
       console.info('Stopping backend process...');
       this.backendProcess.kill();
