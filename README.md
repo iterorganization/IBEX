@@ -17,15 +17,8 @@ longer maintained) and go beyond it.
 
 **Documentation:** https://imas-ibex.readthedocs.io/
 
-📖 [Frontend readme](frontend/README.md) · 📖 [Backend readme](backend/README.md)
+[Frontend readme](frontend/README.md) · [Backend readme](backend/README.md)
 
-## 🚧 Project Status
-
-IBEX is under **active development**. Core exploration, plotting, and data
-manipulation workflows are functional, but important changes — including to
-the backend endpoint API — may still occur between releases. Expect fast
-iteration, and please report issues or gaps you encounter via
-[GitHub Issues](https://github.com/iterorganization/IBEX/issues).
 
 ## Quick Start
 
@@ -86,7 +79,16 @@ npm run package
     ./launch-dev.sh
 ```
 
-## 🗺️ TODO / Roadmap 
+## 🚧 Project Status
+
+IBEX is under **active development**. Core exploration, plotting, and data
+manipulation workflows are functional, but important changes — including to
+the backend endpoint API — may still occur between releases. Expect fast
+iteration, and please report issues or gaps you encounter via
+[GitHub Issues](https://github.com/iterorganization/IBEX/issues).
+
+
+## TODO / Roadmap 
 
 - Improve performance and reactivity
 - UX friendliness
