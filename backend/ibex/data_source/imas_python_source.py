@@ -857,6 +857,397 @@ class IMASPythonSource(DataSourceInterface):
 
         return {"outline_nodes": result}
 
+    def _handle_binary_operations(self, plot_data_query: PlotDataRequestModel, data_to_be_returned):
+        """
+
+        :param plot_data_query:
+        :param data_to_be_returned:
+        :return:
+        """
+
+        if plot_data_query.operations is not None:
+            data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query.operations)
+
+        return data_to_be_returned
+
+    def _handle_signal_operations(
+        self,
+        plot_data_query: PlotDataRequestModel,
+        data_to_be_returned,
+        coordinates_to_be_returned,
+        original_data_shape,
+        signals_data,
+        common_coords_values,
+        result_unit,
+    ):
+        """
+
+        :param plot_data_query:
+        :param data_to_be_returned:
+        :param coordinates_to_be_returned:
+        :param original_data_shape:
+        :param signals_data:
+        :param common_coord_values:
+        :param result_unit:
+        :return:
+        """
+
+        #
+        # Steps performed in this block:
+        # 1. Collect all signal URIs referenced in signal_operations
+        # 2. Pad data to rectangular if shape is irregular
+        # 3. For each signal URI, fetch and prepare data:
+        #    a. If the signal was already interpolated (stored during
+        #       interpolation phase), skip fetching
+        #    b. Otherwise fetch the signal and check shape compatibility
+        # 4. Prepare operand data for each signal:
+        #    a. If interpolation was requested, resample onto common coords
+        #    b. Otherwise normalize raw signal data to a NumPy array
+        # 5. Build a flat uri->array dict and apply all signal operations
+
+        if plot_data_query.signal_operations:
+            # Step 1: extract unique signal URIs from operation strings
+            signal_op_uris = set()
+            for op_str in plot_data_query.signal_operations or []:
+                _, op_uri = op_str.split(":", 1)
+                signal_op_uris.add(op_uri)
+
+            # Step 2: ensure rectangular data for downstream processing
+            if original_data_shape == "irregular":
+                data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+            # Step 3: fetch and prepare each signal referenced in operations
+            for signal_uri in signal_op_uris:
+                if signal_uri not in signals_data:
+                    # Signal was not pre-loaded during interpolation phase.
+                    # Fetch it now and verify shape compatibility.
+                    request = PlotDataRequestModel(uri=signal_uri)
+                    other_signal = self.get_plot_data(request)
+
+                    # Comparing signal shapes
+                    if (
+                        other_signal["data"]["shape"] == "irregular"
+                        or other_signal["data"]["shape"] != original_data_shape
+                    ):
+                        msg = (
+                            f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                            "Signal and data shapes do not match. "
+                            "Try interpolating the signal onto the data shape."
+                        )
+                        raise InvalidParametersException(msg)
+
+                    # Comparing coordinates
+                    coordinates_match = self._coordinates_match(
+                        coordinates_to_be_returned, other_signal["data"]["coordinates"]
+                    )
+
+                    if not coordinates_match:
+                        msg = (
+                            f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                            "Coordinates do not match. "
+                            "Try interpolating the signal onto the data coordinates."
+                        )
+                        raise InvalidParametersException(msg)
+
+                    signals_data[signal_uri] = {
+                        "uri": request.uri,
+                        "data": other_signal["data"]["value"],
+                        "coordinates": [
+                            sorted(set(flatten(self._convert_to_lists(c["value"]))))
+                            for c in other_signal["data"]["coordinates"]
+                        ],
+                        "shape": other_signal["data"]["shape"],
+                        "unit": other_signal["data"]["unit"],
+                    }
+
+                # Step 4: prepare operand data (resampled or raw)
+                if plot_data_query.interpolate_over:
+                    # Resample signal data onto the common coordinate grid
+                    signal_data = resample_data_without_interpolation(
+                        tuple(reversed(signals_data[signal_uri]["coordinates"])),
+                        signals_data[signal_uri]["data"],
+                        tuple(common_coords_values),
+                    )
+                else:
+                    signal_data = signals_data[signal_uri]["data"]
+
+                signals_data[signal_uri]["data"] = np.asarray(signal_data)
+
+            # Step 5: flatten dict and apply operations in order
+            signal_data_by_uri = {uri: info["data"] for uri, info in signals_data.items()}
+
+            # Step 6: Handling operations units
+            for operation in plot_data_query.signal_operations:
+                operation_type, signal_uri = operation.split(":", 1)
+                result_unit = combine_signal_units(
+                    result_unit,
+                    signals_data[signal_uri]["unit"],
+                    operation_type,
+                )
+
+            # Step 7: Computing 'operations'
+            data_to_be_returned = apply_signal_operations(
+                data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
+            )
+        return data_to_be_returned, result_unit
+
+    def _handle_binary_and_signal_operations(self, operations, data_to_be_returned, coordinates_to_be_returned):
+        """
+
+        :param operations: list[str] - combined binary and signal operation strings
+        :param data_to_be_returned: list[dict] - data structures from get_plot_data() function
+        :param coordinates_to_be_returned: list[dict] - coordinate structures from get_plot_data() function
+        :return:
+        """
+        ...
+
+    def _handle_data_smoothing(
+        self, plot_data_query: PlotDataRequestModel, data_to_be_returned, coordinates_to_be_returned, first_value
+    ):
+        """
+
+        :param plot_data_query:
+        :param data_to_be_returned:
+        :return:
+        """
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
+        ids = uri_obj.ids_name
+        node_path = uri_obj.node_path
+
+        if plot_data_query.smoothing_method is not None:
+            if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
+                raise InvalidParametersException(
+                    "Data smoothing is only supported when leaf-node coordinates contain time"
+                )
+
+            if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+                if first_value.metadata.ndim != 1:
+                    message = f"Savitzky-Golay filter supports only 1D smoothing. Selected data node is {first_value.metadata.ndim}D."
+                    raise InvalidParametersException(message)
+                data_to_be_returned = apply_savgol_filter(
+                    data_to_be_returned,
+                    window_length=plot_data_query.savgol_smoothing_window_length,
+                    polyorder=plot_data_query.savgol_smoothing_polyorder,
+                    deriv=plot_data_query.savgol_smoothing_deriv,
+                    delta=plot_data_query.savgol_smoothing_delta,
+                    mode=plot_data_query.savgol_smoothing_mode,
+                    cval=plot_data_query.savgol_smoothing_cval,
+                )
+
+            elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
+                time_coordinate_axis = None
+                if first_value.metadata.ndim == 2:
+                    time_coordinate_axis = next(
+                        (i for i, d in enumerate(coordinates_to_be_returned) if d.get("name") == "time"), None
+                    )
+                data_to_be_returned = apply_gaussian_filter(
+                    data_to_be_returned,
+                    sigma=plot_data_query.gaussian_smoothing_sigma,
+                    axis=time_coordinate_axis,
+                )
+
+        return data_to_be_returned
+
+    def _convert_to_lists(self, data):
+        if isinstance(data, list):
+            return [self._convert_to_lists(d) for d in data]
+        elif isinstance(data, (np.ndarray, IDSNumericArray)):
+            return data.tolist()
+        else:
+            return data
+
+    def _handle_data_resampling(
+        self,
+        plot_data_query: PlotDataRequestModel,
+        data_to_be_returned,
+        coordinates_to_be_returned,
+        original_data_shape,
+        result_unit,
+        first_value,
+    ):
+        """
+
+        :param plot_data_query:
+        :param data_to_be_returned:
+        :param coordinates_to_be_returned:
+        :return:
+        """
+
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
+        ids = uri_obj.ids_name
+        node_path = uri_obj.node_path
+
+        common_coords_values = []
+
+        # Signals used when combining data after interpolation.
+        # {uri: str, data: list[*], coordinates: list[list], shape: list, unit: str}
+        signals_data = {
+            plot_data_query.uri: {
+                "uri": plot_data_query.uri,
+                "data": data_to_be_returned,
+                "coordinates": [
+                    sorted(set(flatten(self._convert_to_lists(c["value"])))) for c in coordinates_to_be_returned
+                ],
+                "shape": original_data_shape,
+                "unit": result_unit,
+            }
+        }
+
+        if plot_data_query.interpolate_over:
+            # check for non-interpolatable coordinates
+            if plot_data_query.interpolation_method != InterpolationMethod.EXACT_VALUE:
+                for _coord in coordinates_to_be_returned:
+                    if _coord.get("description") == "1...N" and _coord.get("_is_aos"):
+                        raise InvalidParametersException(
+                            f"Interpolation is not supported for coordinate '{_coord['name']}' "
+                            "which is a Array of Structures coordinate and cannot be used to generate new values. Try using exact_value method."
+                        )
+
+            # =================== GATHER ALL COORDINATES ===================
+            original_coord_values = []
+
+            should_resample_data_onto_new_coordinates: bool = False
+
+            for c in coordinates_to_be_returned:
+                c["value"] = self._convert_to_lists(c["value"])
+                original_coord_values.append(sorted(set(flatten(c["value"]))))
+
+                expected_flattened_shape = np.array(c["value"]).shape[-1]
+                flattened_shape = np.array(original_coord_values[-1]).shape[-1]
+
+                if expected_flattened_shape != flattened_shape:
+                    # If given coordinate is different across AoS indices, we cannot simply flatted coordinates list to 1D.
+                    should_resample_data_onto_new_coordinates = True
+
+            if should_resample_data_onto_new_coordinates:
+                # Coordinates values are different across AoS indices
+                # New data array has to be created with all data points
+                data_to_be_returned = resolve_irregular_coordinate_data_shape(
+                    coordinates=list(reversed([c["value"] for c in coordinates_to_be_returned])),
+                    data=data_to_be_returned,
+                    target_coordinates=list(reversed(original_coord_values)),
+                )
+
+            original_coord_values.reverse()
+
+            store_other_signals_data = False  # used for signal combining after interpolation
+            if plot_data_query.signal_operations:
+                store_other_signals_data = True
+
+            for _uri in plot_data_query.interpolate_over:
+                _uri_obj = IMAS_URI(_uri)
+
+                if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
+                    if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
+                        # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
+                        ...
+                    else:
+                        raise InvalidParametersException(
+                            "IDS name and node path should be the same for source and target URI when interpolating data"
+                        )
+
+                new_plot_data_query = PlotDataRequestModel(uri=_uri)
+                # interpolate_to will be used later with signal combining
+                interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
+                interpolate_to_coordinates = interpolate_to["coordinates"]
+                if store_other_signals_data:
+                    signals_data[_uri] = {
+                        "uri": _uri,
+                        "data": pad_to_rectangular(interpolate_to["value"]),
+                        "coordinates": [
+                            sorted(set(flatten(self._convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
+                        ],
+                        "shape": interpolate_to["shape"],
+                        "unit": interpolate_to["unit"],
+                    }
+
+                if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
+                    message = "Interpolation error. Source and target nodes have different number of coordinates."
+                    raise InvalidParametersException(message)
+
+                for x, y in zip(coordinates_to_be_returned, interpolate_to_coordinates):
+                    if x["name"] != y["name"]:
+                        # coordinates between quantities doesn't match
+                        message = f"Interpolation error. Coordinates names does not match between target and source nodes ({x['name']} vs. {y['name']})."
+                        raise InvalidParametersException(message)
+
+                    x["value"] = sorted(set(flatten(x["value"]) + flatten(self._convert_to_lists(y["value"]))))
+
+            # reverse coordinates list so it matches data dimensions
+            common_coords_values = [c["value"] for c in reversed(coordinates_to_be_returned)]
+            # =================== INTERPOLATE ===================
+
+            # === make data vector rectangular ===
+            data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+            # === run interpolation ===
+            if plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE:
+                data_to_be_returned = resample_data_without_interpolation(
+                    tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
+                )
+            else:
+                data_to_be_returned = resample_data_with_interpolation(
+                    tuple(original_coord_values),
+                    data_to_be_returned,
+                    tuple(common_coords_values),
+                    interpolation_method=plot_data_query.interpolation_method,
+                )
+
+            # Keep the primary signal entry in sync with its resampled data.
+            signals_data[plot_data_query.uri].update(
+                {
+                    "data": np.array(data_to_be_returned, copy=True),
+                    "coordinates": [list(values) for values in reversed(common_coords_values)],
+                    "shape": list(np.asarray(data_to_be_returned).shape),
+                }
+            )
+
+            new_coordinate_shapes = calculate_coordinate_shapes(
+                list(np.asarray(data_to_be_returned).shape),
+                first_value.metadata.ndim,
+            )
+
+            # expand flattened coordinates
+            for i, c in enumerate(coordinates_to_be_returned):
+                c["shape"] = list(new_coordinate_shapes[i])
+                c["value"] = expand(c["value"], c["shape"][:-1])
+
+        return data_to_be_returned, coordinates_to_be_returned, signals_data, common_coords_values
+
+    def _handle_downsampling(
+        self, plot_data_query: PlotDataRequestModel, data_to_be_returned, coordinates_to_be_returned, first_value
+    ):
+        """
+
+        :param plot_data_query:
+        :param data_to_be_returned:
+        :param coordinates_to_be_returned:
+        :return:
+        """
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
+        ids = uri_obj.ids_name
+        node_path = uri_obj.node_path
+
+        # Downsample only 1D data
+        if first_value.metadata.ndim == 1:
+            if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":
+                # If coordinate targets node -> downsample coordinate as well
+                coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
+                    data_to_be_returned,
+                    target_size=plot_data_query.downsampled_size,
+                    method=plot_data_query.downsampling_method,
+                    x=coordinates_to_be_returned[0]["value"],
+                    single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
+                )
+
+            else:
+                _, data_to_be_returned = downsample_data(
+                    data_to_be_returned,
+                    target_size=plot_data_query.downsampled_size,
+                    method=plot_data_query.downsampling_method,
+                )
+        return data_to_be_returned, coordinates_to_be_returned
+
     def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
@@ -1066,43 +1457,20 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= BEGIN simple operations ============
 
-            if plot_data_query.operations is not None:
-                data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query.operations)
+            data_to_be_returned = self._handle_binary_operations(
+                plot_data_query, data_to_be_returned=data_to_be_returned
+            )
 
             # ============= END simple operations =============
 
             # ============= BEGIN data smoothing ============
-            if plot_data_query.smoothing_method is not None:
-                if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
-                    raise InvalidParametersException(
-                        "Data smoothing is only supported when leaf-node coordinates contain time"
-                    )
 
-                if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
-                    if first_value.metadata.ndim != 1:
-                        message = f"Savitzky-Golay filter supports only 1D smoothing. Selected data node is {first_value.metadata.ndim}D."
-                        raise InvalidParametersException(message)
-                    data_to_be_returned = apply_savgol_filter(
-                        data_to_be_returned,
-                        window_length=plot_data_query.savgol_smoothing_window_length,
-                        polyorder=plot_data_query.savgol_smoothing_polyorder,
-                        deriv=plot_data_query.savgol_smoothing_deriv,
-                        delta=plot_data_query.savgol_smoothing_delta,
-                        mode=plot_data_query.savgol_smoothing_mode,
-                        cval=plot_data_query.savgol_smoothing_cval,
-                    )
-
-                elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
-                    time_coordinate_axis = None
-                    if first_value.metadata.ndim == 2:
-                        time_coordinate_axis = next(
-                            (i for i, d in enumerate(coordinates_to_be_returned) if d.get("name") == "time"), None
-                        )
-                    data_to_be_returned = apply_gaussian_filter(
-                        data_to_be_returned,
-                        sigma=plot_data_query.gaussian_smoothing_sigma,
-                        axis=time_coordinate_axis,
-                    )
+            data_to_be_returned = self._handle_data_smoothing(
+                plot_data_query=plot_data_query,
+                data_to_be_returned=data_to_be_returned,
+                coordinates_to_be_returned=coordinates_to_be_returned,
+                first_value=first_value,
+            )
 
             # ============= END data smoothing =============
 
@@ -1112,247 +1480,31 @@ class IMASPythonSource(DataSourceInterface):
                 original_data_shape = "irregular"
 
             # ============= BEGIN resample data onto new time vector =============
-            def convert_to_lists(data):
-                if isinstance(data, list):
-                    return [convert_to_lists(d) for d in data]
-                elif isinstance(data, (np.ndarray, IDSNumericArray)):
-                    return data.tolist()
-                else:
-                    return data
 
-            # Signals used when combining data after interpolation.
-            # {uri: str, data: list[*], coordinates: list[list], shape: list, unit: str}
-            signals_data = {
-                plot_data_query.uri: {
-                    "uri": plot_data_query.uri,
-                    "data": data_to_be_returned,
-                    "coordinates": [
-                        sorted(set(flatten(convert_to_lists(c["value"])))) for c in coordinates_to_be_returned
-                    ],
-                    "shape": original_data_shape,
-                    "unit": result_unit,
-                }
-            }
-
-            if plot_data_query.interpolate_over:
-                # check for non-interpolatable coordinates
-                if plot_data_query.interpolation_method != InterpolationMethod.EXACT_VALUE:
-                    for _coord in coordinates_to_be_returned:
-                        if _coord.get("description") == "1...N" and _coord.get("_is_aos"):
-                            raise InvalidParametersException(
-                                f"Interpolation is not supported for coordinate '{_coord['name']}' "
-                                "which is a Array of Structures coordinate and cannot be used to generate new values. Try using exact_value method."
-                            )
-
-                # =================== GATHER ALL COORDINATES ===================
-                original_coord_values = []
-
-                should_resample_data_onto_new_coordinates: bool = False
-
-                for c in coordinates_to_be_returned:
-                    c["value"] = convert_to_lists(c["value"])
-                    original_coord_values.append(sorted(set(flatten(c["value"]))))
-
-                    expected_flattened_shape = np.array(c["value"]).shape[-1]
-                    flattened_shape = np.array(original_coord_values[-1]).shape[-1]
-
-                    if expected_flattened_shape != flattened_shape:
-                        # If given coordinate is different across AoS indices, we cannot simply flatted coordinates list to 1D.
-                        should_resample_data_onto_new_coordinates = True
-
-                if should_resample_data_onto_new_coordinates:
-                    # Coordinates values are different across AoS indices
-                    # New data array has to be created with all data points
-                    data_to_be_returned = resolve_irregular_coordinate_data_shape(
-                        coordinates=list(reversed([c["value"] for c in coordinates_to_be_returned])),
-                        data=data_to_be_returned,
-                        target_coordinates=list(reversed(original_coord_values)),
-                    )
-
-                original_coord_values.reverse()
-
-                store_other_signals_data = False  # used for signal combining after interpolation
-                if plot_data_query.signal_operations:
-                    store_other_signals_data = True
-
-                for _uri in plot_data_query.interpolate_over:
-                    _uri_obj = IMAS_URI(_uri)
-
-                    if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
-                        if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
-                            # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
-                            ...
-                        else:
-                            raise InvalidParametersException(
-                                "IDS name and node path should be the same for source and target URI when interpolating data"
-                            )
-
-                    new_plot_data_query = PlotDataRequestModel(uri=_uri)
-                    # interpolate_to will be used later with signal combining
-                    interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
-                    interpolate_to_coordinates = interpolate_to["coordinates"]
-                    if store_other_signals_data:
-                        signals_data[_uri] = {
-                            "uri": _uri,
-                            "data": pad_to_rectangular(interpolate_to["value"]),
-                            "coordinates": [
-                                sorted(set(flatten(convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
-                            ],
-                            "shape": interpolate_to["shape"],
-                            "unit": interpolate_to["unit"],
-                        }
-
-                    if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
-                        message = "Interpolation error. Source and target nodes have different number of coordinates."
-                        raise InvalidParametersException(message)
-
-                    for x, y in zip(coordinates_to_be_returned, interpolate_to_coordinates):
-                        if x["name"] != y["name"]:
-                            # coordinates between quantities doesn't match
-                            message = f"Interpolation error. Coordinates names does not match between target and source nodes ({x['name']} vs. {y['name']})."
-                            raise InvalidParametersException(message)
-
-                        x["value"] = sorted(set(flatten(x["value"]) + flatten(convert_to_lists(y["value"]))))
-
-                # reverse coordinates list so it matches data dimensions
-                common_coords_values = [c["value"] for c in reversed(coordinates_to_be_returned)]
-                # =================== INTERPOLATE ===================
-
-                # === make data vector rectangular ===
-                data_to_be_returned = pad_to_rectangular(data_to_be_returned)
-
-                # === run interpolation ===
-                if plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE:
-                    data_to_be_returned = resample_data_without_interpolation(
-                        tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
-                    )
-                else:
-                    data_to_be_returned = resample_data_with_interpolation(
-                        tuple(original_coord_values),
-                        data_to_be_returned,
-                        tuple(common_coords_values),
-                        interpolation_method=plot_data_query.interpolation_method,
-                    )
-
-                # Keep the primary signal entry in sync with its resampled data.
-                signals_data[plot_data_query.uri].update(
-                    {
-                        "data": np.array(data_to_be_returned, copy=True),
-                        "coordinates": [list(values) for values in reversed(common_coords_values)],
-                        "shape": list(np.asarray(data_to_be_returned).shape),
-                    }
+            data_to_be_returned, coordinates_to_be_returned, signals_data, common_coords_values = (
+                self._handle_data_resampling(
+                    plot_data_query,
+                    data_to_be_returned=data_to_be_returned,
+                    coordinates_to_be_returned=coordinates_to_be_returned,
+                    original_data_shape=original_data_shape,
+                    result_unit=result_unit,
+                    first_value=first_value,
                 )
-
-                new_coordinate_shapes = calculate_coordinate_shapes(
-                    list(np.asarray(data_to_be_returned).shape),
-                    first_value.metadata.ndim,
-                )
-
-                # expand flattened coordinates
-                for i, c in enumerate(coordinates_to_be_returned):
-                    c["shape"] = list(new_coordinate_shapes[i])
-                    c["value"] = expand(c["value"], c["shape"][:-1])
+            )
 
             # ============= END resample data onto new time vector =============
 
             # ============= BEGIN signal operations =============
-            #
-            # Steps performed in this block:
-            # 1. Collect all signal URIs referenced in signal_operations
-            # 2. Pad data to rectangular if shape is irregular
-            # 3. For each signal URI, fetch and prepare data:
-            #    a. If the signal was already interpolated (stored during
-            #       interpolation phase), skip fetching
-            #    b. Otherwise fetch the signal and check shape compatibility
-            # 4. Prepare operand data for each signal:
-            #    a. If interpolation was requested, resample onto common coords
-            #    b. Otherwise normalize raw signal data to a NumPy array
-            # 5. Build a flat uri->array dict and apply all signal operations
 
-            if plot_data_query.signal_operations:
-                # Step 1: extract unique signal URIs from operation strings
-                signal_op_uris = set()
-                for op_str in plot_data_query.signal_operations or []:
-                    _, op_uri = op_str.split(":", 1)
-                    signal_op_uris.add(op_uri)
-
-                # Step 2: ensure rectangular data for downstream processing
-                if original_data_shape == "irregular":
-                    data_to_be_returned = pad_to_rectangular(data_to_be_returned)
-
-                # Step 3: fetch and prepare each signal referenced in operations
-                for signal_uri in signal_op_uris:
-                    if signal_uri not in signals_data:
-                        # Signal was not pre-loaded during interpolation phase.
-                        # Fetch it now and verify shape compatibility.
-                        request = PlotDataRequestModel(uri=signal_uri)
-                        other_signal = self.get_plot_data(request)
-
-                        # Comparing signal shapes
-                        if (
-                            other_signal["data"]["shape"] == "irregular"
-                            or other_signal["data"]["shape"] != original_data_shape
-                        ):
-                            msg = (
-                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
-                                "Signal and data shapes do not match. "
-                                "Try interpolating the signal onto the data shape."
-                            )
-                            raise InvalidParametersException(msg)
-
-                        # Comparing coordinates
-                        coordinates_match = self._coordinates_match(
-                            coordinates_to_be_returned, other_signal["data"]["coordinates"]
-                        )
-
-                        if not coordinates_match:
-                            msg = (
-                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
-                                "Coordinates do not match. "
-                                "Try interpolating the signal onto the data coordinates."
-                            )
-                            raise InvalidParametersException(msg)
-
-                        signals_data[signal_uri] = {
-                            "uri": request.uri,
-                            "data": other_signal["data"]["value"],
-                            "coordinates": [
-                                sorted(set(flatten(convert_to_lists(c["value"]))))
-                                for c in other_signal["data"]["coordinates"]
-                            ],
-                            "shape": other_signal["data"]["shape"],
-                            "unit": other_signal["data"]["unit"],
-                        }
-
-                    # Step 4: prepare operand data (resampled or raw)
-                    if plot_data_query.interpolate_over:
-                        # Resample signal data onto the common coordinate grid
-                        signal_data = resample_data_without_interpolation(
-                            tuple(reversed(signals_data[signal_uri]["coordinates"])),
-                            signals_data[signal_uri]["data"],
-                            tuple(common_coords_values),
-                        )
-                    else:
-                        signal_data = signals_data[signal_uri]["data"]
-
-                    signals_data[signal_uri]["data"] = np.asarray(signal_data)
-
-                # Step 5: flatten dict and apply operations in order
-                signal_data_by_uri = {uri: info["data"] for uri, info in signals_data.items()}
-
-                # Step 6: Handling operations units
-                for operation in plot_data_query.signal_operations:
-                    operation_type, signal_uri = operation.split(":", 1)
-                    result_unit = combine_signal_units(
-                        result_unit,
-                        signals_data[signal_uri]["unit"],
-                        operation_type,
-                    )
-
-                # Step 7: Computing 'operations'
-                data_to_be_returned = apply_signal_operations(
-                    data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
-                )
+            data_to_be_returned, result_unit = self._handle_signal_operations(
+                plot_data_query,
+                data_to_be_returned=data_to_be_returned,
+                coordinates_to_be_returned=coordinates_to_be_returned,
+                original_data_shape=original_data_shape,
+                signals_data=signals_data,
+                common_coords_values=common_coords_values,
+                result_unit=result_unit,
+            )
 
             # ============= END signal operations =============
 
@@ -1365,24 +1517,17 @@ class IMASPythonSource(DataSourceInterface):
             except ValueError:
                 processed_data_shape = "irregular"
 
-            # Downsample only 1D data
-            if first_value.metadata.ndim == 1:
-                if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":
-                    # If coordinate targets node -> downsample coordinate as well
-                    coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
-                        data_to_be_returned,
-                        target_size=plot_data_query.downsampled_size,
-                        method=plot_data_query.downsampling_method,
-                        x=coordinates_to_be_returned[0]["value"],
-                        single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
-                    )
+            # ============= BEGIN downsampling =============
 
-                else:
-                    _, data_to_be_returned = downsample_data(
-                        data_to_be_returned,
-                        target_size=plot_data_query.downsampled_size,
-                        method=plot_data_query.downsampling_method,
-                    )
+            data_to_be_returned, coordinates_to_be_returned = self._handle_downsampling(
+                plot_data_query,
+                data_to_be_returned=data_to_be_returned,
+                coordinates_to_be_returned=coordinates_to_be_returned,
+                first_value=first_value,
+            )
+
+            # ============= END downsampling =============
+
             # serialize coordinates and update shapes (they could be changed by downsampling)
             for c in coordinates_to_be_returned:
                 try:
