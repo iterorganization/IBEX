@@ -858,11 +858,14 @@ class IMASPythonSource(DataSourceInterface):
         return {"outline_nodes": result}
 
     def _handle_binary_operations(self, plot_data_query: PlotDataRequestModel, data_to_be_returned):
-        """
+        """Apply simple binary operations (e.g. addition, multiplication) to the data.
 
-        :param plot_data_query:
-        :param data_to_be_returned:
-        :return:
+        Delegates to :func:`apply_simple_operations` when the request contains
+        a non-empty ``operations`` list, otherwise returns the data unchanged.
+
+        :param plot_data_query: Plot data request model that may carry binary operations.
+        :param data_to_be_returned: Data values to which the operations are applied.
+        :return: Data after applying binary operations, or the original data if no operations were requested.
         """
 
         if plot_data_query.operations is not None:
@@ -880,16 +883,17 @@ class IMASPythonSource(DataSourceInterface):
         common_coords_values,
         result_unit,
     ):
-        """
+        """Apply signal-level operations (e.g. combining two signals) to the data.
 
-        :param plot_data_query:
-        :param data_to_be_returned:
-        :param coordinates_to_be_returned:
-        :param original_data_shape:
-        :param signals_data:
-        :param common_coord_values:
-        :param result_unit:
-        :return:
+
+        :param plot_data_query: Plot data request model containing signal operation definitions.
+        :param data_to_be_returned: Primary signal data to which the operations are applied.
+        :param coordinates_to_be_returned: Coordinate descriptors for the primary signal.
+        :param original_data_shape: Shape classification of the primary data.
+        :param signals_data: Mutable dictionary of pre-loaded signal data keyed by URI.
+        :param common_coords_values: Common coordinate values used for resampling operands.
+        :param result_unit: Current result unit string that is updated with each operation.
+        :return: A tuple ``(data_to_be_returned, result_unit)`` with the updated data and unit.
         """
 
         #
@@ -1004,11 +1008,19 @@ class IMASPythonSource(DataSourceInterface):
     def _handle_data_smoothing(
         self, plot_data_query: PlotDataRequestModel, data_to_be_returned, coordinates_to_be_returned, first_value
     ):
-        """
+        """Apply a smoothing filter to the data.
 
-        :param plot_data_query:
-        :param data_to_be_returned:
-        :return:
+        Supports Savitzky-Golay and Gaussian smoothing methods. Savitzky-Golay
+        filtering is restricted to 1-D data. Gaussian smoothing automatically
+        detects the time axis for 2-D data.
+
+        :param plot_data_query: Plot data request model specifying the smoothing method and parameters.
+        :param data_to_be_returned: Data values to be smoothed.
+        :param coordinates_to_be_returned: Coordinate descriptors used to locate the time axis.
+        :param first_value: Metadata object providing dimensionality information.
+        :return: Smoothed data, or the original data when no smoothing method is specified.
+        :raises InvalidParametersException: If smoothing is requested but coordinates lack a time axis,
+            or if Savitzky-Golay is used on non-1-D data.
         """
         uri_obj = IMAS_URI(plot_data_query.uri.strip())
         ids = uri_obj.ids_name
@@ -1065,12 +1077,29 @@ class IMASPythonSource(DataSourceInterface):
         result_unit,
         first_value,
     ):
-        """
+        """Resample (interpolate) data onto a common coordinate grid.
 
-        :param plot_data_query:
-        :param data_to_be_returned:
-        :param coordinates_to_be_returned:
-        :return:
+        When ``interpolate_over`` is specified in the request, this method:
+
+        1. Validates that Array-of-Structures coordinates are not used with non-exact
+           interpolation methods.
+        2. Gathers and merges coordinate values from all target URIs.
+        3. Resolves irregular coordinate data shapes when coordinate values differ
+           across AoS indices.
+        4. Performs the interpolation (exact-value resampling or continuous interpolation)
+           onto the merged coordinate grid.
+        5. Updates the ``signals_data`` dictionary with the resampled primary signal and,
+           if signal operations are pending, stores additional signal data for later use.
+
+        :param plot_data_query: Plot data request model with interpolation settings.
+        :param data_to_be_returned: Primary signal data to resample.
+        :param coordinates_to_be_returned: Coordinate descriptors (modified in place).
+        :param original_data_shape: Shape classification.
+        :param result_unit: Unit string of the primary signal.
+        :param first_value: Metadata object providing dimensionality information.
+        :return: A tuple ``(data_to_be_returned, coordinates_to_be_returned, signals_data, common_coords_values)``
+            containing the resampled data, updated coordinates, signal data dictionary, and common coordinate values.
+        :raises InvalidParametersException: If interpolation parameters are invalid or coordinate mismatches are detected.
         """
 
         uri_obj = IMAS_URI(plot_data_query.uri.strip())
@@ -1217,12 +1246,17 @@ class IMASPythonSource(DataSourceInterface):
     def _handle_downsampling(
         self, plot_data_query: PlotDataRequestModel, data_to_be_returned, coordinates_to_be_returned, first_value
     ):
-        """
+        """Downsample data to reduce its size for display purposes.
 
-        :param plot_data_query:
-        :param data_to_be_returned:
-        :param coordinates_to_be_returned:
-        :return:
+        Only 1-D data is eligible for downsampling. When the primary coordinate
+        targets the same node as the data, the coordinate is downsampled in tandem;
+        otherwise only the data values are downsampled.
+
+        :param plot_data_query: Plot data request model specifying target size and downsampling method.
+        :param data_to_be_returned: Data values to downsample.
+        :param coordinates_to_be_returned: Coordinate descriptors; the first coordinate may be downsampled alongside the data.
+        :param first_value: Metadata object providing dimensionality information.
+        :return: A tuple ``(data_to_be_returned, coordinates_to_be_returned)`` with the downsampled data and coordinates.
         """
         uri_obj = IMAS_URI(plot_data_query.uri.strip())
         ids = uri_obj.ids_name
