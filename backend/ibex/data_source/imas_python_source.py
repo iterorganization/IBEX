@@ -25,7 +25,6 @@ from imas.ids_path import IDSPath  # type: ignore
 
 from itertools import zip_longest, chain  # type: ignore
 
-from imas_core.exception import ImasCoreBackendException
 
 from ibex.data_source.data_source_interface import DataSourceInterface
 from ibex.data_source.exception import (
@@ -93,7 +92,7 @@ class IMASPythonSource(DataSourceInterface):
         """
         try:
             return imas.DBEntry(uri, mode="r")
-        except ImasCoreBackendException:
+        except imas_core.exception.ALException:
             message = f"Could not open pulsefile: {uri}"
             raise EntryNotFoundException(message) from None
 
@@ -857,25 +856,26 @@ class IMASPythonSource(DataSourceInterface):
 
         return {"outline_nodes": result}
 
-    def _handle_binary_operations(self, plot_data_query: PlotDataRequestModel, data_to_be_returned):
-        """Apply simple binary operations (e.g. addition, multiplication) to the data.
+    def _handle_binary_operations(self, operation, data_to_be_returned):
+        """Apply a scalar binary operation (e.g. addition, multiplication) to the data.
 
-        Delegates to :func:`apply_simple_operations` when the request contains
-        a non-empty ``operations`` list, otherwise returns the data unchanged.
+        Accepts a single operation string or a list of operation strings and
+        delegates to :func:`apply_simple_operations`.
 
-        :param plot_data_query: Plot data request model that may carry binary operations.
-        :param data_to_be_returned: Data values to which the operations are applied.
-        :return: Data after applying binary operations, or the original data if no operations were requested.
+        :param operation: Binary operation string e.g. 'add:10', or a list of such strings.
+        :param data_to_be_returned: Data values to which the operation is applied.
+        :return: Data after applying the given operation(s).
         """
 
-        if plot_data_query.operations is not None:
-            data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query.operations)
-
-        return data_to_be_returned
+        if isinstance(operation, list):
+            return apply_simple_operations(data_to_be_returned, operation)
+        else:
+            return apply_simple_operations(data_to_be_returned, [operation])
 
     def _handle_signal_operations(
         self,
         plot_data_query: PlotDataRequestModel,
+        operation,
         data_to_be_returned,
         coordinates_to_be_returned,
         original_data_shape,
@@ -887,6 +887,7 @@ class IMASPythonSource(DataSourceInterface):
 
 
         :param plot_data_query: Plot data request model containing signal operation definitions.
+        :param operation: Single signal-operation string to be applied. E.g. 'add:imas:hdf5...'
         :param data_to_be_returned: Primary signal data to which the operations are applied.
         :param coordinates_to_be_returned: Coordinate descriptors for the primary signal.
         :param original_data_shape: Shape classification of the primary data.
@@ -897,113 +898,139 @@ class IMASPythonSource(DataSourceInterface):
         """
 
         #
-        # Steps performed in this block:
-        # 1. Collect all signal URIs referenced in signal_operations
+        # Steps performed in this function:
+        # 1. Extract the operand signal URI from the operation string
         # 2. Pad data to rectangular if shape is irregular
-        # 3. For each signal URI, fetch and prepare data:
+        # 3. Fetch and prepare the operand signal:
         #    a. If the signal was already interpolated (stored during
         #       interpolation phase), skip fetching
         #    b. Otherwise fetch the signal and check shape compatibility
-        # 4. Prepare operand data for each signal:
+        # 4. Prepare operand data:
         #    a. If interpolation was requested, resample onto common coords
         #    b. Otherwise normalize raw signal data to a NumPy array
-        # 5. Build a flat uri->array dict and apply all signal operations
+        # 5. Build a flat uri->array dict and apply the signal operation
 
-        if plot_data_query.signal_operations:
-            # Step 1: extract unique signal URIs from operation strings
-            signal_op_uris = set()
-            for op_str in plot_data_query.signal_operations or []:
-                _, op_uri = op_str.split(":", 1)
-                signal_op_uris.add(op_uri)
+        # Step 1: extract the operand signal URI from the operation string
+        signal_uri = operation.split(":", 1)[1]
 
-            # Step 2: ensure rectangular data for downstream processing
-            if original_data_shape == "irregular":
-                data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+        # Step 2: ensure rectangular data for downstream processing
+        if original_data_shape == "irregular":
+            data_to_be_returned = pad_to_rectangular(data_to_be_returned)
 
-            # Step 3: fetch and prepare each signal referenced in operations
-            for signal_uri in signal_op_uris:
-                if signal_uri not in signals_data:
-                    # Signal was not pre-loaded during interpolation phase.
-                    # Fetch it now and verify shape compatibility.
-                    request = PlotDataRequestModel(uri=signal_uri)
-                    other_signal = self.get_plot_data(request)
+        # Step 3: fetch and prepare signal referenced in operation
+        if signal_uri not in signals_data:
+            # Signal was not pre-loaded during interpolation phase.
+            # Fetch it now and verify shape compatibility.
+            request = PlotDataRequestModel(uri=signal_uri)
 
-                    # Comparing signal shapes
-                    if (
-                        other_signal["data"]["shape"] == "irregular"
-                        or other_signal["data"]["shape"] != original_data_shape
-                    ):
-                        msg = (
-                            f"Cannot apply operation on signal {signal_uri} without interpolation. "
-                            "Signal and data shapes do not match. "
-                            "Try interpolating the signal onto the data shape."
-                        )
-                        raise InvalidParametersException(msg)
+            other_signal = self.get_plot_data(request)
 
-                    # Comparing coordinates
-                    coordinates_match = self._coordinates_match(
-                        coordinates_to_be_returned, other_signal["data"]["coordinates"]
-                    )
-
-                    if not coordinates_match:
-                        msg = (
-                            f"Cannot apply operation on signal {signal_uri} without interpolation. "
-                            "Coordinates do not match. "
-                            "Try interpolating the signal onto the data coordinates."
-                        )
-                        raise InvalidParametersException(msg)
-
-                    signals_data[signal_uri] = {
-                        "uri": request.uri,
-                        "data": other_signal["data"]["value"],
-                        "coordinates": [
-                            sorted(set(flatten(self._convert_to_lists(c["value"]))))
-                            for c in other_signal["data"]["coordinates"]
-                        ],
-                        "shape": other_signal["data"]["shape"],
-                        "unit": other_signal["data"]["unit"],
-                    }
-
-                # Step 4: prepare operand data (resampled or raw)
-                if plot_data_query.interpolate_over:
-                    # Resample signal data onto the common coordinate grid
-                    signal_data = resample_data_without_interpolation(
-                        tuple(reversed(signals_data[signal_uri]["coordinates"])),
-                        signals_data[signal_uri]["data"],
-                        tuple(common_coords_values),
-                    )
-                else:
-                    signal_data = signals_data[signal_uri]["data"]
-
-                signals_data[signal_uri]["data"] = np.asarray(signal_data)
-
-            # Step 5: flatten dict and apply operations in order
-            signal_data_by_uri = {uri: info["data"] for uri, info in signals_data.items()}
-
-            # Step 6: Handling operations units
-            for operation in plot_data_query.signal_operations:
-                operation_type, signal_uri = operation.split(":", 1)
-                result_unit = combine_signal_units(
-                    result_unit,
-                    signals_data[signal_uri]["unit"],
-                    operation_type,
+            # Comparing signal shapes
+            if other_signal["data"]["shape"] == "irregular" or other_signal["data"]["shape"] != original_data_shape:
+                msg = (
+                    f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                    "Signal and data shapes do not match. "
+                    "Try interpolating the signal onto the data shape."
                 )
+                raise InvalidParametersException(msg)
 
-            # Step 7: Computing 'operations'
-            data_to_be_returned = apply_signal_operations(
-                data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
+            # Comparing coordinates
+            coordinates_match = self._coordinates_match(coordinates_to_be_returned, other_signal["data"]["coordinates"])
+
+            if not coordinates_match:
+                msg = (
+                    f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                    "Coordinates do not match. "
+                    "Try interpolating the signal onto the data coordinates."
+                )
+                raise InvalidParametersException(msg)
+
+            signals_data[signal_uri] = {
+                "uri": request.uri,
+                "data": other_signal["data"]["value"],
+                "coordinates": [
+                    sorted(set(flatten(self._convert_to_lists(c["value"]))))
+                    for c in other_signal["data"]["coordinates"]
+                ],
+                "shape": other_signal["data"]["shape"],
+                "unit": other_signal["data"]["unit"],
+            }
+
+        # Step 4: prepare operand data (resampled or raw)
+        if plot_data_query.interpolate_over:
+            # Resample signal data onto the common coordinate grid
+            signal_data = resample_data_without_interpolation(
+                tuple(reversed(signals_data[signal_uri]["coordinates"])),
+                signals_data[signal_uri]["data"],
+                tuple(common_coords_values),
             )
+        else:
+            signal_data = signals_data[signal_uri]["data"]
+
+        signals_data[signal_uri]["data"] = np.asarray(signal_data)
+
+        # Step 5: flatten dict and apply the operation
+        signal_data_by_uri = {uri: info["data"] for uri, info in signals_data.items()}
+
+        # Step 6: Handling operations units
+        operation_type, signal_uri = operation.split(":", 1)
+        result_unit = combine_signal_units(
+            result_unit,
+            signals_data[signal_uri]["unit"],
+            operation_type,
+        )
+
+        # Step 7: Computing 'operations'
+        data_to_be_returned = apply_signal_operations(data_to_be_returned, [operation], signal_data_by_uri)
         return data_to_be_returned, result_unit
 
-    def _handle_binary_and_signal_operations(self, operations, data_to_be_returned, coordinates_to_be_returned):
+    def _handle_binary_and_signal_operations(
+        self,
+        plot_data_query,
+        data_to_be_returned,
+        coordinates_to_be_returned,
+        original_data_shape,
+        signals_data,
+        common_coords_values,
+        result_unit,
+    ):
+        """Apply requested operations to the data, in the order given.
+
+        Iterates over ``plot_data_query.operations`` and dispatches each entry:
+
+        - scalar operand (e.g. ``'add:10'``) is delegated to
+          :meth:`_handle_binary_operations`;
+        - signal operand (an IMAS URI, e.g. ``'add:imas:hdf5?...'``) is delegated
+          to :meth:`_handle_signal_operations`, which also combines units.
+
+        :param plot_data_query: Plot data request model with the ordered ``operations`` list.
+        :param data_to_be_returned: Data values to which the operations are applied.
+        :param coordinates_to_be_returned: Coordinate descriptors of the primary signal (used for compatibility checks).
+        :param original_data_shape: Shape classification of the primary data ("irregular" triggers padding).
+        :param signals_data: Dictionary of pre-loaded signal data keyed by URI.
+        :param common_coords_values: Common coordinate values used for resampling operands when interpolation was requested.
+        :param result_unit: Unit string of the current result, updated by each signal operation.
+        :return: A tuple ``(data_to_be_returned, result_unit)`` with data after all operations and the resulting unit.
         """
 
-        :param operations: list[str] - combined binary and signal operation strings
-        :param data_to_be_returned: list[dict] - data structures from get_plot_data() function
-        :param coordinates_to_be_returned: list[dict] - coordinate structures from get_plot_data() function
-        :return:
-        """
-        ...
+        for operation in plot_data_query.operations:
+            op, operand = operation.split(":", 1)
+            if bool(re.fullmatch(r"[+-]?\d+(?:[.,]\d+)?", operand)):
+                # binary operation
+                data_to_be_returned = self._handle_binary_operations(operation, data_to_be_returned=data_to_be_returned)
+            else:
+                # signal operation
+                data_to_be_returned, result_unit = self._handle_signal_operations(
+                    plot_data_query=plot_data_query,
+                    operation=operation,
+                    data_to_be_returned=data_to_be_returned,
+                    coordinates_to_be_returned=coordinates_to_be_returned,
+                    original_data_shape=original_data_shape,
+                    signals_data=signals_data,
+                    common_coords_values=common_coords_values,
+                    result_unit=result_unit,
+                )
+        return data_to_be_returned, result_unit
 
     def _handle_data_smoothing(
         self, plot_data_query: PlotDataRequestModel, data_to_be_returned, coordinates_to_be_returned, first_value
@@ -1160,8 +1187,14 @@ class IMASPythonSource(DataSourceInterface):
             original_coord_values.reverse()
 
             store_other_signals_data = False  # used for signal combining after interpolation
-            if plot_data_query.signal_operations:
-                store_other_signals_data = True
+            if plot_data_query.operations:
+                for op in plot_data_query.operations:
+                    _, operand = op.split(":", 1)
+
+                    if not bool(re.fullmatch(r"[+-]?\d+(?:[.,]\d+)?", operand)):
+                        # if operand is not a simple number, assume it's URI
+                        store_other_signals_data = True
+                        break
 
             for _uri in plot_data_query.interpolate_over:
                 _uri_obj = IMAS_URI(_uri)
@@ -1489,14 +1522,6 @@ class IMASPythonSource(DataSourceInterface):
 
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
 
-            # ============= BEGIN simple operations ============
-
-            data_to_be_returned = self._handle_binary_operations(
-                plot_data_query, data_to_be_returned=data_to_be_returned
-            )
-
-            # ============= END simple operations =============
-
             # ============= BEGIN data smoothing ============
 
             data_to_be_returned = self._handle_data_smoothing(
@@ -1528,17 +1553,18 @@ class IMASPythonSource(DataSourceInterface):
 
             # ============= END resample data onto new time vector =============
 
-            # ============= BEGIN signal operations =============
+            # ============= BEGIN binary and signal operations ============
 
-            data_to_be_returned, result_unit = self._handle_signal_operations(
-                plot_data_query,
-                data_to_be_returned=data_to_be_returned,
-                coordinates_to_be_returned=coordinates_to_be_returned,
-                original_data_shape=original_data_shape,
-                signals_data=signals_data,
-                common_coords_values=common_coords_values,
-                result_unit=result_unit,
-            )
+            if plot_data_query.operations:
+                data_to_be_returned, result_unit = self._handle_binary_and_signal_operations(
+                    plot_data_query=plot_data_query,
+                    data_to_be_returned=data_to_be_returned,
+                    coordinates_to_be_returned=coordinates_to_be_returned,
+                    original_data_shape=original_data_shape,
+                    signals_data=signals_data,
+                    common_coords_values=common_coords_values,
+                    result_unit=result_unit,
+                )
 
             # ============= END signal operations =============
 

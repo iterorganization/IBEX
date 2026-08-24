@@ -281,16 +281,20 @@ def test_combined_features(entry_path, interpolation_entry_path_directory):
     db = f"imas:hdf5?path={entry_path}"
     parameters = {
         "uri": f"{db}#core_profiles/global_quantities/ip",
-        "operations": ["add:2", "mul:3"],
+        "operations": ["add:2", "mul:3", f"add:{db}#core_profiles/global_quantities/ip"],
         "smoothing_method": "gaussian_filter",
         "gaussian_smoothing_sigma": 1,
-        "signal_operations": [f"add:{db}#core_profiles/global_quantities/ip"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 200
 
     response_body = response.json()
-    assert response_body["data"]["value"] == pytest.approx([20.5, 24.4, 30, 35, 39], 0.1)
+    # ip=[1..5]; gaussian sigma=1 -> G(ip); add:2, mul:3 -> (G(ip)+2)*3;
+    # self-signal add operand is the smoothed (pre-operations) snapshot G(ip)
+    # result = (G(ip)+2)*3 + G(ip) = 4*G(ip)+6
+    assert response_body["data"]["value"] == pytest.approx(
+        [11.7081638, 14.27128814, 18.0, 21.72871186, 24.2918362], 0.01
+    )
 
     # --- Part 2: different simple ops + savgol smoothing + exact_value interpolation + signal ops ---
     db_names = [
@@ -300,11 +304,10 @@ def test_combined_features(entry_path, interpolation_entry_path_directory):
 
     parameters = {
         "uri": f"{db_names[0]}#equilibrium/vacuum_toroidal_field/b0",
-        "operations": ["mul:10", "pow:2"],
+        "operations": ["mul:10", "pow:2", f"add:{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
         "smoothing_method": "savitzky-golay_filter",
         "savgol_smoothing_window_length": 3,
         "savgol_smoothing_polyorder": 1,
-        "signal_operations": [f"add:{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
         "interpolate_over": [f"{db_names[1]}#equilibrium/vacuum_toroidal_field/b0"],
         "interpolation_method": "exact_value",
     }
@@ -312,14 +315,14 @@ def test_combined_features(entry_path, interpolation_entry_path_directory):
     assert response.status_code == 200
 
     response_body = response.json()
-    # db_1 b0: [0.1,0.2,0.3,0.4], mul:10+pow:2 -> [1,4,9,16]
-    # savgol wl=3 po=1 -> [0.6667,4.6667,9.6667,15.6667]
+    # db_1 b0: [0.1,0.2,0.3,0.4] (smoothing runs first: savgol on linear data -> no change)
+    # mul:10+pow:2 -> [1,4,9,16]
     # exact_value interpolation on union [1,2,3,4] -> no change
     # db_2 b0: [0.1,0.2,0.3]
     # resampled to [1,2,3,4] with exact_value: [0.1,0.2,0.3,None]
-    # signal add propagates missing operand data: [0.7667,4.8667,9.9667,None]
+    # signal add propagates missing operand data: [1.1,4.2,9.3,None]
     values = response_body["data"]["value"]
-    assert values[:3] == pytest.approx([0.76, 4.86, 9.96], 0.01)
+    assert values[:3] == pytest.approx([1.1, 4.2, 9.3], 0.01)
     assert values[3] is None
 
 
@@ -376,7 +379,7 @@ def test_plot_data_coordinate_aliases(entry_path, expected_unit):
 def test_plot_data_with_signal_operations_rejects_different_units(entry_path):
     parameters = {
         "uri": f"imas:hdf5?path={entry_path}#core_profiles/global_quantities/v_loop",
-        "signal_operations": [f"add:imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip"],
+        "operations": [f"add:imas:hdf5?path={entry_path}#core_profiles/global_quantities/ip"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 466
@@ -388,7 +391,7 @@ def test_plot_data_with_signal_operations_updates_unit(entry_path, operation, ex
     uri = f"imas:hdf5?path={entry_path}#core_profiles/time"
     response = pytest.test_client.get(
         "/data/plot_data",
-        params={"uri": uri, "signal_operations": [f"{operation}:{uri}"]},
+        params={"uri": uri, "operations": [f"{operation}:{uri}"]},
     )
 
     assert response.status_code == 200
@@ -403,7 +406,7 @@ def test_plot_data_with_signal_operations_same_shape_different_uris(interpolatio
 
     parameters = {
         "uri": f"{db_names[0]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2",
-        "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2"],
+        "operations": [f"add:{db_names[1]}#equilibrium/time_slice[0:2]/profiles_2d[0]/grid/dim2"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 200
@@ -420,7 +423,7 @@ def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_
 
     parameters = {
         "uri": f"{db_names[0]}#equilibrium/time",
-        "signal_operations": [f"add:{db_names[1]}#equilibrium/time"],
+        "operations": [f"add:{db_names[1]}#equilibrium/time"],
         "interpolate_over": [f"{db_names[1]}#equilibrium/time"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
@@ -436,7 +439,7 @@ def test_plot_data_with_signal_operations_and_interpolation(interpolation_entry_
     # reversed order
     parameters = {
         "uri": f"{db_names[1]}#equilibrium/time",
-        "signal_operations": [f"add:{db_names[0]}#equilibrium/time"],
+        "operations": [f"add:{db_names[0]}#equilibrium/time"],
         "interpolate_over": [f"{db_names[0]}#equilibrium/time"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
@@ -459,7 +462,7 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
 
     parameters = {
         "uri": f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
-        "signal_operations": [f"add:{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+        "operations": [f"add:{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
         "interpolate_over": [f"{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
@@ -475,7 +478,7 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
     # ---- reversed: db_2 primary, db_1 operand ----
     parameters = {
         "uri": f"{db_names[1]}#equilibrium/time_slice[:]/profiles_2d[:]/psi",
-        "signal_operations": [f"add:{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
+        "operations": [f"add:{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
         "interpolate_over": [f"{db_names[0]}#equilibrium/time_slice[:]/profiles_2d[:]/psi"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)

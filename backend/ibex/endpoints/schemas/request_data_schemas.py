@@ -83,7 +83,10 @@ class GaussianSmoothingParameters(BaseModel):
 
 
 class PlotDataBasicParameters(BaseModel):
-    """..."""
+    """
+    Basic parameters of the ``/data/plot_data/`` request: source URI, interpolation,
+    downsampling, smoothing and the ordered list of data operations.
+    """
 
     uri: str = Field(description="IMAS URI")
     interpolate_over: Optional[List[str]] = Field(
@@ -95,11 +98,10 @@ class PlotDataBasicParameters(BaseModel):
     smoothing_method: SmoothingMethod | None = Field(default=None, description="Smoothing method to be used")
     operations: Optional[List[str]] = Field(
         default=None,
-        description="Ordered list of scalar operations in format 'type:value' e.g. 'add:10'",
-    )
-    signal_operations: Optional[List[str]] = Field(
-        default=None,
-        description="Ordered list of signal operations in format 'type:uri' e.g. 'add:some/imas/uri'",
+        description=(
+            "Ordered list of operations in format 'type:value' (scalar operand, e.g. 'add:10') "
+            "or 'type:uri' (signal operand, e.g. 'add:some/imas/uri')"
+        ),
     )
 
 
@@ -111,35 +113,30 @@ class PlotDataRequestModel(
     @model_validator(mode="after")
     def validate_operations_format(self) -> "PlotDataRequestModel":
         if self.operations:
-            valid_operations = set(_SIMPLE_OPERATIONS_FUNCTIONS.keys())
+            simple_operations = set(_SIMPLE_OPERATIONS_FUNCTIONS.keys())
+            signal_operations = set(_SIGNAL_OPERATIONS_FUNCTIONS.keys())
+            valid_operations = simple_operations | signal_operations
             for op in self.operations:
                 if ":" not in op:
-                    raise ValueError(f"Invalid operation format: '{op}'. Expected 'operation:value'")
+                    raise ValueError(f"Invalid operation format: '{op}'. Expected 'operation:value' or 'operation:uri'")
                 op_type, value_str = op.split(":", 1)
-                if op_type not in valid_operations:
-                    raise ValueError(
-                        f"Unknown operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
-                    )
                 try:
                     float(value_str.replace(",", "."))
                 except ValueError:
-                    raise ValueError(f"Invalid operation value: '{value_str}' in '{op}'. Value must be a number.")
-        return self
-
-    @model_validator(mode="after")
-    def validate_signal_operations_format(self) -> "PlotDataRequestModel":
-        if self.signal_operations:
-            valid_operations = set(_SIGNAL_OPERATIONS_FUNCTIONS.keys())
-            for op in self.signal_operations:
-                if ":" not in op:
-                    raise ValueError(f"Invalid signal operation format: '{op}'. Expected 'operation:uri'")
-                op_type, uri = op.split(":", 1)
-                if op_type not in valid_operations:
-                    raise ValueError(
-                        f"Unknown signal operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
-                    )
-                if not uri.strip():
-                    raise ValueError(f"Invalid signal operation: '{op}'. URI must not be empty.")
+                    # Not a number -> operand is an IMAS URI of another signal
+                    if op_type not in signal_operations:
+                        raise ValueError(
+                            f"Unknown operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
+                        )
+                    if not value_str.strip():
+                        raise ValueError(f"Invalid operation: '{op}'. URI must not be empty.")
+                    if not value_str.startswith("imas:"):
+                        raise ValueError(f"Invalid operation: '{op}'. Operand must be a valid IMAS URI ('imas:...')")
+                else:
+                    if op_type not in simple_operations:
+                        raise ValueError(
+                            f"Unknown operation type: '{op_type}'. Valid types: {', '.join(sorted(valid_operations))}"
+                        )
         return self
 
     @model_validator(mode="after")

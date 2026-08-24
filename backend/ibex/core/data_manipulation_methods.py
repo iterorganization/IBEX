@@ -180,19 +180,21 @@ data_smoothing_method_parameter = DataManipulationParameter(
 data_smoothing_description.method_parameters.append(data_smoothing_method_parameter)
 available_methods.data_manipulation_methods.append(data_smoothing_description)
 
-# ====================== SIMPLE DATA OPERATIONS ======================
+# ====================== DATA OPERATIONS ======================
 
-simple_data_operations_description = DataManipulationOperation(
-    name="Simple Data Operations",
-    description="Ordered list of scalar operations applied to the dataset. "
-    "Execution order is determined by the order of parameters in the request.",
+data_operations_description = DataManipulationOperation(
+    name="Data Operations",
+    description="Ordered list of operations applied to the dataset. "
+    "An entry is a scalar operation when its operand is a number, "
+    "or a signal operation when its operand is an IMAS URI of another signal ('imas:...'). "
+    "All entries are executed in the given order.",
     method_parameters=[],
 )
 
 data_operations_parameter = DataManipulationParameter(
     human_readable_name="Operations",
     name="operations",
-    description="Ordered list of scalar operations applied to every data point.",
+    description="Ordered list of operations applied to every data point.",
     type="list[object]",
     group_label="Operation",
     fields=[
@@ -213,52 +215,12 @@ data_operations_parameter = DataManipulationParameter(
         DataManipulationParameter(
             human_readable_name="Value",
             name="operation_value",
-            description="Scalar value for the operation",
-            type="number",
+            description="Operand: a number for scalar operations, or an IMAS URI of another signal "
+            "for signal operations (only add, sub, mul, div are accepted for signal operands)",
+            type="number|string",
         ),
     ],
 )
 
-simple_data_operations_description.method_parameters.append(data_operations_parameter)
-available_methods.data_manipulation_methods.append(simple_data_operations_description)
-
-# ====================== SIGNAL DATA OPERATIONS ======================
-
-signal_data_operations_description = DataManipulationOperation(
-    name="Signal Data Operations",
-    description="Ordered list of signal operations applied to the dataset. "
-    "Execution order is determined by the order of parameters in the request. "
-    "Each value is a URI pointing to a signal.",
-    method_parameters=[],
-)
-
-signal_data_operations_parameter = DataManipulationParameter(
-    human_readable_name="Operations",
-    name="operations",
-    description="Ordered list of signal operations applied to every data point.",
-    type="list[object]",
-    group_label="Operation",
-    fields=[
-        DataManipulationParameter(
-            human_readable_name="Type",
-            name="operation_type",
-            description="Type of operation",
-            type="string",
-            possible_values=[
-                PossibleValue(value="add", description="Addition"),
-                PossibleValue(value="sub", description="Subtraction"),
-                PossibleValue(value="mul", description="Multiplication"),
-                PossibleValue(value="div", description="Division"),
-            ],
-        ),
-        DataManipulationParameter(
-            human_readable_name="Signal URI",
-            name="operation_value",
-            description="URI to signal data for the operation",
-            type="string",
-        ),
-    ],
-)
-
-signal_data_operations_description.method_parameters.append(signal_data_operations_parameter)
-available_methods.data_manipulation_methods.append(signal_data_operations_description)
+data_operations_description.method_parameters.append(data_operations_parameter)
+available_methods.data_manipulation_methods.append(data_operations_description)
