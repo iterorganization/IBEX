@@ -882,6 +882,7 @@ class IMASPythonSource(DataSourceInterface):
         signals_data,
         common_coords_values,
         result_unit,
+        resampled_uris,
     ):
         """Apply signal-level operations (e.g. combining two signals) to the data.
 
@@ -894,6 +895,10 @@ class IMASPythonSource(DataSourceInterface):
         :param signals_data: Mutable dictionary of pre-loaded signal data keyed by URI.
         :param common_coords_values: Common coordinate values used for resampling operands.
         :param result_unit: Current result unit string that is updated with each operation.
+        :param resampled_uris: Mutable set of URIs that have already been resampled.
+            When the same signal URI appears in multiple operations, only the first
+            occurrence triggers resampling; subsequent ones use the already-resampled
+            data stored in ``signals_data``.
         :return: A tuple ``(data_to_be_returned, result_unit)`` with the updated data and unit.
         """
 
@@ -957,13 +962,14 @@ class IMASPythonSource(DataSourceInterface):
             }
 
         # Step 4: prepare operand data (resampled or raw)
-        if plot_data_query.interpolate_over:
+        if plot_data_query.interpolate_over and signal_uri not in resampled_uris:
             # Resample signal data onto the common coordinate grid
             signal_data = resample_data_without_interpolation(
                 tuple(reversed(signals_data[signal_uri]["coordinates"])),
                 signals_data[signal_uri]["data"],
                 tuple(common_coords_values),
             )
+            resampled_uris.add(signal_uri)
         else:
             signal_data = signals_data[signal_uri]["data"]
 
@@ -1013,8 +1019,10 @@ class IMASPythonSource(DataSourceInterface):
         :return: A tuple ``(data_to_be_returned, result_unit)`` with data after all operations and the resulting unit.
         """
 
+        resampled_uris = set()  # stores uris that have already been resampled/interpolated
         for operation in plot_data_query.operations:
             op, operand = operation.split(":", 1)
+
             if bool(re.fullmatch(r"[+-]?\d+(?:[.,]\d+)?", operand)):
                 # binary operation
                 data_to_be_returned = self._handle_binary_operations(operation, data_to_be_returned=data_to_be_returned)
@@ -1029,6 +1037,7 @@ class IMASPythonSource(DataSourceInterface):
                     signals_data=signals_data,
                     common_coords_values=common_coords_values,
                     result_unit=result_unit,
+                    resampled_uris=resampled_uris,
                 )
         return data_to_be_returned, result_unit
 

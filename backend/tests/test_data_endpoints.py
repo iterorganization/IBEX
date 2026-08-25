@@ -535,3 +535,26 @@ def test_binary_and_signal_operations_order(interpolation_entry_path_directory):
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 200
     assert response.json()["data"]["value"] == [9.0, 13.0, 17.0, None]
+
+    # Order D: add:5 -> signal -> sub:5
+    # [1,2,3,4] +5 = [6,7,8,9] +[1,2,3,None] = [7,9,10,None] -5 = [2,4,6,None]
+    parameters = {
+        "uri": uri,
+        "operations": ["add:5", signal_operand, "sub:5"],
+        "interpolate_over": interpolate_over,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    assert response.json()["data"]["value"] == [2.0, 4.0, 6.0, None]
+
+    # Order E: add:{db_2} -> mul:3 -> add:{db_2} -> sub:2
+    # [1,2,3,4] +[1,2,3,None] = [2,4,6,None] *3 = [6,12,18,None]
+    #   +[1,2,3,None] = [7,14,21,None] -2 = [5,12,19,None]
+    parameters = {
+        "uri": uri,
+        "operations": [signal_operand, "mul:3", signal_operand, "sub:2"],
+        "interpolate_over": interpolate_over,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    assert response.json()["data"]["value"] == [5.0, 12.0, 19.0, None]
