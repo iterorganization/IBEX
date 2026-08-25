@@ -11,18 +11,17 @@ The IBEX backend provides a range of data manipulation techniques that directly 
 These operations are applied as part of the ``/data/plot_data/`` request flow and allow the backend to transform datasets before they are returned to the frontend.
 The backend applies the manipulation stages in this order:
 
-1. simple data operations
-2. data smoothing
-3. data interpolation
-4. signal operations
-5. downsampling
+1. data smoothing
+2. data interpolation
+3. simple and signal operations (a single ordered ``operations`` list; scalar and signal entries can be interleaved)
+4. downsampling
 
 This means later stages operate on the output of earlier ones when the corresponding request parameters are enabled.
 
 .. note::
 
-   Signal operations are applied after data interpolation and before downsampling.
-   See the dedicated section below for details.
+   Simple and signal operations are applied after data interpolation and before downsampling.
+   See the dedicated sections below for details.
 
 Data smoothing
 ---------------
@@ -117,7 +116,7 @@ The following operation types are supported:
 * ``root`` — Nth root
 
 Operations are applied **in the order they appear** in the request.
-The backend executes them sequentially on the numerical data **before** smoothing, interpolation, or downsampling.
+In the processing pipeline they run **after** smoothing and interpolation, but **before** downsampling.
 
 Configuration
 ~~~~~~~~~~~~~~
@@ -183,7 +182,7 @@ Operations are applied in the order they appear in the request.
 Configuration
 ~~~~~~~~~~~~~~
 
-Signal operations are configured through the ``signal_operations`` parameter of the ``/data/plot_data/`` endpoint.
+Signal operations are configured through the ``operations`` parameter of the ``/data/plot_data/`` endpoint (the same parameter as for simple scalar operations).
 It accepts a list of strings in the format ``type:uri``, where ``type`` is one of the supported operations and ``uri`` is the IMAS URI of the operand signal.
 
 The following operation types are supported:
@@ -192,8 +191,6 @@ The following operation types are supported:
 * ``sub`` — subtraction
 * ``mul`` — multiplication
 * ``div`` — division
-* ``pow`` — exponentiation
-* ``root`` — Nth root
 
 Division by zero is rejected by the backend.
 
@@ -220,7 +217,7 @@ Addition of two signals:
 .. code-block:: bash
 
    curl -X 'GET' \
-     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&signal_operations=add:<other_signal_URI>' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=add:<other_signal_URI>' \
      -H 'accept: application/json'
 
 Multiple signal operations (subtraction then multiplication):
@@ -228,7 +225,7 @@ Multiple signal operations (subtraction then multiplication):
 .. code-block:: bash
 
    curl -X 'GET' \
-     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&signal_operations=sub:<other_signal_URI>&signal_operations=mul:<yet_another_URI>' \
+     '<IBEX_server_address>/data/plot_data?uri=<IMAS_URI>&operations=sub:<other_signal_URI>&operations=mul:<yet_another_URI>' \
      -H 'accept: application/json'
 
 
