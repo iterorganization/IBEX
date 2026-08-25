@@ -489,3 +489,49 @@ def test_plot_data_with_signal_operations_and_interpolation_2d(interpolation_ent
     assert data.shape == (4, 4, 3, 12)
     # db_1 and db_2 have disjoint valid dim1 locations after interpolation, so operand NaNs propagate.
     assert np.count_nonzero(~np.isnan(data)) == 0
+
+
+def test_binary_and_signal_operations_order(interpolation_entry_path_directory):
+    """Verify that mixed binary and signal operations are applied strictly in order."""
+    db_names = [
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_1",
+        f"imas:hdf5?path={interpolation_entry_path_directory}/interpolation_db_2",
+    ]
+    uri = f"{db_names[0]}#equilibrium/time"
+    signal_operand = f"add:{db_names[1]}#equilibrium/time"
+    interpolate_over = [f"{db_names[1]}#equilibrium/time"]
+    # db_1 time = [1, 2, 3, 4], db_2 time = [1, 2, 3]
+    # After interpolation_over db_2, the signal operand becomes [1, 2, 3, None]
+
+    # Order A: mul:2 -> add:5 -> signal
+    # [1,2,3,4] *2 = [2,4,6,8] +5 = [7,9,11,13] +[1,2,3,None] = [8,11,14,None]
+    parameters = {
+        "uri": uri,
+        "operations": ["mul:2", "add:5", signal_operand],
+        "interpolate_over": interpolate_over,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    assert response.json()["data"]["value"] == [8.0, 11.0, 14.0, None]
+
+    # Order B: add:5 -> mul:2 -> signal
+    # [1,2,3,4] +5 = [6,7,8,9] *2 = [12,14,16,18] +[1,2,3,None] = [13,16,19,None]
+    parameters = {
+        "uri": uri,
+        "operations": ["add:5", "mul:2", signal_operand],
+        "interpolate_over": interpolate_over,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    assert response.json()["data"]["value"] == [13.0, 16.0, 19.0, None]
+
+    # Order C: signal -> mul:2 -> add:5
+    # [1,2,3,4] +[1,2,3,None] = [2,4,6,None] *2 = [4,8,12,None] +5 = [9,13,17,None]
+    parameters = {
+        "uri": uri,
+        "operations": [signal_operand, "mul:2", "add:5"],
+        "interpolate_over": interpolate_over,
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    assert response.json()["data"]["value"] == [9.0, 13.0, 17.0, None]
