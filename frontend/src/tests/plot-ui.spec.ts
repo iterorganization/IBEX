@@ -138,6 +138,17 @@ describe('UI Tests for plotted data', function () {
       async () => (await getTestState()).active.dataPlot.length,
       0,
     );
+    // Regression guard for #135: double-clicking a structure label used to
+    // leave a native text selection behind, which silently swallowed every
+    // later checkbox click. Labels are no longer selectable, so the click
+    // below must still register. The two clicks collapse then re-expand the
+    // folder, leaving the tree as it was.
+    const profiles1dFolder = await getCssElementFromDataTestId(
+      `folder-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/`,
+      20000,
+    );
+    await getDriver().actions().doubleClick(profiles1dFolder).perform();
+
     // Click on phi checkbox to start a new plot
     await findCssElementAndClickIt(
       `checkbox-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/phi`,

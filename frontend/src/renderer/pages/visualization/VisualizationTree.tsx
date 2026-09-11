@@ -34,7 +34,6 @@ import {
   fetchNodeInfos,
   handleExistingPlot,
   handleNewPlot,
-  hasUserSelectedText,
 } from '../../utils';
 
 interface VisualizationTreeProps {
@@ -307,10 +306,6 @@ export const VisualizationTree = ({
    * @returns
    */
   async function handleAccordionChange(value: string) {
-    if (hasUserSelectedText()) {
-      return;
-    }
-
     if (value) {
       const selectedURIData = active.dataURI.find((item) => item.uri === value);
 
