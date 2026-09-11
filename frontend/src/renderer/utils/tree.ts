@@ -92,17 +92,3 @@ export const updateCustomDataTree = (
 
   return newCustomDataTree;
 };
-
-export const hasUserSelectedText = () => {
-  // Prevent from action if user is selecting text
-  const selection = window.getSelection();
-  let savedSelection: Range | null = null;
-  if (selection && !selection.isCollapsed) {
-    savedSelection = selection.getRangeAt(0).cloneRange();
-  }
-  if (savedSelection) {
-    return true;
-  } else {
-    return false;
-  }
-};

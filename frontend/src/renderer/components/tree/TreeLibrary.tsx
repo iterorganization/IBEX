@@ -26,7 +26,6 @@ import {
   NodeInfoTypeEnum,
   URITreeNodeData,
 } from '../../types';
-import { hasUserSelectedText } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface NodeIconProps {
@@ -128,11 +127,6 @@ function Element({
   }, [node.label]);
 
   const handleExpandTree = () => {
-    // open node tree only if user don't select text
-    if (hasUserSelectedText()) {
-      return;
-    }
-
     if (!expanded) {
       tree.expand(node.value);
     } else {
@@ -205,10 +199,6 @@ function NodeIcon({
           NodeInfoTypeEnum.COMPLEX,
         ].includes(type)
       ) {
-        if (hasUserSelectedText()) {
-          return;
-        }
-
         if (checked) {
           // Remove node & his error bands
           const nodesToUncheck = checkedNodes.filter(
@@ -254,12 +244,7 @@ function NodeIcon({
     );
 
     const getFolderIcon = () => (
-      <Group
-        gap={2}
-        style={{ userSelect: 'text' }}
-        wrap="nowrap"
-        data-testid={`folder-${node.value}`}
-      >
+      <Group gap={2} wrap="nowrap" data-testid={`folder-${node.value}`}>
         {expanded ? (
           <IconFolderOpen {...commonProps} className={classes.forcedWidth} />
         ) : (
@@ -274,7 +259,6 @@ function NodeIcon({
         <Group
           gap={2}
           style={{
-            userSelect: 'text',
             cursor:
               shouldDisableTree ||
               node.label.toString().endsWith('_error_lower') ||

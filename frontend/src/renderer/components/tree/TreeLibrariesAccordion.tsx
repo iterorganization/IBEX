@@ -111,7 +111,7 @@ export const TreeLibrariesAccordion = ({
         key={`accodion-${item.uri}`}
         value={`${item.uri}`}
       >
-        <Accordion.Control style={{ userSelect: 'text' }}>
+        <Accordion.Control style={{ userSelect: 'none' }}>
           <AccordionLabel
             label={item.name}
             description={item.uri}
