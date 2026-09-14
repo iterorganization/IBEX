@@ -27,6 +27,15 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.npm
+          key: ${{ runner.os }}-electron-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-electron-
+
       - name: Install dependencies
         working-directory: frontend
         run: npm ci

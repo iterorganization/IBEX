@@ -20,13 +20,17 @@ jobs:
       - name: Display Node version
         run: node -v && npm -v
 
+      # --ignore-scripts skips the electron / electron-chromedriver postinstall
+      # downloads (~150 MB): this job only runs prettier and eslint, neither of
+      # which launches Electron, and the TypeScript types they need ship in the
+      # npm tarballs.
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: Run code formatting
+      - name: Check code formatting
         working-directory: frontend
-        run: npm run format
+        run: npx prettier --check .
 
       - name: Run linting
         working-directory: frontend
