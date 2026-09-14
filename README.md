@@ -24,7 +24,7 @@ longer maintained) and go beyond it.
 
 ### Prerequisites
 - Python 3.9+
-- Node.js 16+
+- Node.js >= 22.12
 
 ### Installation & Build
 

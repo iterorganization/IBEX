@@ -12,8 +12,12 @@ Ibex frontend is an Electron application designed to deliver a rich and seamless
 
 ## Prerequisites
 
-- Node.js >= 16
+- Node.js >= 22.12 (required by Electron 43 and the packaging tools)
 - npm
+
+> `npm audit` does not report clean, and cannot today. See
+> [SECURITY-NOTES.md](SECURITY-NOTES.md) for what remains and why, and note that
+> `npm audit fix --force` must never be run here — it downgrades Electron Forge.
 
 You can load the module on ITER cluster by running the following command:
 
