@@ -1,0 +1,37 @@
+name: frontend-linting-and-formatting
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout frontend sources
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Display Node version
+        run: node -v && npm -v
+
+      # --ignore-scripts skips the electron / electron-chromedriver postinstall
+      # downloads (~150 MB): this job only runs prettier and eslint, neither of
+      # which launches Electron, and the TypeScript types they need ship in the
+      # npm tarballs.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Check code formatting
+        working-directory: frontend
+        run: npx prettier --check .
+
+      - name: Run linting
+        working-directory: frontend
+        run: npm run lint

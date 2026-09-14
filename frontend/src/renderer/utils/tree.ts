@@ -2,21 +2,22 @@ import {
   CustomTreeData,
   CustomTreeNodeData,
   NodeInfoTypeEnum,
+  SearchNodeResponse,
   URIData,
 } from '../types';
 
 export const buildTree = (
   tree: CustomTreeNodeData[],
   dataUri: URIData,
-  paths: string[],
+  searchResults: SearchNodeResponse,
 ): CustomTreeNodeData[] => {
   // Reset the children for each ids
   tree.forEach((node) => {
     node.children = [];
   });
 
-  paths.forEach((path) => {
-    const cleanPath = path.replace(/^#/, '').split('/');
+  searchResults.paths.forEach((path) => {
+    const cleanPath = path.path.replace(/^#/, '').split('/');
     let currentNode = tree;
     let findValue = dataUri.uri;
 
@@ -58,6 +59,7 @@ export const buildTree = (
           children: [],
           uriLabel: dataUri.name,
           seeErrorBars: false,
+          is_geometry_node: path.is_geometry_node,
         };
 
         // Add the new node to the tree
@@ -89,18 +91,4 @@ export const updateCustomDataTree = (
   });
 
   return newCustomDataTree;
-};
-
-export const hasUserSelectedText = () => {
-  // Prevent from action if user is selecting text
-  const selection = window.getSelection();
-  let savedSelection: Range | null = null;
-  if (selection && !selection.isCollapsed) {
-    savedSelection = selection.getRangeAt(0).cloneRange();
-  }
-  if (savedSelection) {
-    return true;
-  } else {
-    return false;
-  }
 };

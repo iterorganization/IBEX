@@ -19,8 +19,10 @@ export function ConfirmModal({ isOpen, onClose, onConfirm, children }: Props) {
       data-testid="confirm-modal"
       transitionProps={{
         transition: 'fade',
-        duration: 0,
       }}
+      {...(window.env.E2E_TEST === 'true' && {
+        transitionProps: { duration: 0 },
+      })}
     >
       <form
         onSubmit={(e) => {

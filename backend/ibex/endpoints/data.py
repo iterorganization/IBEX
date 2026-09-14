@@ -1,13 +1,14 @@
 """Endpoints extracting data from data source"""
 
 import orjson
-from typing import List, Any
+from typing import Any, Annotated
 
 from fastapi import APIRouter, Query  # type: ignore
 from fastapi.responses import ORJSONResponse  # type: ignore
 
 from ibex.core import ibex_service
-from ibex.endpoints.schemas.data_schemas import FieldValueResponse, PlotDataResponse
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
+from ibex.endpoints.schemas.response_data_schemas import FieldValueResponse, PlotDataResponse
 
 router = APIRouter()
 
@@ -41,7 +42,6 @@ def field_value(
     uri: str,
     downsampling_method: str | None = Query(None),
     downsampled_size: int = 1000,
-    range: List[int] = Query(None),
 ) -> Any:
     """
     IBEX endpoint. Returns value extracted from pulsefile's leaf node.
@@ -58,7 +58,7 @@ def field_value(
     :return: JSON response
 
     """
-    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size, range))
+    return CustomORJSONResponse(ibex_service.get_data(uri.strip(), downsampling_method, downsampled_size))
 
 
 @router.get(
@@ -70,11 +70,12 @@ def field_value(
         200: {"description": "Plot data returned successfully"},
         404: {"description": "Data node not found"},
         464: {"description": "Given data node is empty"},
+        466: {"description": "Invalid parameters for requested data manipulation"},
     },
     description="Returns single (or tensorized) data node value with detailed parameters used to plot the data",
 )
 @ibex_service.measure_execution_time
-def plot_data(uri: str, downsampling_method: str | None = Query(None), downsampled_size: int = 1000) -> Any:
+def plot_data(plot_data_query: Annotated[PlotDataRequestModel, Query()]) -> CustomORJSONResponse:
     """
     IBEX endpoint. Prepares and returns full information about data node and it's coordinates.
 
@@ -108,10 +109,12 @@ def plot_data(uri: str, downsampling_method: str | None = Query(None), downsampl
     |   }
     | }
 
-    :param uri: IMAS URI with the path to leaf node
-    :param downsampling_method: one of the downsampling metods returend by :func:`~ibex.endpoints.info.downsampling_methods` endpoint, or None
-    :param downsampled_size: target size of downsampled data
+    :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+    :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+
     :rtype: dict (automatically converted to JSON by FastAPI)
     :return: JSON response
+
     """
-    return CustomORJSONResponse(ibex_service.get_plot_data(uri.strip(), downsampling_method, downsampled_size))
+
+    return CustomORJSONResponse(ibex_service.get_plot_data(plot_data_query))

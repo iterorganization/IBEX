@@ -19,9 +19,8 @@ python -m venv venv
 echo "PWD: " `pwd`
 
 # PREPARE THE ENVIRONMENT
-pip install --upgrade pip setuptools wheel build pytest-cov
-pip install --upgrade sphinx sphinx-autosummary-accessors sphinx_immaterial
+pip install --upgrade pip setuptools wheel
 pip install --upgrade .[docs]
 
-# RUN PYTEST
+# BUILD DOCS
 make -C ../docs html

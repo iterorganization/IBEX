@@ -1,46 +1,66 @@
 // test/setup.ts
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import * as path from 'path';
 import * as chrome from 'selenium-webdriver/chrome';
 import { Builder, WebDriver } from 'selenium-webdriver';
 import { ConfigurationState } from 'src/renderer/types';
 
+const DEBUGGER_ADDRESS = '127.0.0.1:9222';
+
 let driver: WebDriver;
-let electron: ChildProcessWithoutNullStreams;
+
 /**
- * Starts the Electron app and initializes WebDriver to connect to it.
+ * Resolves the chromedriver shipped by electron-chromedriver. It must be used
+ * instead of letting Selenium Manager pick one, because only that binary
+ * matches the Chromium version embedded in the Electron we are driving.
+ */
+function getChromedriverPath(): string {
+  const packageJson = require.resolve('electron-chromedriver/package.json');
+  return path.join(path.dirname(packageJson), 'bin', 'chromedriver');
+}
+
+/**
+ * Waits until the Electron app started by `npm run start:e2e` exposes its
+ * DevTools endpoint, so tests do not depend on a fixed startup delay.
+ */
+async function waitForDebugger(timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`http://${DEBUGGER_ADDRESS}/json/version`);
+      if (response.ok) return;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  throw new Error(
+    `No Electron instance answering on ${DEBUGGER_ADDRESS}. Start the app with ` +
+      `"npm run start:e2e" before running the tests. Last error: ${lastError}`,
+  );
+}
+
+/**
+ * Attaches WebDriver to the running Electron app.
+ * The app itself is started by `npm run start:e2e` (see ci/run-e2e-test.sh):
+ * it owns the webpack dev server the renderer is loaded from, so the tests
+ * attach to that instance rather than launching a second one.
  * @returns WebDriver instance connected to the Electron app
  */
 export async function startApp() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const electronBinary = require('electron');
-  const appDir = path.resolve(__dirname, '..', '..');
-  const electronEntry = path.join(appDir, '.webpack', 'main', 'index.js');
-
-  electron = spawn(
-    electronBinary,
-    ['--remote-debugging-port=9222', electronEntry],
-    {
-      cwd: appDir,
-      env: {
-        ...process.env,
-        ELECTRON_ENABLE_LOGGING: 'true',
-        ELECTRON_ENABLE_STACK_DUMPING: 'true',
-        // E2E_TEST: 'true',
-      },
-    },
-  );
-
-  await new Promise((r) => setTimeout(r, 5000));
+  await waitForDebugger();
 
   const options = new chrome.Options()
-    .addArguments('--remote-debugging-port=9222')
     .addArguments('--no-sandbox')
     .addArguments('--disable-dev-shm-usage');
+  options.debuggerAddress(DEBUGGER_ADDRESS);
 
   // Initialize WebDriver to connect to Electron's Chromium instance
   driver = await new Builder()
     .forBrowser('chrome')
+    .setChromeService(new chrome.ServiceBuilder(getChromedriverPath()))
     .setChromeOptions(options as chrome.Options)
     .build();
 
@@ -56,11 +76,12 @@ export function getDriver(): WebDriver {
 }
 
 /**
- * Stops the Electron app and quits the WebDriver.
+ * Detaches WebDriver from the Electron app.
+ * The app is left running: its lifecycle belongs to whoever started it
+ * (ci/run-e2e-test.sh), and the remaining spec files attach to it in turn.
  */
 export async function stopApp() {
   if (driver) await driver.quit();
-  if (electron) electron.kill();
 }
 
 /**

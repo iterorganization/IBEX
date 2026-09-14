@@ -212,6 +212,9 @@ export function ConfigCreateModal({
       title="Create config"
       size="sm"
       data-testid="config-create-modal"
+      {...(window.env.E2E_TEST === 'true' && {
+        transitionProps: { duration: 0 },
+      })}
     >
       <form onSubmit={form.onSubmit(handleSubmit, handleValidationError)}>
         <Stack gap={16}>

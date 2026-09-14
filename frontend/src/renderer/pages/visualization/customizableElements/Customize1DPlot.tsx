@@ -8,25 +8,24 @@ import {
 } from '@mantine/core';
 import { DataGridPlot, DataPlotly } from '../../../types';
 import { useEffect, useState } from 'react';
+import { initPlotColors } from '../../../utils';
 
 interface Customize1DPlotProps {
   customizedDataGrid: DataGridPlot;
   selectedPlot: DataPlotly | null;
+  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
-  initPlotColors: () => void;
 }
 export const Customize1DPlot = ({
   customizedDataGrid,
   selectedPlot,
+  customContainerRef,
   setCustomizedDataGrid,
-  initPlotColors,
 }: Customize1DPlotProps) => {
   const [colorPlot, setColorPlot] = useState(selectedPlot?.line?.color || '');
 
   const updatePlotColor = (newColor: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     const updatedLine = selectedPlot?.line || {};
     updatedLine.color = newColor;
@@ -41,7 +40,7 @@ export const Customize1DPlot = ({
   };
 
   const resetPlotColors = () => {
-    const updatedPlots = JSON.parse(JSON.stringify(customizedDataGrid.plot));
+    const updatedPlots = structuredClone(customizedDataGrid.plot);
     for (const plot of updatedPlots) {
       if (plot?.line?.color) {
         delete plot.line.color;
@@ -53,9 +52,7 @@ export const Customize1DPlot = ({
   };
 
   const updatePlotMode = (newMode: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     updatedDataPlot.plot.find((plot) => plot.name === selectedPlot.name).mode =
       newMode;
@@ -67,9 +64,7 @@ export const Customize1DPlot = ({
   };
 
   const updatePlotShape = (newShape: string) => {
-    const updatedDataPlot = JSON.parse(
-      JSON.stringify(customizedDataGrid),
-    ) as DataGridPlot;
+    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
 
     const plotToUpdate = updatedDataPlot.plot.find(
       (plot) => plot.name === selectedPlot.name,
@@ -87,7 +82,11 @@ export const Customize1DPlot = ({
       // Init color plot in component
       setColorPlot(selectedPlot.line.color);
     } else {
-      initPlotColors();
+      initPlotColors(
+        customizedDataGrid,
+        customContainerRef,
+        setCustomizedDataGrid,
+      );
     }
   }, [selectedPlot?.line]);
 

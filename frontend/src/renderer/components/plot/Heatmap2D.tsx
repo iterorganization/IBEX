@@ -5,10 +5,11 @@ import { Layout } from 'plotly.js';
 import {
   Axis,
   AxisData,
+  Complex,
   Configuration,
   Coordinates,
   DataGridPlot,
-} from 'src/renderer/types';
+} from '../../types';
 import classe from './SimplePlotly.module.css';
 import { Center, Grid, Group, Select, Stack, Text } from '@mantine/core';
 import { VerticalSlider } from '../verticalSlider';
@@ -23,6 +24,7 @@ import classes from './Heatmap2D.module.css';
 import { useIbexStore } from '../../stores';
 import { NoDataForURI } from '.';
 import { usePlotLayout } from './hooks/usePlotLayout';
+import { IconLink } from '@tabler/icons-react';
 
 interface Heatmap2DProps {
   itemDataGrid: DataGridPlot;
@@ -30,6 +32,7 @@ interface Heatmap2DProps {
   height: number;
   plotIndex: string;
   showSliders: boolean;
+  forcedPlotType?: 'heatmap' | 'contour';
   handleUpdateCoordinate?: (
     coordinate: Coordinates,
     valueIndex: number,
@@ -42,6 +45,7 @@ export const Heatmap2D = ({
   height,
   plotIndex,
   showSliders,
+  forcedPlotType,
   handleUpdateCoordinate,
 }: Heatmap2DProps) => {
   const { active, updatedConfiguration } = useIbexStore();
@@ -56,6 +60,7 @@ export const Heatmap2D = ({
   const [y, setY] = useState<number[]>([]);
   const [z, setZ] = useState<(number | string)[][]>([]);
   const plotRef = useRef<Plot | null>(null);
+  const [shouldForceRatio, setShouldForceRatio] = useState<boolean>(false);
   const [layoutPlot, setLayoutPlot] = useState<Partial<Layout>>({
     autosize: true,
     scene: {
@@ -63,10 +68,33 @@ export const Heatmap2D = ({
       yaxis: { title: { text: yAxis?.name || '' } },
       zaxis: { title: { text: zAxis?.name || '' } },
     },
+    xaxis: {
+      exponentformat: 'power',
+      showexponent: 'all',
+      separatethousands: true,
+      scaleanchor: null,
+      scaleratio: null,
+      zeroline: false,
+      showgrid: itemDataGrid.displayGrid,
+    },
+    yaxis: {
+      exponentformat: 'power',
+      showexponent: 'all',
+      separatethousands: true,
+      zeroline: false,
+      showgrid: itemDataGrid.displayGrid,
+    },
     modebar: {
       orientation: 'v',
     },
+    legend: {
+      x: 1.3,
+      y: 1,
+      groupclick: 'togglegroup',
+      tracegroupgap: 0,
+    },
   });
+  const selectedPlot = itemDataGrid.plot[parseInt(plotIndex)];
   // Custom hook used for trigger some useEffects to update the layout
   usePlotLayout({
     itemDataGrid,
@@ -74,6 +102,24 @@ export const Heatmap2D = ({
   });
   const [title, setTitle] = useState(itemDataGrid.title);
   const layoutPlotWidth = showSliders ? width * 0.8 : width;
+
+  /**
+   * Rule to determine if we have to force ratio.
+   * The value is initialized once at grid creation and only changed via the customization switch.
+   */
+  useEffect(() => {
+    setShouldForceRatio(itemDataGrid.forceXyRatio);
+  }, [itemDataGrid.forceXyRatio]);
+
+  /**
+   * Update layout to force ratio or not
+   */
+  useEffect(() => {
+    const updatedLayoutPlot = structuredClone(layoutPlot);
+    updatedLayoutPlot.xaxis.scaleanchor = shouldForceRatio ? 'y' : null;
+    updatedLayoutPlot.xaxis.scaleratio = shouldForceRatio ? 1 : null;
+    setLayoutPlot(updatedLayoutPlot);
+  }, [shouldForceRatio]);
 
   /**
    * Update the editable title when layout title change
@@ -128,7 +174,7 @@ export const Heatmap2D = ({
 
   const init3DAxis = useCallback(async () => {
     // Transpose data matrix to orign values
-    const selectedDataMatrix = itemDataGrid.plot[parseInt(plotIndex)]?.yData;
+    const selectedDataMatrix = selectedPlot?.yData;
     if (!selectedDataMatrix) {
       return;
     }
@@ -136,13 +182,8 @@ export const Heatmap2D = ({
 
     // get colorscale name and unit linked to selected plot
     const colorscaleName =
-      itemDataGrid.plot[parseInt(plotIndex)].yaxis === 'y2'
-        ? itemDataGrid.y2AxisData?.name || 'Z Axis'
-        : itemDataGrid.yAxisData?.name || 'Z Axis';
-    const colorscaleUnit =
-      itemDataGrid.plot[parseInt(plotIndex)].yaxis === 'y2'
-        ? itemDataGrid.y2AxisData?.unit || ''
-        : itemDataGrid.yAxisData?.unit || '';
+      selectedPlot?.name.replace(`_${selectedPlot.labelUri}`, '') || 'Z Axis';
+    const colorscaleUnit = selectedPlot?.unit || '';
 
     //Initialize xAxis, yAxis, zAxis
     setZAxis({
@@ -234,7 +275,7 @@ export const Heatmap2D = ({
   }, [yAxis]);
 
   useEffect(() => {
-    if (data3D) {
+    if (data3D && selectedPlot) {
       // Update x, y & z useStates to plot heatmap
       setX(
         getArrayValueFromDependance(itemDataGrid.coordinates, 0) as number[],
@@ -242,10 +283,8 @@ export const Heatmap2D = ({
       setY(
         getArrayValueFromDependance(itemDataGrid.coordinates, 1) as number[],
       );
-
       // Get matrix [[]] needed for z in 3D
-      let zData: AxisData | number | string =
-        itemDataGrid.plot[parseInt(plotIndex)].yData;
+      let zData: AxisData | number | string | Complex = selectedPlot.yData;
 
       const tensor = tf.tensor(zData);
       const depthToGoThrough = tensor.shape.length - 2; // shape length - 2 because z need a vector of depth 2 ([][])
@@ -304,9 +343,13 @@ export const Heatmap2D = ({
                             coord.axeIndex === (targetAxis === 'y' ? 1 : 0),
                         ).name
                       }
-                      data={itemDataGrid.coordinates.map(
-                        (coord: Coordinates) => coord.name,
-                      )}
+                      data={(itemDataGrid.geometries.length // In contour plot, allow to transpose only x & y to keep compatibles coordinates with geometries
+                        ? itemDataGrid.coordinates.filter(
+                            (coord) =>
+                              coord.axeIndex === 0 || coord.axeIndex === 1,
+                          )
+                        : itemDataGrid.coordinates
+                      ).map((coord: Coordinates) => coord.name)}
                       w={`${width * 0.2}px`}
                       onChange={(value) =>
                         value &&
@@ -316,6 +359,7 @@ export const Heatmap2D = ({
                             (coord: Coordinates) => coord.name === value,
                           ).axeIndex,
                           targetAxis === 'x' ? 0 : 1,
+                          false,
                           active,
                           updatedConfiguration,
                         )
@@ -333,8 +377,9 @@ export const Heatmap2D = ({
                 w={`${width * 0.2}px`}
                 miw={`${(itemDataGrid.coordinates.length - coordsUsedInAxes) * 50}px`}
                 align="flex-end"
+                pos="relative"
               >
-                {JSON.parse(JSON.stringify(itemDataGrid.coordinates))
+                {structuredClone(itemDataGrid.coordinates)
                   .sort(compareByAxeIndex)
                   .map(
                     (item: Coordinates, valueIndex: number) =>
@@ -364,6 +409,22 @@ export const Heatmap2D = ({
                         />
                       ),
                   )}
+                {itemDataGrid.synchronizedGrids.list.length && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 12,
+                      ...(itemDataGrid.coordinates.length > 2
+                        ? { right: -20 }
+                        : { left: 0 }),
+                    }}
+                  >
+                    <IconLink
+                      size={20}
+                      color={itemDataGrid.synchronizedGrids.color}
+                    />
+                  </div>
+                )}
               </Group>
             </Grid.Col>
           </>
@@ -385,21 +446,37 @@ export const Heatmap2D = ({
             ref={plotRef}
             data={[
               {
-                type: 'heatmap',
+                type: forcedPlotType
+                  ? forcedPlotType
+                  : itemDataGrid.selectedPlotMode === 'Heatmap'
+                    ? 'heatmap'
+                    : itemDataGrid.selectedPlotMode === 'Contour'
+                      ? 'contour'
+                      : 'heatmap',
+                contours: {
+                  coloring: 'lines',
+                },
                 colorscale:
-                  itemDataGrid.plot[parseInt(plotIndex)]?.customPreferences
-                    ?.colorscale || 'Viridis',
+                  selectedPlot?.customPreferences?.colorscale || 'Viridis',
                 colorbar: {
                   title: {
                     text: zAxis?.name
                       ? `${zAxis?.name} ${(zAxis?.unit && '[' + zAxis.unit + ']') || ''}`
                       : '',
                   },
+                  exponentformat: 'power',
+                  showexponent: 'all',
+                  separatethousands: true,
                 },
-                x: x,
-                y: y,
-                z: z,
+                hovertemplate:
+                  'x: %{x}<br>' + 'y: %{y}<br>' + 'z: %{z:,.6g}<extra></extra>',
+                x: [...x],
+                y: [...y],
+                z: z.map((row) => [...row]),
               },
+
+              // Add geometries in contour type
+              ...(itemDataGrid?.geometries ?? []),
             ]}
             config={{
               autosizable: false,
@@ -430,7 +507,7 @@ export const Heatmap2D = ({
           <Center h={height}>
             <NoDataForURI
               itemDataGrid={itemDataGrid}
-              selectedPlot={itemDataGrid.plot[parseInt(plotIndex)]}
+              selectedPlot={selectedPlot}
             />
           </Center>
         </Grid.Col>

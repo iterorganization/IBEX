@@ -6,8 +6,10 @@ import {
   fetchErrorBands,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
+  getUrisToInterpolate,
   getVectorData,
   normalizeIndices,
+  reapplyAxisOrder,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
@@ -38,20 +40,27 @@ export const CustomizeDownsampling = ({
   const getDownSampledData = async () => {
     try {
       open();
-      const updatedDataPlot = JSON.parse(
-        JSON.stringify(customizedDataGrid),
+      const updatedDataPlot = structuredClone(
+        customizedDataGrid,
       ) as DataGridPlot;
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
         // Downsample data
+        const urisToInterpolate = getUrisToInterpolate(
+          plot.nodeUri,
+          updatedDataPlot.plot,
+        );
         const dataPlotDownsampled = await fetchDataPlot(
           normalizeIndices(plot.nodeUri),
           downsamplingMethod,
           downsamplingSize,
+          updatedDataPlot?.dataType,
+          urisToInterpolate,
+          updatedDataPlot?.interpolated_method,
         );
 
-        if (plot.error_y?.type === 'data' && plot.error_y?.array.length > 0) {
+        if (plot?.error_bands?.length) {
           // Downsample error bands with provided parameters if error bands exists for this plot
           await fetchErrorBands(
             updatedDataPlot,
@@ -109,6 +118,13 @@ export const CustomizeDownsampling = ({
 
         plotIndex++;
       }
+
+      // Re-apply axis transposition: the back-end returns data in default axis
+      // order, so restore the user's transposition after the fetch
+      const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
+        (coord) => coord.axeIndex,
+      );
+      await reapplyAxisOrder(updatedDataPlot, wantedAxeIndexOrder);
 
       // Save new configuration with downsampled data
       setCustomizedDataGrid({
@@ -186,9 +202,9 @@ export const CustomizeDownsampling = ({
           maw={200}
         />
         <NumberInput
-          label="Size"
-          description="Update the size"
-          placeholder="Update the size"
+          label="Size of the leaf node"
+          description="Number of elements to retain in the leaf node"
+          placeholder="Enter the size of the leaf node"
           value={downsamplingSize}
           onChange={(value: number) => setDownsamplingSize(value)}
           w="45%"

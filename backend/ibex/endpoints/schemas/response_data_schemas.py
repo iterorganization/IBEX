@@ -20,7 +20,7 @@ class PlotDataCoordinateModel(BaseModel):
     target: str = Field(
         description="Which node coordinate is it", examples=["#equilibrium/time_slice[0]/profiles_2d[0]/psi"]
     )
-    unit: str = Field(description="Data units", examples=[""])
+    unit: str = Field(description="Data units", examples=["m", "mixed"])
     shape: list[int] | str = Field(description="Shape of the data", examples=[[129]])
     downsampled_shape: list[int] | str = Field(description="Shape of the data after downsampling", examples=[[129]])
     ndim: int = Field(description="Number of data dimensions stored in node", examples=[1])

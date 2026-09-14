@@ -12,8 +12,12 @@ Ibex frontend is an Electron application designed to deliver a rich and seamless
 
 ## Prerequisites
 
-- Node.js >= 16
+- Node.js >= 22.12 (required by Electron 43 and the packaging tools)
 - npm
+
+> `npm audit` does not report clean, and cannot today. See
+> [SECURITY-NOTES.md](SECURITY-NOTES.md) for what remains and why, and note that
+> `npm audit fix --force` must never be run here — it downgrades Electron Forge.
 
 You can load the module on ITER cluster by running the following command:
 
@@ -25,11 +29,11 @@ module load nodejs
 
 Clone this repository and install the dependencies:
 
-HTTPS : `git clone https://git.iter.org/scm/imex/ibex.git`
+HTTPS : `git clone https://github.com/iterorganization/IBEX.git`
 
 or
 
-SSH : `git clone ssh://git@git.iter.org/imex/ibex.git`
+SSH : `git clone git@github.com:iterorganization/IBEX.git`
 
 ```
 cd frontend
@@ -42,11 +46,6 @@ Install the dependencies using npm:
 ```
 npm install
 ```
-
-### Environment Variables
-
-To define the environment variables, create a `.env` file in the root directory of the project. You can define different PORT or API_URL using by application.
-Refer to the `.env.example` file for the list of environment variables.
 
 ## Available Commands
 

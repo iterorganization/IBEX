@@ -65,7 +65,9 @@ export function usePlotLayout({
   }, [itemDataGrid.y2AxisData?.type, setLayoutPlot]);
 
   useEffect(() => {
-    const newTypeOfX = typeof itemDataGrid.plot[0].x[0];
+    const newTypeOfX = itemDataGrid.plot[0]?.x
+      ? typeof itemDataGrid.plot[0]?.x[0]
+      : undefined;
     if (newTypeOfX === 'string') {
       // Update x axis to category type if it become a string
       setLayoutPlot((prevLayout) => ({

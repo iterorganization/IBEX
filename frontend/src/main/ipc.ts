@@ -147,11 +147,11 @@ export default {
       return app.getPath('home');
     });
 
-    ipcMain.handle('getDefaultTemplatesPath', () => {
+    ipcMain.handle('getPathFromRessources', (event, folderSteps: string[]) => {
       const templatesPath =
         process.env.NODE_ENV === 'development'
-          ? path.join(app.getAppPath(), '..', 'templates') // root in dev
-          : path.join(process.resourcesPath, 'templates'); // resources/ in prod
+          ? path.join(app.getAppPath(), '..', ...folderSteps) // root in dev
+          : path.join(process.resourcesPath, ...folderSteps); // resources/ in prod
       return templatesPath;
     });
   },

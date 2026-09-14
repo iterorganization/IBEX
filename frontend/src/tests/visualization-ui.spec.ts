@@ -26,7 +26,7 @@ describe('UI Tests for Visualization Component', function () {
   afterEach(async () => {
     await setTestState({ configurations: [], active: null });
 
-    // Ferme les modales restantes si besoin
+    // Close any remaining modals if necessary
     try {
       const modalOverlay = await driver.findElement(
         By.css('.mantine-Modal-overlay'),
@@ -38,11 +38,11 @@ describe('UI Tests for Visualization Component', function () {
         );
         await closeButton.click();
 
-        // Attends la disparition de l'overlay
+        // Wait until the overlay disappears
         await driver.wait(until.stalenessOf(modalOverlay), 3000);
       }
     } catch {
-      // Ignore si la modale n'existe pas
+      // Ignore if the modal does not exist
     }
   });
 

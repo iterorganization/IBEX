@@ -1,4 +1,4 @@
-import { Data, ErrorBar } from 'plotly.js';
+import { Data } from 'plotly.js';
 import { Layout } from 'react-grid-layout';
 import { NodeInfoTypeEnum } from './nodes';
 
@@ -9,12 +9,19 @@ export interface Axis {
   type?: string;
 }
 
+export type Complex = {
+  r: number;
+  i: number;
+};
+
 export type AxisData =
-  | (number | string)[][][]
-  | (number | string)[][]
-  | (number | string)[];
+  | (number | string | Complex)[][][][]
+  | (number | string | Complex)[][][]
+  | (number | string | Complex)[][]
+  | (number | string | Complex)[];
 
 export interface BaseCoordinates {
+  axeIndex: number;
   path: string;
   target: string;
   valueIndex: number;
@@ -25,11 +32,46 @@ export interface BaseCoordinates {
 export interface Coordinates extends BaseCoordinates {
   name: string;
   shape: number[] | 'irregular';
-  coordinates: string[];
+  coord_dependencies: string[];
   data: AxisData;
-  axeIndex: number;
   unit?: string;
 }
+
+export type OperationKind = 'unary' | 'signal';
+
+/**
+ * Scalar operation: the value is a constant applied to every data point.
+ * `kind` is optional because configurations saved before the "Data operations"
+ * panel store unary rows without it.
+ */
+export type UnaryOperation = {
+  kind?: 'unary';
+  type: string | null;
+  value: number;
+};
+
+/**
+ * Signal operation: the value is the nodeUri of another plot of the same grid,
+ * combined point by point with the edited plot.
+ */
+export type SignalOperation = {
+  kind: 'signal';
+  type: string | null;
+  value: string | null;
+};
+
+export type DataOperation = UnaryOperation | SignalOperation;
+
+export type SmoothingParams = {
+  smoothing_method: string;
+  gaussian_smoothing_sigma?: number;
+  savgol_smoothing_window_length?: number;
+  savgol_smoothing_polyorder?: number;
+  savgol_smoothing_deriv?: number;
+  savgol_smoothing_delta?: number;
+  savgol_smoothing_mode?: string;
+  savgol_smoothing_cval?: number;
+};
 
 export interface BaseDataPlotly {
   nodeUri: string;
@@ -38,7 +80,28 @@ export interface BaseDataPlotly {
   customPreferences?: CustomPreferences;
   line?: PlotLine;
   mode?: string;
+  smoothing?: SmoothingParams;
+  operations?: DataOperation[];
 }
+
+export type Geometry = {
+  type: 'scatter';
+  mode: 'lines';
+  x: number[];
+  y: number[];
+  line: GeometryLine;
+  geometry_node: string;
+  nodeUris: string[];
+  name: string;
+  legendgroup: string;
+  showlegend: boolean;
+  fill?: 'toself';
+};
+
+type GeometryLine = {
+  color: string;
+  width: number;
+};
 
 export type DataPlotly = BaseDataPlotly &
   Data & {
@@ -46,17 +109,22 @@ export type DataPlotly = BaseDataPlotly &
     y: (string | number)[];
     yData: AxisData;
     unit: string;
-    error_y?: ErrorBar;
     error_bands?: ErrorBandData[];
     path?: string;
     dimensions?: number;
     shape?: number[];
     description?: string;
+    hovertemplate?: string;
+    customdata?: Datum[] | Datum[][];
+    connectgaps?: boolean;
   };
+
+type Datum = string | number | Date;
 
 export type ErrorBandData = {
   path: string;
   yData: AxisData;
+  array: Datum[];
 };
 
 export type CustomPreferences = {
@@ -78,8 +146,11 @@ export interface BaseDataGridPlot {
   isTitleOverwritten: boolean;
   displayErrorBand: boolean;
   displayGrid: boolean;
+  forceXyRatio: boolean;
+  synchronizedGrids: synchronizedList;
   downsampled_method?: string;
   downsampled_size?: number;
+  interpolated_method?: string;
   xAxisData?: Axis;
   yAxisData?: Axis;
   y2AxisData?: Axis;
@@ -92,11 +163,31 @@ export interface DataGridPlot extends Layout, BaseDataGridPlot {
   coordinates?: Coordinates[];
   downsampled_method?: string;
   downsampled_size?: number;
-  selectedPlotMode?: 'Heatmap' | '1D';
+  selectedPlotMode?: PlotType;
+  geometries: Geometry[];
+  is_geometry_node: boolean;
 }
 
 export interface DataGridPlotToSave extends BaseDataGridPlot {
   dataType: NodeInfoTypeEnum;
   plot: BaseDataPlotly[];
   coordinates: BaseCoordinates[];
+  is_geometry_node: boolean;
+  geometries: Partial<Geometry>[];
 }
+
+export type synchronizedList = {
+  color: string;
+  list: string[];
+};
+
+export type PlotType = '1D' | 'Heatmap' | 'Contour';
+
+export type GeometryInfos = {
+  geometry_node: string;
+  parameters: string[];
+};
+
+export type GeometryInfosResponse = {
+  outline_nodes: GeometryInfos[];
+};

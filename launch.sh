@@ -41,9 +41,13 @@ read -r -a found_ports < <(get_free_ports)
 echo "Selected free ports: ${found_ports[@]}"
 echo "Setting IBEX BACKEND PORT = ${found_ports[0]}"
 
-${SCRIPT_DIR}/backend/bin/run_ibex_service -p ${found_ports[0]} &
+cd "$SCRIPT_DIR/backend"
+python -m ibex.cli -p ${found_ports[0]} &
 BACKEND_PID=$!
 cd "$SCRIPT_DIR"
+
+echo "Setting IBEX_BACKEND_URL = http://127.0.0.1:${found_ports[0]}"
+export IBEX_BACKEND_URL="http://127.0.0.1:${found_ports[0]}"
 
 echo "2. Configuring frontend"
 

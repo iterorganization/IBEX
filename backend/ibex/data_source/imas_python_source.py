@@ -3,6 +3,7 @@
 from typing import Optional, Sequence, List
 
 import imas  # type: ignore
+import imas_core
 import numpy as np  # type: ignore
 import re  # type: ignore
 from idstools.database import DBMaster  # type: ignore
@@ -37,6 +38,25 @@ from ibex.data_source.exception import (
     InvalidParametersException,
 )
 from ibex.core.utils import downsample_data, transform_2D_data, find_first_value_in_list
+from ibex.core.utils import IMAS_URI
+from ibex.data_source.imas_python_source_utils import (
+    path_in_filled_paths,
+    convert_ids_data_into_numpy_array,
+    resample_data_with_interpolation,
+    resample_data_without_interpolation,
+    pad_to_rectangular,
+    flatten,
+    expand,
+    calculate_coordinate_shapes,
+    apply_savgol_filter,
+    apply_gaussian_filter,
+    apply_simple_operations,
+    resolve_irregular_coordinate_data_shape,
+    apply_signal_operations,
+    combine_signal_units,
+)
+from ibex.core.data_manipulation_methods import SmoothingMethod, InterpolationMethod
+from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
 
 class IMASPythonSource(DataSourceInterface):
@@ -58,6 +78,10 @@ class IMASPythonSource(DataSourceInterface):
             return obj.value
         if isinstance(obj, np.ndarray) and not obj.flags.c_contiguous:
             return np.ascontiguousarray(obj)
+        if isinstance(obj, (np.ndarray, IDSNumericArray)):  # np.arrays with not supported dtype
+            return obj.tolist()
+        if isinstance(obj, complex):  # not supported dtype extracted from np.array
+            return (obj.real, obj.imag)
         raise TypeError
 
     def _open_entry(self, uri: str) -> imas.DBEntry:
@@ -86,6 +110,8 @@ class IMASPythonSource(DataSourceInterface):
             ids_root = entry.get(ids, lazy=True, autoconvert=False, occurrence=occurrence)
             return ids_root
         except imas.exception.IDSNameError as e:
+            raise IdsNotFoundException(e) from None
+        except imas.exception.DataEntryException as e:
             raise IdsNotFoundException(e) from None
 
     def data_entry_exists(self, uri: str) -> bool:
@@ -143,17 +169,41 @@ class IMASPythonSource(DataSourceInterface):
         result["type"] = metadata.data_type or "structure"
         result["ndim"] = metadata.ndim
         result["shape"] = []  # empty for 0D data
+        result["is_geometry_node"] = self._is_geometry_node(metadata)
 
         if recursive:
             result["children"] = [self._jsonify_metadata(child, recursive) for child in metadata]
         else:
             result["children"] = [
-                {"name": child.name, "type": child.data_type, "ndim": child.ndim}
+                {
+                    "name": child.name,
+                    "type": child.data_type,
+                    "ndim": child.ndim,
+                    "is_geometry_node": self._is_geometry_node(child),
+                }
                 for child in metadata
                 if show_error_bars or not any(x in child.name for x in ["_error_upper", "_error_lower", "_error_index"])
             ]
 
         return result
+
+    def _is_geometry_node(self, metadata: IDSMetadata):
+        """
+        Checks if node lies inside geometry structure
+        :param metadata: metadata of ids node
+        :return:
+        """
+        if metadata is None:
+            return False
+
+        node_type = getattr(metadata, "structure_reference", None)
+        is_outline_static = node_type == "outline_2d_geometry_static"
+        is_outline_rz = "outline" in metadata.name and node_type == "rz1d_static"
+
+        if is_outline_rz or is_outline_static:
+            return True
+
+        return self._is_geometry_node(metadata._parent)
 
     def get_node_info(
         self,
@@ -184,6 +234,32 @@ class IMASPythonSource(DataSourceInterface):
             metadata_dict["coordinates"] = list(coordinates.values())
             # flatten list
             metadata_dict["coordinates"] = list(chain.from_iterable(metadata_dict["coordinates"]))
+
+            # ========== check if node and it's children have data ==========
+            try:
+                filled_paths = entry.list_filled_paths(ids, int(occurrence))
+            except (
+                AttributeError,
+                imas.backends.imas_core.imas_interface.LLInterfaceError,
+                imas_core.exception.ImasCoreBackendException,
+            ):
+                # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                # ImasCoreBackendException - selected backend doesn't support list_filled paths
+                ...  # proceed
+            else:
+                metadata_dict["has_data"] = path_in_filled_paths(metadata.path_string, filled_paths)
+
+                if metadata.path_string == "":
+                    # ids roots always have data (otherwise they cannot be obtained)
+                    metadata_dict["has_data"] = True
+
+                # update metadata dict
+                for child_dict in metadata_dict["children"]:
+                    child_metadata = metadata[child_dict["name"]]
+                    child_dict["has_data"] = path_in_filled_paths(child_metadata.path_string, filled_paths)
+
+            # ========== END check if node and it's children have data ==========
 
             # fill 'shape', but omit it if path points to more than one node
             if metadata_dict["ndim"] > 0 and ":" not in node_path:
@@ -246,6 +322,9 @@ class IMASPythonSource(DataSourceInterface):
                 new_ids_obj = ids_obj[f"{path_node_name}[{path_index}]"]
             except AttributeError as e:
                 raise NodeNotFoundException(e)
+            except IndexError:
+                message = f"Index out of range: {path_node_name} has no index {path_index}"
+                raise NodeNotFoundException(message)
             return self._get_raw_data(new_ids_obj, path_elements[1:])
 
         elif isinstance(path_index, slice):
@@ -374,7 +453,6 @@ class IMASPythonSource(DataSourceInterface):
         occurrence: int = 0,
         downsampling_method: str | None = None,
         downsampled_size: int = 1000,
-        range: List[int] | None = None,
     ) -> dict:
         """
         Returns data extracted from IDS, converted into dictionary
@@ -383,13 +461,15 @@ class IMASPythonSource(DataSourceInterface):
         :param ids: name of ids e.g. core_profiles
         :param node_path: path to ids node e.g. ids_properties/version_put
         :param occurrence: ids occurrence number
-        :param range:
+        :param downsampling_method: method to be used during downsampling process
+        :param downsampled_size: target size for downsampling
         :return: dictionary {'value':<node_value>}, where <node_value> represents data extracted from IDS node
         """
-
         with self._open_entry(uri) as entry:
-            ids_root = self._get_ids_from_entry(entry, ids, occurrence)
-
+            try:
+                ids_root = self._get_ids_from_entry(entry, ids, occurrence)
+            except imas.exception.DataEntryException as e:
+                raise IdsNotFoundException(str(e)) from None
             ids_path = IDSPath(node_path)
             path_elements = list(ids_path.items())
             ids_data = self._get_raw_data(ids_root, path_elements)
@@ -451,6 +531,13 @@ class IMASPythonSource(DataSourceInterface):
 
             for ids in ids_list:
                 try:
+                    try:
+                        filled_paths = entry.list_filled_paths(ids, occurrence=0)
+                    except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                        # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                        # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                        # proceed
+                        filled_paths = []
                     ids_obj = entry.get(ids, occurrence=0, autoconvert=False, lazy=True)
                     paths = [node for node in imas.util.find_paths(ids_obj, searched_node)]
                     for path in paths:
@@ -462,7 +549,18 @@ class IMASPythonSource(DataSourceInterface):
                         # collect only leaf nodes
                         node_data_type = ids_obj.metadata[path].data_type
                         if node_data_type.value != "structure" and node_data_type.value != "struct_array":
-                            found_paths.append(f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}")
+                            path_name = f"#{ids}/{self._add_index_to_aos_in_path(ids_obj.metadata, path)}"
+                            is_geometry_node = self._is_geometry_node(ids_obj.metadata[path])
+                            if not filled_paths:
+                                # every ids has at least one filled path. If not, it means functionality is not available.
+                                found_paths.append(
+                                    {"path": path_name, "has_data": None, "is_geometry_node": is_geometry_node}
+                                )
+                            else:
+                                path_has_data = path_in_filled_paths(path, filled_paths)
+                                found_paths.append(
+                                    {"path": path_name, "has_data": path_has_data, "is_geometry_node": is_geometry_node}
+                                )
 
                 except imas.exception.DataEntryException:
                     continue
@@ -573,24 +671,209 @@ class IMASPythonSource(DataSourceInterface):
         elif isinstance(data, IDSStructure):
             raise NotALeafNodeException("Cannot serialize non-leaf node")
 
-    def get_plot_data(
+    def _leaf_node_coordinates_contain_time(self, leaf_node_path: str, coordinates_to_be_returned: list[dict]) -> bool:
+        """
+        Returns True when the leaf-node coordinates contain a time coordinate.
+
+        :param loaf_node_path: path to tested_node
+        :param coordinates_to_be_returned: list of dicts of coordinates from get_plot_data() method
+        :return: True or False
+        """
+        if not coordinates_to_be_returned:
+            return False
+        for coordinate in coordinates_to_be_returned:
+            if coordinate["name"] == "time" and coordinate["target"] == leaf_node_path:
+                return True
+
+        return False
+
+    def _generate_grid_quantity_alias(self, grid_node: IDSNumericArray):
+        """
+        Generates alias and unit for selected grid node. Assumes grid_node.name == "dimX" X=(1...N)
+        :param grid_node: IDSNode (named dimX, X = [1...N])
+        :return:
+        """
+        result = {"axis_label": None, "unit": None}
+        if grid_node._parent is None or grid_node._parent._parent is None:
+            return result
+        if not re.search(r"dim[1-9]", grid_node.metadata.name):
+            return result
+
+        # assume grid_node is located inside XXX/grid/<node> and grid_type is located in XXX/grid_type
+        grid_type_index = grid_node._parent._parent.grid_type.index
+        if grid_type_index == imas.ids_defs.EMPTY_INT:
+            return result
+
+        dim_index = int(grid_node.metadata.name[-1]) - 1  # dim1->0, dim2->1 etc...
+        # Extract units
+        try:
+            units = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).units.split(",")
+            result["unit"] = units[dim_index]
+        except (ValueError, KeyError, AttributeError):
+            result["unit"] = None
+
+        # Extract axis labels
+        try:
+            axis_labels = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).axis_labels.split(",")
+            result["axis_label"] = axis_labels[dim_index]
+        except AttributeError:
+            description = imas.identifiers.poloidal_plane_coordinates_identifier(grid_type_index).description
+            match = re.findall(r"(\w+)=(dim[1-9])", description)
+            axis_labels = {v: k for k, v in match}
+            result["axis_label"] = axis_labels.get(grid_node.metadata.name, None)
+
+        return result
+
+    def get_geometry_overlay_nodes(
         self,
         uri: str,
-        ids: str,
-        node_path: str,
-        occurrence: int = 0,
-        downsampling_method: str | None = None,
-        downsampled_size: int = 1000,
-    ):
+        show_empty_nodes: bool = False,
+        show_error_bars: bool = False,
+    ) -> dict:
+        """
+        Returns paths to metadata nodes that describe geometry overlays.
+
+        A node is included when:
+        - its type is ``outline_2d_geometry_static``, or
+        - its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+        Error bar nodes are filtered out by default and can be included with ``show_error_bars=True``.
+
+        :param uri: imas URI
+        :param show_empty_nodes: whether empty nodes should be returned, or not
+        :param show_error_bars: whether error bar nodes should be returned, or not
+        :return: dictionary {'outline_nodes': [{'geometry_node': '...', 'parameters': [...]}, ...]}
+        """
+
+        # ============ HELPER FUNCTION ============
+        def _get_descendant_node_names(metadata: IDSMetadata):
+
+            res = []
+            if metadata.data_type in (IDSDataType.STRUCTURE, IDSDataType.STRUCT_ARRAY):
+                for child in metadata:
+                    res.extend([f"{metadata.name}/{x}" for x in _get_descendant_node_names(child)])
+            else:
+                res.append(f"{metadata.name}")
+            return res
+
+        def _walk_outline_nodes(
+            uri: str,
+            ids: str,
+            occurrence: int,
+            root_metadata: IDSMetadata,
+            metadata: IDSMetadata,
+            results: list[dict[str, list[str]]],
+            show_error_bars: bool = False,
+            filled_paths: list[str] | None = None,
+        ) -> None:
+            """
+            Recursively traverses IDS metadata tree and collects nodes describing geometry overlays.
+
+            A node is collected when its type is ``outline_2d_geometry_static``
+            or when its name contains ``outline`` and its type is ``rz1d_static`` or ``rz1d_dynamic_aos``.
+
+            :param uri: imas URI
+            :param ids: name of IDS (e.g. core_profiles)
+            :param occurrence: IDS occurrence number
+            :param root_metadata: root metadata of the IDS (used to resolve tensorized paths)
+            :param metadata: current metadata node to inspect
+            :param results: list to which collected geometry overlay entries are appended
+            :param show_error_bars: whether to include error bar parameter names (e.g. ``_error_upper``)
+            :param filled_paths: optional list of filled paths; when given, only nodes with filled parameters are collected
+            """
+
+            if self._is_geometry_node(metadata):
+                tensorized_path = self._add_index_to_aos_in_path(root_metadata, metadata.path_string)
+                full_uri_with_path = f"{uri}#{ids}:{occurrence}/{tensorized_path}"
+                parameters_entry = {"geometry_node": full_uri_with_path, "parameters": []}
+
+                params = []
+                for child in metadata:
+                    params.extend(_get_descendant_node_names(child))
+
+                for param in params:
+                    is_error_node = any(
+                        error_node in param for error_node in ["_error_upper", "_error_lower", "_error_index"]
+                    )
+                    if show_error_bars or not is_error_node:
+                        if filled_paths is not None:
+                            node = f"{metadata.path_string}/{param}"
+                            if node in filled_paths:
+                                parameters_entry["parameters"].append(param)
+                        else:
+                            parameters_entry["parameters"].append(param)
+
+                if parameters_entry["parameters"]:  # don't put structures with empty "parameters"
+                    results.append(parameters_entry)
+
+            else:
+                for child in metadata:
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids,
+                        occurrence=occurrence,
+                        root_metadata=root_metadata,
+                        metadata=child,
+                        results=results,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
+
+        # ============ END HELPER FUNCTION ============
+
+        # Iterate over all filled IDSes and their occurrences to collect geometry overlay nodes
+        filled_idses = self.list_idses(uri)["idses"]
+
+        with self._open_entry(uri) as entry:
+            result = []
+
+            for ids_dict in filled_idses:
+                # ids_dict = {'name': < name >, 'occurrences': [ < 0 >, < 1 >, ...]}
+                for occurrence in ids_dict["occurrences"]:
+                    ids_obj = self._get_ids_from_entry(entry, ids_dict["name"], occurrence)
+                    outline_nodes = []
+
+                    filled_paths = None
+                    if not show_empty_nodes:
+                        try:
+                            filled_paths = entry.list_filled_paths(ids_dict["name"], int(occurrence))
+                        except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                            # AttributeError - current version of IMAS-Python doesn't support list_filled paths
+                            # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                            # proceed without filtering empty nodes
+                            ...
+
+                    _walk_outline_nodes(
+                        uri=uri,
+                        ids=ids_dict["name"],
+                        occurrence=occurrence,
+                        root_metadata=ids_obj.metadata,
+                        metadata=ids_obj.metadata,
+                        results=outline_nodes,
+                        show_error_bars=show_error_bars,
+                        filled_paths=filled_paths,
+                    )
+
+                    result.extend(outline_nodes)
+
+        return {"outline_nodes": result}
+
+    def get_plot_data(self, plot_data_query: PlotDataRequestModel) -> dict:
         """
         Returns all data used to plot selected quantity. Result contains data values, metadata and coordinates.
 
-        :param uri: imas URI
-        :param ids: name of ids e.g. core_profiles
-        :param node_path: path to ids node e.g. ids_properties/version_put
-        :param occurrence: ids occurrence number
+        :param plot_data_query: See :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
+        :type plot_data_query: :class:`ibex.endpoints.schemas.request_data_schemas.PlotDataRequestModel`
         :return: Dictionary containing data values, metadata and coordinates.
         """
+
+        uri_obj = IMAS_URI(plot_data_query.uri.strip())
+        uri = uri_obj.uri_entry_identifiers
+        ids = uri_obj.ids_name
+        node_path = uri_obj.node_path
+        occurrence = uri_obj.occurrence
+
+        if not plot_data_query.interpolation_method:
+            plot_data_query.interpolation_method = InterpolationMethod.EXACT_VALUE
 
         with self._open_entry(uri) as entry:
             ids_obj = self._get_ids_from_entry(entry, ids, occurrence)
@@ -601,7 +884,7 @@ class IMASPythonSource(DataSourceInterface):
             self._check_data_is_leaf_node(ids_data)
 
             if self._is_empty(ids_data):
-                raise NoDataException(f"No data for {node_path}")
+                raise NoDataException(f"No data for {uri}#{ids}/{node_path}")
             coordinates_to_be_returned = []
 
             # =================================
@@ -610,8 +893,8 @@ class IMASPythonSource(DataSourceInterface):
             for _node_path, _coordinate_path_list in coordinates_dict.items():
                 _new_coordinate_path_list = []
                 for _coordinate_path in _coordinate_path_list:
-                    if _coordinate_path == "1...N":
-                        _new_coordinate_path_list.append("1...N")
+                    if _coordinate_path.startswith("1..."):  # 1...N, 1...2, 1...3 etc.
+                        _new_coordinate_path_list.append(_coordinate_path)
                         continue
 
                     _new_coordinate_path = ""
@@ -619,7 +902,7 @@ class IMASPythonSource(DataSourceInterface):
                     # iterate over path elements. X stands target node path element, while Y stands for coordinate path elements
                     # we do this in order to fill dummy indexes with indexes extracted from target node path
                     for x, y in zip_longest(_node_path.items(), IDSPath(_coordinate_path).items()):
-                        # x[0] is node name in path eg. profiles_1d
+                        # x[0] is node name in path e.g. profiles_1d
                         # x[1] is indices or single index. For instance x=profiles_1d[123] -> x[0]=profiles_1d & x[1]=123
                         # the same applies to y
 
@@ -644,21 +927,24 @@ class IMASPythonSource(DataSourceInterface):
                 shapes_dimension = not bool(re.search(r"\[\d+\]$", str(target)))
 
                 for coord in coord_list:
-                    if coord == "1...N":
-                        # 1...N coords are targeting AoS
+                    if coord.startswith("1..."):
                         # remove last array operator ([<number or colon>]) from path and save it as target_str
-
                         splitted_target = str(target).split("/")
                         splitted_target[-1] = re.sub(r"[\[\(](.*?)[\]\)]", "", splitted_target[-1])
                         target_str = "/".join([x for x in splitted_target])
                         # ====================================
+
+                        # not returned, only used internally for interpolation check
+                        _is_aos = (
+                            IDSPath(target_str).goto_metadata(ids_obj.metadata).data_type == IDSDataType.STRUCT_ARRAY
+                        )
 
                         ids_path = IDSPath(str(target_str))
                         path_elements = list(ids_path.items())
                         coord_target_objects = self._get_raw_data(ids_obj, path_elements)
                         self._check_data_is_leaf_node(coord_target_objects)
 
-                        # collect labels for 1...N coordinates
+                        # collect labels for 1... coordinates
                         labels = []
                         try:
                             for element in coord_target_objects:
@@ -697,7 +983,7 @@ class IMASPythonSource(DataSourceInterface):
                         # (otherwise coordinate name would be the same as target node name)
                         coordinate_name = splitted_target[-1]
                         if f"{target}" == f"{node_path}":
-                            coordinate_name = "1...N"
+                            coordinate_name = coord
 
                         try:
                             coord_data_shape = np.asarray(coord_values).shape
@@ -715,6 +1001,7 @@ class IMASPythonSource(DataSourceInterface):
                             "description": "1...N",
                             "coordinates": shape_factors,
                             "shapes_dimension": shapes_dimension,
+                            "_is_aos": _is_aos,  # not returned, only used internally for interpolation validation
                             "value": labels if labels else coord_values,
                         }
                         coordinates_to_be_returned.append(c)
@@ -742,10 +1029,20 @@ class IMASPythonSource(DataSourceInterface):
                         except ValueError:
                             coord_data_shape = "irregular"
 
+                        coord_name = coord.split("/")[-1]
+                        axis_label = None
+                        unit = None
+                        if re.search(r"dim[1-9]", coord_name):
+                            labels_dict = self._generate_grid_quantity_alias(first_value)
+                            axis_label = labels_dict["axis_label"]
+                            unit = labels_dict["unit"]
+
+                        coord_name = axis_label if axis_label else coord_name
+                        units = unit if unit else first_value.metadata.units
                         c = {
-                            "name": coord.split("/")[-1],
+                            "name": coord_name,
                             "target": f"#{ids}/{target}",
-                            "unit": first_value.metadata.units,
+                            "unit": units,
                             "shape": coord_data_shape,  # coord_data could be np.ndarray or list[np.ndarray]
                             "downsampled_shape": coord_data_shape,
                             "ndim": first_value.metadata.ndim,
@@ -757,32 +1054,334 @@ class IMASPythonSource(DataSourceInterface):
                         }
                         coordinates_to_be_returned.append(c)
             first_value = find_first_value_in_list(ids_data)
-            data_to_be_returned = ids_data
+            result_unit = first_value.metadata.units or ""
+            data_to_be_returned = convert_ids_data_into_numpy_array(ids_data)
 
             if first_value.metadata.ndim == 2:
                 # Transform 2D arrays.
                 # By default first dimension of 2D has coordinate that is second on the list
                 # FE expects data's first dimension to be connected with second dimension, thus this transformation
+
                 data_to_be_returned = transform_2D_data(data_to_be_returned)
+
+            # ============= BEGIN simple operations ============
+
+            if plot_data_query.operations is not None:
+                data_to_be_returned = apply_simple_operations(data_to_be_returned, plot_data_query.operations)
+
+            # ============= END simple operations =============
+
+            # ============= BEGIN data smoothing ============
+            if plot_data_query.smoothing_method is not None:
+                if not self._leaf_node_coordinates_contain_time(f"#{ids}/{node_path}", coordinates_to_be_returned):
+                    raise InvalidParametersException(
+                        "Data smoothing is only supported when leaf-node coordinates contain time"
+                    )
+
+                if plot_data_query.smoothing_method == SmoothingMethod.SAVITZKY_GOLAY_FILTER:
+                    if first_value.metadata.ndim != 1:
+                        message = f"Savitzky-Golay filter supports only 1D smoothing. Selected data node is {first_value.metadata.ndim}D."
+                        raise InvalidParametersException(message)
+                    data_to_be_returned = apply_savgol_filter(
+                        data_to_be_returned,
+                        window_length=plot_data_query.savgol_smoothing_window_length,
+                        polyorder=plot_data_query.savgol_smoothing_polyorder,
+                        deriv=plot_data_query.savgol_smoothing_deriv,
+                        delta=plot_data_query.savgol_smoothing_delta,
+                        mode=plot_data_query.savgol_smoothing_mode,
+                        cval=plot_data_query.savgol_smoothing_cval,
+                    )
+
+                elif plot_data_query.smoothing_method == SmoothingMethod.GAUSSIAN_FILTER:
+                    time_coordinate_axis = None
+                    if first_value.metadata.ndim == 2:
+                        time_coordinate_axis = next(
+                            (i for i, d in enumerate(coordinates_to_be_returned) if d.get("name") == "time"), None
+                        )
+                    data_to_be_returned = apply_gaussian_filter(
+                        data_to_be_returned,
+                        sigma=plot_data_query.gaussian_smoothing_sigma,
+                        axis=time_coordinate_axis,
+                    )
+
+            # ============= END data smoothing =============
+
             try:
                 original_data_shape = np.asarray(data_to_be_returned).shape
             except ValueError:
                 original_data_shape = "irregular"
+
+            # ============= BEGIN resample data onto new time vector =============
+            def convert_to_lists(data):
+                if isinstance(data, list):
+                    return [convert_to_lists(d) for d in data]
+                elif isinstance(data, (np.ndarray, IDSNumericArray)):
+                    return data.tolist()
+                else:
+                    return data
+
+            # Signals used when combining data after interpolation.
+            # {uri: str, data: list[*], coordinates: list[list], shape: list, unit: str}
+            signals_data = {
+                plot_data_query.uri: {
+                    "uri": plot_data_query.uri,
+                    "data": data_to_be_returned,
+                    "coordinates": [
+                        sorted(set(flatten(convert_to_lists(c["value"])))) for c in coordinates_to_be_returned
+                    ],
+                    "shape": original_data_shape,
+                    "unit": result_unit,
+                }
+            }
+
+            if plot_data_query.interpolate_over:
+                # check for non-interpolatable coordinates
+                if plot_data_query.interpolation_method != InterpolationMethod.EXACT_VALUE:
+                    for _coord in coordinates_to_be_returned:
+                        if _coord.get("description") == "1...N" and _coord.get("_is_aos"):
+                            raise InvalidParametersException(
+                                f"Interpolation is not supported for coordinate '{_coord['name']}' "
+                                "which is a Array of Structures coordinate and cannot be used to generate new values. Try using exact_value method."
+                            )
+
+                # =================== GATHER ALL COORDINATES ===================
+                original_coord_values = []
+
+                should_resample_data_onto_new_coordinates: bool = False
+
+                for c in coordinates_to_be_returned:
+                    c["value"] = convert_to_lists(c["value"])
+                    original_coord_values.append(sorted(set(flatten(c["value"]))))
+
+                    expected_flattened_shape = np.array(c["value"]).shape[-1]
+                    flattened_shape = np.array(original_coord_values[-1]).shape[-1]
+
+                    if expected_flattened_shape != flattened_shape:
+                        # If given coordinate is different across AoS indices, we cannot simply flatted coordinates list to 1D.
+                        should_resample_data_onto_new_coordinates = True
+
+                if should_resample_data_onto_new_coordinates:
+                    # Coordinates values are different across AoS indices
+                    # New data array has to be created with all data points
+                    data_to_be_returned = resolve_irregular_coordinate_data_shape(
+                        coordinates=list(reversed([c["value"] for c in coordinates_to_be_returned])),
+                        data=data_to_be_returned,
+                        target_coordinates=list(reversed(original_coord_values)),
+                    )
+
+                original_coord_values.reverse()
+
+                store_other_signals_data = False  # used for signal combining after interpolation
+                if plot_data_query.signal_operations:
+                    store_other_signals_data = True
+
+                for _uri in plot_data_query.interpolate_over:
+                    _uri_obj = IMAS_URI(_uri)
+
+                    if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
+                        if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
+                            # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
+                            ...
+                        else:
+                            raise InvalidParametersException(
+                                "IDS name and node path should be the same for source and target URI when interpolating data"
+                            )
+
+                    new_plot_data_query = PlotDataRequestModel(uri=_uri)
+                    # interpolate_to will be used later with signal combining
+                    interpolate_to = self.get_plot_data(new_plot_data_query)["data"]
+                    interpolate_to_coordinates = interpolate_to["coordinates"]
+                    if store_other_signals_data:
+                        signals_data[_uri] = {
+                            "uri": _uri,
+                            "data": pad_to_rectangular(interpolate_to["value"]),
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"])))) for c in interpolate_to_coordinates
+                            ],
+                            "shape": interpolate_to["shape"],
+                            "unit": interpolate_to["unit"],
+                        }
+
+                    if len(interpolate_to_coordinates) != len(coordinates_to_be_returned):
+                        message = "Interpolation error. Source and target nodes have different number of coordinates."
+                        raise InvalidParametersException(message)
+
+                    for x, y in zip(coordinates_to_be_returned, interpolate_to_coordinates):
+                        if x["name"] != y["name"]:
+                            # coordinates between quantities doesn't match
+                            message = f"Interpolation error. Coordinates names does not match between target and source nodes ({x['name']} vs. {y['name']})."
+                            raise InvalidParametersException(message)
+
+                        x["value"] = sorted(set(flatten(x["value"]) + flatten(convert_to_lists(y["value"]))))
+
+                # reverse coordinates list so it matches data dimensions
+                common_coords_values = [c["value"] for c in reversed(coordinates_to_be_returned)]
+                # =================== INTERPOLATE ===================
+
+                # === make data vector rectangular ===
+                data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+                # === run interpolation ===
+                if plot_data_query.interpolation_method == InterpolationMethod.EXACT_VALUE:
+                    data_to_be_returned = resample_data_without_interpolation(
+                        tuple(original_coord_values), data_to_be_returned, tuple(common_coords_values)
+                    )
+                else:
+                    data_to_be_returned = resample_data_with_interpolation(
+                        tuple(original_coord_values),
+                        data_to_be_returned,
+                        tuple(common_coords_values),
+                        interpolation_method=plot_data_query.interpolation_method,
+                    )
+
+                # Keep the primary signal entry in sync with its resampled data.
+                signals_data[plot_data_query.uri].update(
+                    {
+                        "data": np.array(data_to_be_returned, copy=True),
+                        "coordinates": [list(values) for values in reversed(common_coords_values)],
+                        "shape": list(np.asarray(data_to_be_returned).shape),
+                    }
+                )
+
+                new_coordinate_shapes = calculate_coordinate_shapes(
+                    list(np.asarray(data_to_be_returned).shape),
+                    first_value.metadata.ndim,
+                )
+
+                # expand flattened coordinates
+                for i, c in enumerate(coordinates_to_be_returned):
+                    c["shape"] = list(new_coordinate_shapes[i])
+                    c["value"] = expand(c["value"], c["shape"][:-1])
+
+            # ============= END resample data onto new time vector =============
+
+            # ============= BEGIN signal operations =============
+            #
+            # Steps performed in this block:
+            # 1. Collect all signal URIs referenced in signal_operations
+            # 2. Pad data to rectangular if shape is irregular
+            # 3. For each signal URI, fetch and prepare data:
+            #    a. If the signal was already interpolated (stored during
+            #       interpolation phase), skip fetching
+            #    b. Otherwise fetch the signal and check shape compatibility
+            # 4. Prepare operand data for each signal:
+            #    a. If interpolation was requested, resample onto common coords
+            #    b. Otherwise normalize raw signal data to a NumPy array
+            # 5. Build a flat uri->array dict and apply all signal operations
+
+            if plot_data_query.signal_operations:
+                # Step 1: extract unique signal URIs from operation strings
+                signal_op_uris = set()
+                for op_str in plot_data_query.signal_operations or []:
+                    _, op_uri = op_str.split(":", 1)
+                    signal_op_uris.add(op_uri)
+
+                # Step 2: ensure rectangular data for downstream processing
+                if original_data_shape == "irregular":
+                    data_to_be_returned = pad_to_rectangular(data_to_be_returned)
+
+                # Step 3: fetch and prepare each signal referenced in operations
+                for signal_uri in signal_op_uris:
+                    if signal_uri not in signals_data:
+                        # Signal was not pre-loaded during interpolation phase.
+                        # Fetch it now and verify shape compatibility.
+                        request = PlotDataRequestModel(uri=signal_uri)
+                        other_signal = self.get_plot_data(request)
+
+                        # Comparing signal shapes
+                        if (
+                            other_signal["data"]["shape"] == "irregular"
+                            or other_signal["data"]["shape"] != original_data_shape
+                        ):
+                            msg = (
+                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                                "Signal and data shapes do not match. "
+                                "Try interpolating the signal onto the data shape."
+                            )
+                            raise InvalidParametersException(msg)
+
+                        # Comparing coordinates
+                        coordinates_match = self._coordinates_match(
+                            coordinates_to_be_returned, other_signal["data"]["coordinates"]
+                        )
+
+                        if not coordinates_match:
+                            msg = (
+                                f"Cannot apply operation on signal {signal_uri} without interpolation. "
+                                "Coordinates do not match. "
+                                "Try interpolating the signal onto the data coordinates."
+                            )
+                            raise InvalidParametersException(msg)
+
+                        signals_data[signal_uri] = {
+                            "uri": request.uri,
+                            "data": other_signal["data"]["value"],
+                            "coordinates": [
+                                sorted(set(flatten(convert_to_lists(c["value"]))))
+                                for c in other_signal["data"]["coordinates"]
+                            ],
+                            "shape": other_signal["data"]["shape"],
+                            "unit": other_signal["data"]["unit"],
+                        }
+
+                    # Step 4: prepare operand data (resampled or raw)
+                    if plot_data_query.interpolate_over:
+                        # Resample signal data onto the common coordinate grid
+                        signal_data = resample_data_without_interpolation(
+                            tuple(reversed(signals_data[signal_uri]["coordinates"])),
+                            signals_data[signal_uri]["data"],
+                            tuple(common_coords_values),
+                        )
+                    else:
+                        signal_data = signals_data[signal_uri]["data"]
+
+                    signals_data[signal_uri]["data"] = np.asarray(signal_data)
+
+                # Step 5: flatten dict and apply operations in order
+                signal_data_by_uri = {uri: info["data"] for uri, info in signals_data.items()}
+
+                # Step 6: Handling operations units
+                for operation in plot_data_query.signal_operations:
+                    operation_type, signal_uri = operation.split(":", 1)
+                    result_unit = combine_signal_units(
+                        result_unit,
+                        signals_data[signal_uri]["unit"],
+                        operation_type,
+                    )
+
+                # Step 7: Computing 'operations'
+                data_to_be_returned = apply_signal_operations(
+                    data_to_be_returned, plot_data_query.signal_operations, signal_data_by_uri
+                )
+
+            # ============= END signal operations =============
+
+            # Interpolation and signal operations can change the data shape.
+            # The response's ``shape`` describes the processed data before
+            # downsampling, rather than the raw shape used for compatibility
+            # checks above.
+            try:
+                processed_data_shape = np.asarray(data_to_be_returned).shape
+            except ValueError:
+                processed_data_shape = "irregular"
+
             # Downsample only 1D data
             if first_value.metadata.ndim == 1:
                 if coordinates_to_be_returned[0]["target"].split("/")[-1] == f"{node_path.split('/')[-1]}":
                     # If coordinate targets node -> downsample coordinate as well
                     coordinates_to_be_returned[0]["value"], data_to_be_returned = downsample_data(
                         data_to_be_returned,
-                        target_size=downsampled_size,
-                        method=downsampling_method,
+                        target_size=plot_data_query.downsampled_size,
+                        method=plot_data_query.downsampling_method,
                         x=coordinates_to_be_returned[0]["value"],
                         single_x_axis=(coordinates_to_be_returned[0]["path"] == f"#{ids}/time"),
                     )
 
                 else:
                     _, data_to_be_returned = downsample_data(
-                        data_to_be_returned, target_size=downsampled_size, method=downsampling_method
+                        data_to_be_returned,
+                        target_size=plot_data_query.downsampled_size,
+                        method=plot_data_query.downsampling_method,
                     )
             # serialize coordinates and update shapes (they could be changed by downsampling)
             for c in coordinates_to_be_returned:
@@ -797,8 +1396,8 @@ class IMASPythonSource(DataSourceInterface):
             result = {
                 "data": {
                     "name": node_path.split("/")[-1],
-                    "unit": first_value.metadata.units,
-                    "shape": original_data_shape,
+                    "unit": result_unit,
+                    "shape": processed_data_shape,
                     "downsampled_shape": downsampled_shape,
                     "ndim": first_value.metadata.ndim,
                     "path": f"#{ids}/{node_path}",
@@ -819,6 +1418,16 @@ class IMASPythonSource(DataSourceInterface):
                 coordinate["coordinates"] = new_shape_factors_list
         return result
 
+    def _coordinates_match(self, coordinates_1, coordinates_2):
+        if len(coordinates_1) != len(coordinates_2):
+            return False
+
+        coordinates_match = all(
+            coordinate_1["name"] == coordinate_2["name"]
+            and np.array_equal(np.asarray(coordinate_1["value"]), np.asarray(coordinate_2["value"]), equal_nan=True)
+            for coordinate_1, coordinate_2 in zip(coordinates_1, coordinates_2)
+        )
+        return coordinates_match
 
     def _is_empty(self, seq):
         """Checks if list is essentially empty (contains only empty lists or empty strings)"""
@@ -838,11 +1447,14 @@ class IMASPythonSource(DataSourceInterface):
             if isinstance(x, list):
                 self._replace_empty_numbers(x, replace_to)
             else:
-
                 try:
                     if not x.has_value:
                         arr[i] = replace_to
                 # exception occurs for numpy values e.g. numpy.float64
                 except AttributeError:
-                    if x == imas.ids_defs.EMPTY_FLOAT or x == imas.ids_defs.EMPTY_INT or x == imas.ids_defs.EMPTY_COMPLEX:
+                    if (
+                        x == imas.ids_defs.EMPTY_FLOAT
+                        or x == imas.ids_defs.EMPTY_INT
+                        or x == imas.ids_defs.EMPTY_COMPLEX
+                    ):
                         arr[i] = replace_to

@@ -11,6 +11,7 @@ export type CustomTreeNodeData = TreeNodeData & {
   seeErrorBars: boolean;
   uriLabel: string;
   children: CustomTreeNodeData[];
+  is_geometry_node: boolean;
 };
 
 export type CustomTreeData = URIData & {

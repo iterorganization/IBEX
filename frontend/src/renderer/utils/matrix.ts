@@ -1,4 +1,4 @@
-import { AxisData, Coordinates } from '../types';
+import { AxisData, Complex, Coordinates } from '../types';
 import * as tf from '@tensorflow/tfjs';
 
 export const getFirstArrayValueFromShape = (
@@ -11,7 +11,7 @@ export const getFirstArrayValueFromShape = (
     shape = tensor.shape;
   }
 
-  let firstArrayValue: AxisData | number | string = value;
+  let firstArrayValue: AxisData | number | string | Complex = value;
   for (let index = 0; index < shape.length - 1; index++) {
     if (Array.isArray(firstArrayValue)) {
       firstArrayValue = firstArrayValue[0];
@@ -34,7 +34,7 @@ export const getArrayValueFromDependance = (
   const wantedCoordinate: Coordinates = coordinates.find(
     (coord) => coord.axeIndex === axeIndexWanted,
   );
-  if (!wantedCoordinate.coordinates.length) {
+  if (!wantedCoordinate.coord_dependencies.length) {
     // get first array value when having no dependance
     return getFirstArrayValueFromShape(
       wantedCoordinate.data,
@@ -43,21 +43,13 @@ export const getArrayValueFromDependance = (
   }
 
   // get sorted valueIndex list (sorted by shape length) to access to data matrix
-  const dependances = wantedCoordinate.coordinates;
+  const dependances = structuredClone(
+    wantedCoordinate.coord_dependencies,
+  ).reverse();
   const sortedIndexValueDependances: number[] = [];
-
-  let tensor;
-  if (wantedCoordinate.shape === 'irregular') {
-    // get shape when irregular data
-    tensor = tf.tensor(wantedCoordinate.data);
-  }
-  for (const shapeElement of wantedCoordinate.shape === 'irregular'
-    ? tensor.shape
-    : wantedCoordinate.shape) {
+  for (const dependance of dependances) {
     const coordDep = coordinates.find(
-      (coord_dep) =>
-        dependances.includes(coord_dep.name) &&
-        coord_dep.shape[coord_dep.shape.length - 1] === shapeElement,
+      (coord_dep) => coord_dep.name === dependance,
     );
     if (coordDep) {
       sortedIndexValueDependances.push(coordDep.valueIndex);
@@ -65,7 +57,8 @@ export const getArrayValueFromDependance = (
   }
 
   // Get wanted coordinate data from dependencies not linked to the dimension
-  let coordinateData: (number | string) | AxisData = wantedCoordinate.data;
+  let coordinateData: (number | string | Complex) | AxisData =
+    wantedCoordinate.data;
   for (const vectorIndex of sortedIndexValueDependances) {
     if (Array.isArray(coordinateData)) {
       coordinateData = coordinateData[vectorIndex];

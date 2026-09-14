@@ -65,7 +65,10 @@ export const API = {
     getHomePath: async () => await ipcRenderer.invoke('getHomePath'),
 
     getDefaultTemplatesPath: async () =>
-      await ipcRenderer.invoke('getDefaultTemplatesPath'),
+      await ipcRenderer.invoke('getPathFromRessources', ['templates']),
+
+    getZenodoDataPath: async () =>
+      await ipcRenderer.invoke('getPathFromRessources', ['e2e_datasets']),
   },
 
   preferences: {
@@ -107,3 +110,6 @@ export const API = {
 
 contextBridge.exposeInMainWorld('api', API);
 contextBridge.exposeInMainWorld('stubDataStorage', stubDataStorage);
+contextBridge.exposeInMainWorld('env', {
+  E2E_TEST: process.env.E2E_TEST,
+});

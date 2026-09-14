@@ -15,7 +15,7 @@ class _PrettyFormatter(logging.Formatter):
     white = "[white]"
     reset = "[/]"
 
-    formatstr = "%(asctime)s %(levelname)-8s %(message)s " f"{light_grey}@%(filename)s:%(lineno)d{reset}"
+    formatstr = f"%(asctime)s %(levelname)-8s %(message)s {light_grey}@%(filename)s:%(lineno)d{reset}"
     time_format = "%H:%M:%S"
 
     FORMATS = {

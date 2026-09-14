@@ -14,6 +14,7 @@ export type URITreeNodeData = {
   name: string;
   uri: string;
   type: NodeInfoTypeEnum;
+  is_geometry_node: boolean;
 };
 
 export type URIExistsResponse = {

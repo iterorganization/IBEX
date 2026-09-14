@@ -1,4 +1,5 @@
 import type { Configuration } from 'webpack';
+import webpack from 'webpack';
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
@@ -12,7 +13,12 @@ export const rendererConfig: Configuration = {
   module: {
     rules,
   },
-  plugins,
+  plugins: [
+    ...plugins,
+    new webpack.DefinePlugin({
+      'process.env.DRAGGABLE_DEBUG': JSON.stringify(false),
+    }),
+  ],
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css'],
   },

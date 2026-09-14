@@ -9,6 +9,129 @@ pytest.test_client = TestClient(app)
 
 
 @pytest.fixture(scope="session")
+def interpolation_entry_path_directory(tmp_path_factory):
+    tmp_path = tmp_path_factory.mktemp("interpolation_testdb")
+    rand_generator = np.random.default_rng(2137)
+
+    with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_1", mode="w") as entry:
+        eq = entry.factory.equilibrium()
+
+        eq.ids_properties.homogeneous_time = 1
+        eq.time = np.asarray([1, 2, 3, 4], dtype=float)
+        eq.vacuum_toroidal_field.r0 = 1.0
+        eq.vacuum_toroidal_field.b0 = np.asarray([0.1, 0.2, 0.3, 0.4], dtype=float)
+        eq.time_slice.resize(4)
+        for ts in eq.time_slice:
+            ts.profiles_1d.psi = np.asarray([1.0, 1.2, 1.3, 1.4, 1.5, 1.6])
+            ts.profiles_1d.psi_error_upper = np.asarray([2.0, 2.0, 2.0, 2.0, 2.0, 2.0])
+            ts.profiles_1d.psi_error_lower = np.asarray([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+
+            ts.coordinate_system.grid.dim1 = np.array([1.1, 1.2, 1.5, 1.7], dtype=float)
+            ts.coordinate_system.grid.dim2 = np.array([1.1, 1.2, 1.5], dtype=float)
+            ts.coordinate_system.z = np.array(np.random.rand(4, 3), dtype=float)
+
+            ts.profiles_2d.resize(2)
+            for p2d in ts.profiles_2d:
+                p2d.psi = np.asarray(rand_generator.random((3, 3)))
+                p2d.grid.dim1 = np.asarray([1.0, 2.0, 3.0], dtype=float)
+                p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0], dtype=float)
+        entry.put(eq)
+
+        cp = entry.factory.core_profiles()
+        cp.ids_properties.homogeneous_time = 1
+        cp.time = np.array([1.0, 2.0, 3.0, 4.0])
+        cp.profiles_1d.resize(4)
+
+        for i, p1d in enumerate(cp.profiles_1d):
+            n_rho = 10
+            p1d.grid.rho_tor_norm = np.linspace(0.1 + i * 0.01, 1.0 + i * 0.01, n_rho)
+            p1d.electrons.temperature = np.linspace(1000 - i * 100, 100 + i * 10, n_rho)
+
+        cp.profiles_2d.resize(4)
+        for j, p2d in enumerate(cp.profiles_2d):
+            p2d.ion.resize(2)
+            for k, ion in enumerate(p2d.ion):
+                ion.temperature = np.array(
+                    [
+                        [j + k + 1.0, j + k + 2.0, j + k + 3.0],
+                        [j + k + 4.0, j + k + 5.0, j + k + 6.0],
+                        [j + k + 7.0, j + k + 8.0, j + k + 9.0],
+                    ],
+                    dtype=float,
+                )
+            p2d.grid.dim1 = np.array([0.0, 1.0, 2.0], dtype=float)
+            p2d.grid.dim2 = np.array([0.0, 1.0, 2.0], dtype=float)
+        entry.put(cp)
+
+    with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_2", mode="w") as entry:
+        eq = entry.factory.equilibrium()
+
+        eq.ids_properties.homogeneous_time = 1
+        eq.time = np.asarray([1, 2, 3], dtype=float)
+        eq.vacuum_toroidal_field.r0 = 1.0
+        eq.vacuum_toroidal_field.b0 = np.asarray([0.1, 0.2, 0.3], dtype=float)
+        eq.time_slice.resize(3)
+        for ts in eq.time_slice:
+            ts.profiles_1d.psi = np.asarray([1.8, 1.9, 2.0, 2.1])
+            ts.profiles_1d.psi_error_upper = np.asarray([2.5, 2.5, 2.5, 2.5])
+            # ts.profiles_1d.psi_error_lower = np.asarray([1.5,1.5,1.5,1.5])
+
+            ts.coordinate_system.grid.dim1 = np.array([1.0, 1.3, 1.6], dtype=float)
+            ts.coordinate_system.grid.dim2 = np.array([1.0, 1.3, 1.6], dtype=float)
+            ts.coordinate_system.z = np.array(np.random.rand(3, 3), dtype=float)
+
+            ts.profiles_2d.resize(4)
+            for p2d in ts.profiles_2d:
+                p2d.psi = np.asarray(rand_generator.random((9, 3)))
+                p2d.grid.dim1 = np.asarray([0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7], dtype=float)
+                p2d.grid.dim2 = np.asarray([1.0, 2.0, 3.0], dtype=float)
+        entry.put(eq)
+
+        cp = entry.factory.core_profiles()
+        cp.ids_properties.homogeneous_time = 1
+        cp.time = np.array([1.5, 2.5, 3.5])
+        cp.profiles_1d.resize(3)
+
+        for i, p1d in enumerate(cp.profiles_1d):
+            n_rho = 8
+            p1d.grid.rho_tor_norm = np.linspace(0.2 + i * 0.02, 1.0 + i * 0.02, n_rho)
+            p1d.electrons.temperature = np.linspace(900 - i * 50, 200 + i * 20, n_rho)
+
+        cp.profiles_2d.resize(3)
+        for j, p2d in enumerate(cp.profiles_2d):
+            p2d.ion.resize(2)
+            for k, ion in enumerate(p2d.ion):
+                ion.temperature = np.array(
+                    [
+                        [j + k + 10.0, j + k + 11.0, j + k + 12.0],
+                        [j + k + 13.0, j + k + 14.0, j + k + 15.0],
+                        [j + k + 16.0, j + k + 17.0, j + k + 18.0],
+                    ],
+                    dtype=float,
+                )
+            p2d.grid.dim1 = np.array([0.0, 1.0, 2.0], dtype=float)
+            p2d.grid.dim2 = np.array([0.0, 1.0, 2.0], dtype=float)
+        entry.put(cp)
+
+        with imas.DBEntry(f"imas:hdf5?path={tmp_path}/interpolation_db_3", mode="w") as entry:
+            eq = entry.factory.equilibrium()
+
+            eq.ids_properties.homogeneous_time = 1
+            eq.time = np.asarray([1, 2, 3, 4], dtype=float)
+
+            eq.time_slice.resize(4)
+            for ts in eq.time_slice:
+                ts.profiles_2d.resize(2)
+                for p2d in ts.profiles_2d:
+                    p2d.psi = np.asarray(rand_generator.random((3, 3)))
+                    p2d.grid.dim1 = np.asarray([11.0, 12.0, 13.0], dtype=float)
+                    p2d.grid.dim2 = np.asarray([11.0, 22.0, 33.0], dtype=float)
+            entry.put(eq)
+
+    return tmp_path
+
+
+@pytest.fixture(scope="session")
 def entry_path(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("testdb")
 
@@ -43,12 +166,52 @@ def entry_path(tmp_path_factory):
         for ion in profiles_2d.ion:
             ion.name = f"random ion name {i}"
 
-            ion.temperature = np.array([[i, +1, i + 2], [i + 10, i + 11, i + 12], [i + 20, i + 21, i + 32]])
-        profiles_2d.grid.dim1 = np.array([0, 1, 2])
-        profiles_2d.grid.dim2 = np.array([0, 1, 2])
+            ion.temperature = np.array(
+                [[i, +1, i + 2], [i + 10, i + 11, i + 12], [i + 20, i + 21, i + 32]], dtype=float
+            )
+        profiles_2d.grid.dim1 = np.array([0, 1, 2], dtype=float)
+        profiles_2d.grid.dim2 = np.array([0, 1, 2], dtype=float)
+        profiles_2d.grid.volume_element = np.array([[1.0, 2.0, 3.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], dtype=float)
         i += 10
 
-    entry.put(core_profiles)
-    entry.close()
+    # ===== for data smoothing (must be time-based) =====
+    core_profiles.global_quantities.ip = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    core_profiles.global_quantities.v_loop = np.array([11.0, 22.0, 33.0, 44.0, 55.0])
 
+    # for coordinate aliases/units
+    core_profiles.profiles_2d[0].grid_type = 1
+    core_profiles.profiles_2d[1].grid_type = 2
+
+    entry.put(core_profiles)
+
+    # ===== for geometry overlay =====
+    # ===== for data smoothing 2D (one of coordinates is time) =====
+
+    wall = entry.factory.wall()
+    wall.ids_properties.homogeneous_time = 1
+
+    wall.time = np.array(range(1, 6), dtype=float)
+    wall.global_quantities.electrons.particle_flux_from_wall = np.array(
+        [
+            [1, 3, 2, 4, 3],
+            [1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1],
+        ]
+    )
+
+    wall.description_2d.resize(1)
+    wall.description_2d[0].limiter.unit.resize(1)
+    wall.description_2d[0].limiter.unit[0].outline.r = [1.0]
+    wall.description_2d[0].limiter.unit[0].outline.z = [1.0]
+    entry.put(wall)
+
+    equilibrium = entry.factory.equilibrium()
+    equilibrium.ids_properties.homogeneous_time = 1
+    equilibrium.time = np.array([1.0], dtype=float)
+    equilibrium.time_slice.resize(1)
+    equilibrium.time_slice[0].boundary.outline.r = np.array([1.0], dtype=float)
+    equilibrium.time_slice[0].boundary.outline.z = np.array([2.0], dtype=float)
+    entry.put(equilibrium)
+
+    entry.close()
     return tmp_path

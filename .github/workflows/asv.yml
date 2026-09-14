@@ -1,0 +1,136 @@
+name: ASV Benchmarks
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write       # needed to push HTML report to gh-pages branch
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          # virtualenv required by asv to create per-commit benchmark environments
+          pip install asv virtualenv
+
+      - name: Download test data from Zenodo
+        run: |
+          mkdir -p test_data
+          # iter_scenario_53298_seq1_DD4: ~14 MB, DD 4.0.0, contains core_profiles + equilibrium
+          # (required by all benchmark node paths). The 123364 file is a SOLPS edge
+          # simulation with no core_profiles/equilibrium so is not used for benchmarks.
+          wget -q -O test_data/iter_scenario_53298_seq1_DD4.nc \
+            "https://zenodo.org/records/17062700/files/iter_scenario_53298_seq1_DD4.nc?download=1"
+          echo "Downloaded files:"
+          ls -lh test_data/
+
+      - name: Configure ASV regression threshold for CI
+        run: |
+          # On GitHub Actions: only flag regressions >2x slower in the HTML report,
+          # matching the --factor 2.0 used in asv continuous below.
+          # On Bamboo/local, asv.conf.json is used as-is (default ASV threshold of 5%).
+          python - <<'EOF'
+          import pathlib
+          conf_path = pathlib.Path('asv.conf.json')
+          conf = conf_path.read_text()
+          # Insert threshold entry before the final closing brace
+          assert conf.rstrip().endswith('}'), "Unexpected asv.conf.json ending"
+          patched = conf.rstrip()[:-1].rstrip().rstrip(',') + ',\n    "regressions_thresholds": {".*": 2.0}\n}\n'
+          conf_path.write_text(patched)
+          print("CI: regressions_thresholds set to 2.0")
+          EOF
+
+      - name: Run ASV continuous benchmarks
+        id: asv
+        # continue-on-error so we can post the PR comment before re-failing the job
+        continue-on-error: true
+        env:
+          # Tells benchmarks/__init__.py where the test data lives
+          IBEX_TEST_DATA_DIR: ${{ github.workspace }}/test_data
+        run: |
+          asv machine --yes
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Compare base branch vs PR head — both on the same runner, same hardware
+            BASELINE="origin/${{ github.base_ref }}"
+            CONTENDER="${{ github.sha }}"
+          else
+            # Compare previous commit vs current commit on push/manual trigger
+            # Guard: skip if there is no previous commit (e.g. initial branch push)
+            if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+              echo "No previous commit to compare against — skipping benchmark comparison."
+              exit 0
+            fi
+            BASELINE="HEAD~1"
+            CONTENDER="HEAD"
+          fi
+
+          # Resolve to full SHAs for clarity in the log
+          BASELINE_SHA=$(git rev-parse "${BASELINE}" 2>/dev/null || echo "${BASELINE}")
+          CONTENDER_SHA=$(git rev-parse "${CONTENDER}" 2>/dev/null || echo "${CONTENDER}")
+          echo "Comparing commits:"
+          echo "  BASELINE  : ${BASELINE} → ${BASELINE_SHA}"
+          echo "  CONTENDER : ${CONTENDER} → ${CONTENDER_SHA}"
+
+          # --factor 2.0: only flag as regression if a benchmark is >2x slower
+          # (filters out GitHub runner hardware noise, ~20-50% typical variance)
+          asv continuous --quick --show-stderr --factor 2.0 "${BASELINE_SHA}" "${CONTENDER_SHA}" \
+            2>&1 | tee asv_output.txt
+
+          # Print a direct before/after comparison table (ratio per benchmark).
+          # This makes it easy to see which benchmarks changed and by how much.
+          echo ""
+          echo "=== Before vs After comparison ==="
+          asv compare --factor 2.0 --split "${BASELINE_SHA}" "${CONTENDER_SHA}" 2>&1 | tee -a asv_output.txt
+
+      - name: Fail job if regression detected
+        if: steps.asv.outcome == 'failure'
+        run: |
+          echo "FAILED: Performance regression detected (>2x threshold). See benchmark output above."
+          exit 1
+
+      - name: Generate HTML results
+        # Only meaningful on push to develop/main — asv publish builds the branch
+        # timeline, so PR commits (not yet on any branch) are simply skipped with
+        # "Couldn't find <sha> in branches". Run only after a merge to avoid noise.
+        if: github.event_name != 'pull_request'
+        run: |
+          # asv publish resolves branch names from asv.conf.json via git rev-list.
+          # On PR checkouts only the PR branch is a local ref. Using
+          # refspec <remote>:<local> creates local branches directly so that
+          # git rev-list develop / main succeeds (plain fetch only makes
+          # remotes/origin/develop which asv does not resolve).
+          git fetch origin develop:develop 2>/dev/null || true
+          git fetch origin main:main 2>/dev/null || true
+          asv publish
+
+      - name: Deploy HTML report to GitHub Pages
+        # Only run on push to develop/main, same reasoning as Generate HTML above.
+        if: github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .asv/html
+          destination_dir: benchmarks
+          keep_files: false
