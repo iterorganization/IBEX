@@ -27,6 +27,7 @@ import { replaceNullsWithNaN } from './functions';
 import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';
 import { cachedRequest } from './requestCache';
+import { payloadKey, registerPayload } from '../stores/payloadRegistry';
 
 /**
  * Retrieves the API configuration.
@@ -481,18 +482,20 @@ export const fetchDataPlot = async (
     }
   }
 
+  // The endpoint actually used, which is the payload's identity. It is not
+  // always the one first asked for: the branch below can fall back to M4
+  // downsampling on a timeout, and the fallback returns different bytes.
+  let endpoint: string;
+
   if (downsamplingMethod) {
     // Get downsampled data plot
-    response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
-    );
+    endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
+    response = await fetchFromApi<PlotDataResponse>(endpoint);
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
-      response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
-        5000,
-      );
+      endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
+      response = await fetchFromApi<PlotDataResponse>(endpoint, 5000);
     } catch (error) {
       if (error.name === 'AbortError' || error.name === 'SyntaxError') {
         // "SyntaxError" can be triggered when too heavy (eof error)
@@ -514,9 +517,8 @@ export const fetchDataPlot = async (
           downsampledMethods?.downsampling_methods.find(
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
-        response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
-        );
+        endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
+        response = await fetchFromApi<PlotDataResponse>(endpoint);
       } else {
         // Any other error (e.g. a 466 raised when a signal operation cannot be
         // applied) has already been notified by handleError: propagate it
@@ -576,6 +578,23 @@ export const fetchDataPlot = async (
   }
 
   response.data.value = replaceNullsWithNaN(response.data.value);
+
+  // Registered here rather than at the twenty-odd call sites that store the
+  // result, because this is where the request - the payload's identity - is
+  // known, and where the post-processing above has finished.
+  response.data.valueRef = registerPayload(
+    payloadKey(endpoint, 'value'),
+    response.data.value,
+    response.data.shape,
+  );
+  for (const coord of response.data.coordinates) {
+    coord.valueRef = registerPayload(
+      payloadKey(endpoint, `coord:${coord.name}`),
+      coord.value,
+      coord.shape,
+    );
+  }
+
   return response;
 };
 
@@ -589,16 +608,10 @@ export const fetchFieldValue = async (
   type?: NodeInfoTypeEnum,
 ) => {
   const downsampled_size = downsamplingSize || 1000;
-  let response: FieldValueResponse;
-  if (downsamplingMethod) {
-    response = await fetchFromApi<FieldValueResponse>(
-      `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
-    );
-  } else {
-    response = await fetchFromApi<FieldValueResponse>(
-      `/data/field_value?uri=${encodeURIComponent(uri)}`,
-    );
-  }
+  const endpoint = downsamplingMethod
+    ? `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`
+    : `/data/field_value?uri=${encodeURIComponent(uri)}`;
+  const response = await fetchFromApi<FieldValueResponse>(endpoint);
 
   if (type === 'CPX') {
     // Transform complex data
@@ -606,6 +619,10 @@ export const fetchFieldValue = async (
     response.value = updatedData;
   }
   response.value = replaceNullsWithNaN(response.value);
+  response.valueRef = registerPayload(
+    payloadKey(endpoint, 'value'),
+    response.value,
+  );
   return response;
 };
 

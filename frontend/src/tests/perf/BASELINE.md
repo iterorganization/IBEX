@@ -282,3 +282,55 @@ The fix belongs in the store, not in the specs: `pruneUiState` drops any ui id
 that does not name a grid of the active configuration, and `setActive`,
 `removeConfiguration` and `setState` apply it. Anyone adding a field to the `ui`
 slice that references a grid must add it there too.
+
+## After giving the payloads an identity (stage 8)
+
+| Scenario                   | requests | redraws | renders | payloads | elements | ms   |
+| -------------------------- | -------- | ------- | ------- | -------- | -------- | ---- |
+| toggle edit mode (UI flag) | 0        | 1       | 4       | 8        | 25785    | 959  |
+| coordinate slider, 2 steps | 0        | 6       | 28      | 8        | 25785    | 1522 |
+| metadata panel, first open | 2        | 2       | 4       | 10       | 25791    | 793  |
+| metadata panel, revisit    | 0        | 6       | 40      | 8        | 25785    | 1142 |
+| idle (no interaction)      | 0        | 0       | 0       | 8        | 25785    | 2125 |
+
+Two new columns, both cumulative rather than per-scenario: how many fetched
+arrays the registry is holding when the scenario ends, and how many elements
+they add up to (from the shape the backend reported, which is far cheaper than
+walking a nested array).
+
+`stores/payloadRegistry.ts` gives every fetched array a name derived from the
+request that produced it — the same canonical form `requestCacheKey` computes,
+so a payload and its cached response body are one identity rather than two.
+Registration happens in `fetchDataPlot` and `fetchFieldValue`, where the request
+is known and the post-processing has finished, instead of at the twenty-odd
+call sites that store the result. The store carries `yDataRef`, `dataRef` and
+`error_bands[].yDataRef` **alongside** the arrays: nothing reads through the
+registry yet, so this stage cannot change behaviour, and the counts above say
+it did not.
+
+The interesting row is `metadata panel, first open`: entries go 8 → 10 while
+that panel fetches, and back to 8 on the next scenario. That is the sweep. It
+is driven by a store subscription that walks the configurations for reachable
+refs, debounced onto an idle callback — a slider drag writes the store dozens of
+times a second and none of those writes changes reachability. Deleting a grid
+or a configuration needs no code of its own, which is the reason for choosing
+mark-and-sweep over reference counting across two dozen writers.
+
+It sweeps for real from the first commit rather than in audit mode. The registry
+holds a _second_ reference to every payload, so a registry that reports what it
+would free and frees nothing is a memory leak — and since nothing reads through
+it yet, an over-eager sweep has no observable effect. Audit mode stays, for
+diagnosing the stages that do read.
+
+`DataplotCustomization` holds a detached copy of a grid that the store cannot
+see; `pin`/`unpin` exist for it and the sweep treats pins as roots.
+
+Where a transform still replaces a payload — `transposeAxis`, the `applyRange`
+family, tensorising a coordinate — the ref is cleared rather than re-derived.
+Those arrays are genuinely different payloads, and deriving keys for them is
+what the transposition and range stages do.
+
+`npm run test:unit` (mocha + ts-node + chai, all already devDependencies) covers
+the key algebra and the sweep: 16 tests, no Electron, no renderer, ~20 ms. One
+constraint for anything added under it — import relatively, not through the
+`src/*` alias, which ts-node does not resolve without `tsconfig-paths/register`.

@@ -34,6 +34,8 @@ export interface Coordinates extends BaseCoordinates {
   shape: number[] | 'irregular';
   coord_dependencies: string[];
   data: AxisData;
+  /** Registry key for `data`. See `stores/payloadRegistry.ts`. */
+  dataRef?: string;
   unit?: string;
 }
 
@@ -108,6 +110,8 @@ export type DataPlotly = BaseDataPlotly &
     x: (string | number)[];
     y: (string | number)[];
     yData: AxisData;
+    /** Registry key for `yData`. See `stores/payloadRegistry.ts`. */
+    yDataRef?: string;
     unit: string;
     error_bands?: ErrorBandData[];
     path?: string;
@@ -124,6 +128,8 @@ type Datum = string | number | Date;
 export type ErrorBandData = {
   path: string;
   yData: AxisData;
+  /** Registry key for `yData`. See `stores/payloadRegistry.ts`. */
+  yDataRef?: string;
   array: Datum[];
 };
 

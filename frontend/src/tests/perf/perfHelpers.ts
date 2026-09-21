@@ -91,6 +91,8 @@ const measurements: {
   dataRequests: number;
   redraws: number;
   renders: number;
+  payloads: number;
+  elements: number;
   ms: number;
 }[] = [];
 
@@ -116,6 +118,10 @@ export async function measure(
     dataRequests: dataRequests(snapshot).length,
     redraws: totalRedraws(snapshot),
     renders: totalRenders(snapshot),
+    // Cumulative, not per-scenario: how much of the session's fetched data the
+    // registry is still holding when this scenario ends.
+    payloads: snapshot.payloads?.entries ?? 0,
+    elements: snapshot.payloads?.elements ?? 0,
     ms,
   });
   return snapshot;
@@ -134,6 +140,8 @@ export function reportMeasurements(): void {
         `requests=${String(row.dataRequests).padStart(3)} ` +
         `redraws=${String(row.redraws).padStart(3)} ` +
         `renders=${String(row.renders).padStart(4)} ` +
+        `payloads=${String(row.payloads).padStart(3)} ` +
+        `elements=${String(row.elements).padStart(9)} ` +
         `${row.ms} ms`,
     );
   }

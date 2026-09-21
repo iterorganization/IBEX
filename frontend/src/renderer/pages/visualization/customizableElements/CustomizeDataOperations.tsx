@@ -239,6 +239,8 @@ export const CustomizeDataOperations = ({
           dataPlotOperated.data.coordinates[coordinateIndex].downsampled_shape;
         coordinate.data =
           dataPlotOperated.data.coordinates[coordinateIndex].value;
+        coordinate.dataRef =
+          dataPlotOperated.data.coordinates[coordinateIndex].valueRef;
         coordinateIndex++;
         coordinate.range = [
           0,
@@ -258,6 +260,7 @@ export const CustomizeDataOperations = ({
       plot.shape = dataPlotOperated.data.downsampled_shape;
       plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotOperated.data.value;
+      plot.yDataRef = dataPlotOperated.data.valueRef;
       plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
       // A multiplication or a division between signals changes the unit, which
       // may require moving the plot to the secondary y axis

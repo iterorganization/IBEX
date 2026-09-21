@@ -131,6 +131,8 @@ export const CustomizeSmoothing = ({
           dataPlotSmoothed.data.coordinates[coordinateIndex].downsampled_shape;
         coordinate.data =
           dataPlotSmoothed.data.coordinates[coordinateIndex].value;
+        coordinate.dataRef =
+          dataPlotSmoothed.data.coordinates[coordinateIndex].valueRef;
         coordinateIndex++;
         coordinate.range = [
           0,
@@ -150,6 +152,7 @@ export const CustomizeSmoothing = ({
       plot.shape = dataPlotSmoothed.data.downsampled_shape;
       plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotSmoothed.data.value;
+      plot.yDataRef = dataPlotSmoothed.data.valueRef;
       plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
       if (action === 'restore') {
         plot.smoothing = undefined;

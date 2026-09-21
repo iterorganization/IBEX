@@ -53,10 +53,16 @@ const stats = {
  * `interpolate_over` are ordered lists — so only the key order may be
  * normalised. The origin is dropped so a backend port change cannot look like a
  * different request.
+ *
+ * A relative endpoint canonicalises to the same key as the absolute URL it
+ * becomes, so callers that only hold the endpoint — the payload registry —
+ * name a response exactly as this cache does.
  */
+const RELATIVE_BASE = 'http://ibex.invalid';
+
 export const requestCacheKey = (url: string): string => {
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url, RELATIVE_BASE);
     const grouped = new Map<string, string[]>();
     for (const [key, value] of parsed.searchParams) {
       const values = grouped.get(key);

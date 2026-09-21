@@ -77,11 +77,13 @@ export const plotData = (
   interpolated_method: string,
   description?: string,
   y2Axis?: boolean,
+  yDataRef?: string,
 ): DataGridPlot => {
   const trace: DataPlotly = {
     x: xValue,
     y: yValue,
     yData: yData,
+    yDataRef: yDataRef,
     name: name ? `${name}_${labelUri}` : '',
     line: {},
     mode: 'lines',
@@ -265,6 +267,8 @@ export const handleNewPlot = async (
     response.data.downsampled_method,
     response.data.interpolated_method,
     response.data.description,
+    undefined,
+    response.data.valueRef,
   );
   updatedPlot.dataType = nodes[0].type;
   updatedPlot.is_geometry_node = nodes[0].is_geometry_node;
@@ -358,6 +362,7 @@ const updateInterpolatedPlots = async (
     plot.x = wantedX;
     plot.y = wantedY;
     plot.yData = plotInterpolated.data.value;
+    plot.yDataRef = plotInterpolated.data.valueRef;
     plot.shape = plotInterpolated.data.downsampled_shape;
 
     if (isInDeleteCase) {
@@ -666,6 +671,8 @@ export const handleExistingPlot = async (
         response.data.downsampled_method,
         response.data.interpolated_method,
         response.data.description,
+        undefined,
+        response.data.valueRef,
       );
     } else if (!findDataPlot.y2AxisData) {
       findDataPlot.y2AxisData = {
@@ -689,6 +696,7 @@ export const handleExistingPlot = async (
         response.data.interpolated_method,
         response.data.description,
         true,
+        response.data.valueRef,
       );
     } else {
       showNotification({
@@ -1413,7 +1421,10 @@ export const fetchErrorBands = async (
             urisToInterpolate,
             interpolationMethod,
           );
-          return { value: interpolated.data.value } as FieldValueResponse;
+          return {
+            value: interpolated.data.value,
+            valueRef: interpolated.data.valueRef,
+          } as FieldValueResponse;
         }
         return await fetchFieldValue(
           bandUri,
@@ -1449,6 +1460,7 @@ export const fetchErrorBands = async (
         getVectorData(dataPlot.coordinates, upperResponse.value),
         upperResponse.value,
         plot.nodeUri + '_error_upper',
+        upperResponse.valueRef,
       );
     }
 
@@ -1458,6 +1470,7 @@ export const fetchErrorBands = async (
         getVectorData(dataPlot.coordinates, lowerResponse.value),
         lowerResponse.value,
         plot.nodeUri + '_error_lower',
+        lowerResponse.valueRef,
       );
     }
 
@@ -1482,6 +1495,7 @@ const formatErrorBands = (
   yValue: number[],
   yData: AxisData,
   nodeUri: string,
+  yDataRef?: string,
 ) => {
   if (!(nodeUri.endsWith('_error_lower') || nodeUri.endsWith('_error_upper'))) {
     return;
@@ -1499,6 +1513,7 @@ const formatErrorBands = (
   foundedPlot.error_bands.push({
     path: normalizeIndices(nodeUri),
     yData: yData,
+    yDataRef: yDataRef,
     array: yValue,
   });
 };
@@ -1894,6 +1909,7 @@ function formatCoordinates(
         downsampled_shape: coordinate.downsampled_shape,
         coord_dependencies: coordinate.coordinates,
         data: coordinate.value,
+        dataRef: coordinate.valueRef,
         valueIndex: valueIndex,
         path:
           valueIndex === 0
@@ -1985,6 +2001,7 @@ export async function plotNodeUriLoaded(
               // If coordinates exist, update it with response from BE
               matchingCoord.axeIndex = index;
               matchingCoord.data = responseCoordinates.value;
+              matchingCoord.dataRef = responseCoordinates.valueRef;
               matchingCoord.name = responseCoordinates.name;
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
@@ -2048,6 +2065,7 @@ export async function plotNodeUriLoaded(
               path: yResponsePath,
               shape: response.data.downsampled_shape as number[],
               yData: response.data.value,
+              yDataRef: response.data.valueRef,
               x: defaultXValue,
               y: defaultYValue,
             } as DataPlotly;
@@ -2258,6 +2276,7 @@ export const reapplyAxisOrder = async (
     // Copy transposed data back on the real plot
     const transposedPlot = transposed.plot[0];
     targetPlot.yData = transposedPlot.yData;
+    targetPlot.yDataRef = transposedPlot.yDataRef;
     targetPlot.shape = transposedPlot.shape;
     targetPlot.x = transposedPlot.x;
     targetPlot.y = transposedPlot.y;
@@ -2720,6 +2739,9 @@ async function transposeAxis(
     );
     const transposedDataY = (await tensorizedDataY.array()) as AxisData;
     plotToTranspose.yData = transposedDataY;
+    // A transposed array is a different payload. Deriving a key for it is what
+    // the transposition stage does; until then the trace simply has none.
+    plotToTranspose.yDataRef = undefined;
     plotToTranspose.shape = tensorizedDataY.shape;
 
     if (plotToTranspose?.error_bands) {
@@ -2736,6 +2758,7 @@ async function transposeAxis(
         const transposedErrorBand =
           (await tensorizedErrorBand.array()) as AxisData;
         error_band.yData = transposedErrorBand;
+        error_band.yDataRef = undefined;
       }
     }
   }
@@ -2862,6 +2885,7 @@ const formatTrimmedCoordinate = async (
   const depValues = (await trimmed.array()) as AxisData;
   // Update data
   updatedCoord.data = depValues;
+  updatedCoord.dataRef = undefined;
 
   // Update shapes
   updatedCoord.shape = trimmed.shape;
@@ -3145,6 +3169,8 @@ export async function applyRangeInPlot(
     );
     const newYData = (await trimmed.array()) as AxisData;
     updatedPlot.yData = newYData;
+    // A trimmed array is a different payload; see the note in `transposeAxis`.
+    updatedPlot.yDataRef = undefined;
     updatedPlot.shape = trimmed.shape;
 
     // Update plot.y with trimmed plot.yData
@@ -3182,6 +3208,7 @@ export async function applyRangeInPlot(
         );
         const newYData = (await trimmed.array()) as AxisData;
         error_band.yData = newYData;
+        error_band.yDataRef = undefined;
       }
       const swapped_error_bands = getErrorYVectors(updatedPlot, coordinates);
       updatedPlot.error_bands = swapped_error_bands;

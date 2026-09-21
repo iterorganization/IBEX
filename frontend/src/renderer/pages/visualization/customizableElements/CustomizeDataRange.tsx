@@ -199,6 +199,8 @@ export const CustomizeDataRange = ({
                 ].downsampled_shape;
               coordinate.data =
                 dataRestored.data.coordinates[coordinateIndex].value;
+              coordinate.dataRef =
+                dataRestored.data.coordinates[coordinateIndex].valueRef;
               coordinate.axeIndex = coordinateIndex;
               coordinateIndex++;
             }
@@ -209,6 +211,7 @@ export const CustomizeDataRange = ({
           // Get x axis switch coordinates dependances
           plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
           plot.yData = dataRestored.data.value;
+          plot.yDataRef = dataRestored.data.valueRef;
           // Get y axis
           const vectorData = getVectorData(
             updatedDataPlot.coordinates,
@@ -241,6 +244,7 @@ export const CustomizeDataRange = ({
           const dataTensorized = await getTensorizedMatrix(coord.data);
           coord.shape = dataTensorized.shape;
           coord.data = (await dataTensorized.array()) as AxisData;
+          coord.dataRef = undefined;
 
           // Update target & path with index 0
           const updatedPath = updateIndexFieldName(

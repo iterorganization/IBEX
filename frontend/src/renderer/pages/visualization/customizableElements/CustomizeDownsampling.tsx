@@ -82,6 +82,8 @@ export const CustomizeDownsampling = ({
             // Apply new data
             coordinate.data =
               dataPlotDownsampled.data.coordinates[coordinateIndex].value;
+            coordinate.dataRef =
+              dataPlotDownsampled.data.coordinates[coordinateIndex].valueRef;
             coordinateIndex++;
             // Apply new range
             coordinate.range = [
@@ -109,6 +111,7 @@ export const CustomizeDownsampling = ({
         // Get x axis switch coordinates dependances
         plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotDownsampled.data.value;
+        plot.yDataRef = dataPlotDownsampled.data.valueRef;
         // Get y axis
         const vectorData = getVectorData(
           updatedDataPlot.coordinates,

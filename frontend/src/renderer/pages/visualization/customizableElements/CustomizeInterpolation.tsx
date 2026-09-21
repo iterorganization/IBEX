@@ -87,6 +87,8 @@ export const CustomizeInterpolation = ({
             // Apply new data
             coordinate.data =
               dataPlotInterpolated.data.coordinates[coordinateIndex].value;
+            coordinate.dataRef =
+              dataPlotInterpolated.data.coordinates[coordinateIndex].valueRef;
             coordinateIndex++;
             // Apply new range
             coordinate.range = [
@@ -114,6 +116,7 @@ export const CustomizeInterpolation = ({
         // Get x axis switch coordinates dependances
         plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotInterpolated.data.value;
+        plot.yDataRef = dataPlotInterpolated.data.valueRef;
         // Get y axis
         const vectorData = getVectorData(
           updatedDataPlot.coordinates,
