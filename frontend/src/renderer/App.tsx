@@ -4,7 +4,7 @@ import { AppRouter } from './router';
 import { Notifications } from '@mantine/notifications';
 import { ModalsProvider } from '@mantine/modals';
 import { useIbexStore } from './stores';
-import { ConfigurationState } from './types';
+import { TestState } from './types';
 import { mergeTestState, projectTestState } from './utils';
 
 export function App() {
@@ -14,12 +14,12 @@ export function App() {
     // store write, for a bridge only the e2e suite ever uses.
     const updateHandler = (
       _event: Electron.IpcRendererEvent,
-      testState: Partial<ConfigurationState>,
+      testState: Partial<TestState>,
     ) => {
-      const { setState, getState } = useIbexStore.getState();
+      const store = useIbexStore.getState();
       // The snapshot the spec sends back lost its payloads on the way out, so
       // they are re-attached from what the store still holds.
-      setState(mergeTestState(testState, getState()));
+      store.setState(mergeTestState(testState, store));
     };
 
     const getStateHandler = (

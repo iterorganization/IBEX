@@ -1,11 +1,11 @@
 import {
   Configuration,
-  ConfigurationState,
   Coordinates,
   DataGridPlot,
   DataPlotly,
   ErrorBandData,
   Geometry,
+  TestState,
 } from '../types';
 
 /**
@@ -84,11 +84,10 @@ const projectConfiguration = (configuration: Configuration): Configuration => ({
 });
 
 /** Strips every bulk payload from a state snapshot. */
-export const projectTestState = (
-  state: ConfigurationState,
-): ConfigurationState => ({
+export const projectTestState = (state: TestState): TestState => ({
   configurations: state.configurations?.map(projectConfiguration) ?? [],
   active: state.active ? projectConfiguration(state.active) : state.active,
+  editingGridId: state.editingGridId ?? null,
 });
 
 /**
@@ -162,7 +161,7 @@ const rehydrateGrid = (
 
 const rehydrateConfiguration = (
   configuration: Configuration,
-  current: ConfigurationState,
+  current: TestState,
 ): Configuration => {
   const source =
     current.configurations?.find(
@@ -189,10 +188,10 @@ const rehydrateConfiguration = (
  * `src/tests/utils/state.ts`, whose `dataPlot` is empty - is taken as given.
  */
 export const mergeTestState = (
-  incoming: Partial<ConfigurationState>,
-  current: ConfigurationState,
-): Partial<ConfigurationState> => {
-  const merged: Partial<ConfigurationState> = { ...incoming };
+  incoming: Partial<TestState>,
+  current: TestState,
+): Partial<TestState> => {
+  const merged: Partial<TestState> = { ...incoming };
 
   if (incoming.configurations) {
     merged.configurations = incoming.configurations.map((configuration) =>

@@ -33,6 +33,13 @@ import { IconLink } from '@tabler/icons-react';
 
 interface Heatmap2DProps {
   itemDataGrid: DataGridPlot;
+  /**
+   * Whether this grid is the one being edited. Optional because the
+   * customization and metadata previews render a detached copy of a grid: they
+   * are not an editing surface, which is what the title guard below always
+   * meant to say.
+   */
+  isEditing?: boolean;
   width: number;
   height: number;
   plotIndex: string;
@@ -46,6 +53,7 @@ interface Heatmap2DProps {
 
 export const Heatmap2D = ({
   itemDataGrid,
+  isEditing = false,
   width,
   height,
   plotIndex,
@@ -98,7 +106,7 @@ export const Heatmap2D = ({
     // Plotly - on every unrelated change elsewhere in the configuration.
     const { active, updatedConfiguration } = useIbexStore.getState();
 
-    if (!active.dataPlot.find((element) => element.isEditing)) {
+    if (!isEditing) {
       // Update active dataplot title only when editing (to prevent from updating in customization)
       return;
     }
@@ -433,7 +441,7 @@ export const Heatmap2D = ({
                         )
                       }
                       size="xs"
-                      disabled={!itemDataGrid.isEditing}
+                      disabled={!isEditing}
                     />
                   </Group>
                 ))}
@@ -473,7 +481,7 @@ export const Heatmap2D = ({
                               : 100
                           }
                           height={height - 80 - SELECT_AXIS_HEIGHT}
-                          disabled={!itemDataGrid.isEditing}
+                          disabled={!isEditing}
                         />
                       ),
                   )}
@@ -513,7 +521,7 @@ export const Heatmap2D = ({
           <Plot
             ref={plotRef}
             data={plotData}
-            config={getPlotConfig(itemDataGrid.static)}
+            config={getPlotConfig(isEditing)}
             layout={layoutPlot}
             onRelayout={handleRelayout}
             onAfterPlot={handleAfterPlot}

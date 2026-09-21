@@ -44,6 +44,10 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
   // call time inside the handlers. Subscribing to the whole store here made
   // every panel re-render - and redraw - on any change anywhere.
   const hasDataURI = useIbexStore((state) => state.active.dataURI.length > 0);
+  // A boolean selector, so entering edit mode re-renders the two panels whose
+  // flag changed and no others. `isEditing` used to be a field on every grid,
+  // which meant the write had to rebuild the grids it cleared it on.
+  const isEditing = useIbexStore((state) => state.editingGridId === data.i);
   countRender(`GridLayoutPlot:${data.i}`);
   const [heightGrid, setHeightGrid] = useState(
     data.h * rowHeight + (23 * (data.h * rowHeight)) / 100,
@@ -256,13 +260,16 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
    * Handle the delete grid event
    */
   const handleDeleteGrid = useCallback((id: string) => {
-    const { active, updatedConfiguration } = useIbexStore.getState();
+    const { active, updatedConfiguration, editingGridId, setEditingGrid } =
+      useIbexStore.getState();
     const newDataPlot: DataGridPlot[] = active.dataPlot.filter(
       (item: DataGridPlot) => item.i !== id,
     );
-    const checkedNodeURI = newDataPlot.find((dataPlot) => dataPlot.isEditing)
-      ? active.checkedNodeURI
-      : [];
+    // Deleting the grid being edited leaves edit mode; deleting another one
+    // leaves the tree selection alone.
+    const stillEditing = newDataPlot.some((item) => item.i === editingGridId);
+    if (!stillEditing) setEditingGrid(null);
+    const checkedNodeURI = stillEditing ? active.checkedNodeURI : [];
     const newActive: Configuration = {
       ...active,
       saved: false,
@@ -297,28 +304,20 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
    * Handle edit grid event
    */
   const handleEditGrid = useCallback((id: string) => {
-    const { active, updatedConfiguration } = useIbexStore.getState();
+    const { active, updatedConfiguration, editingGridId, setEditingGrid } =
+      useIbexStore.getState();
 
     const findPlot = active.dataPlot.find((item) => item.i === id);
     if (!findPlot) return;
 
-    const updatedDataPlot = active.dataPlot.map((item) => {
-      if (item.i === id) {
-        return {
-          ...item,
-          isEditing: !item.isEditing,
-          static: !item.isEditing,
-        };
-      }
-      // Keep the identity of grids that are not changing. Rebuilding them
-      // unconditionally handed every other panel a new object, which is what
-      // made an edit on one panel redraw all the others.
-      if (!item.isEditing && !item.static) return item;
-      return { ...item, isEditing: false, static: false };
-    });
+    // Edit mode is a single id, so leaving it touches no grid object at all -
+    // it used to clear a flag on every other grid, and the grids it rebuilt to
+    // do so were what made editing one panel re-render the rest.
+    const wasEditing = editingGridId === id;
+    setEditingGrid(wasEditing ? null : id);
 
     // Check from tree selected plots (all plots used in dataGrid)
-    const checkedNodeURI: URITreeNodeData[] = !findPlot.isEditing
+    const checkedNodeURI: URITreeNodeData[] = !wasEditing
       ? findPlot.plot.map((item) => ({
           uri: normalizeIndices(item.nodeUri),
           name: item.labelUri,
@@ -378,7 +377,6 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
     const updatedActive: Configuration = {
       ...active,
       saved: false,
-      dataPlot: updatedDataPlot,
       checkedNodeURI: checkedNodeURI,
     };
 
@@ -417,6 +415,7 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
       {hasDataURI && (
         <HoverButtons
           data={data}
+          isEditing={isEditing}
           shouldDisplayMetadata={shouldDisplayMetadata}
           handleEditGrid={handleEditGrid}
           handleInspectMetadata={handleInspectMetadata}
@@ -454,6 +453,7 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
         // Show heatmap
         <Heatmap2D
           itemDataGrid={data}
+          isEditing={isEditing}
           width={widthGrid}
           height={heightGrid}
           plotIndex={active3DTab}
@@ -464,6 +464,7 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
         // Show simple plot
         <SimplePlotly
           itemDataGrid={data}
+          isEditing={isEditing}
           width={widthGrid}
           height={heightGrid}
           showSliders={true}

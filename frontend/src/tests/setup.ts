@@ -2,7 +2,7 @@
 import * as path from 'path';
 import * as chrome from 'selenium-webdriver/chrome';
 import { Builder, WebDriver } from 'selenium-webdriver';
-import { ConfigurationState } from 'src/renderer/types';
+import { TestState } from 'src/renderer/types';
 
 const DEBUGGER_ADDRESS = '127.0.0.1:9222';
 
@@ -103,8 +103,8 @@ export const waitForApi = async () => {
  * This function allows you to set the state of the application for testing purposes.
  * @param state Partial state object to set in the application
  */
-export const setTestState = async (state: Partial<ConfigurationState>) => {
-  await driver.executeScript((s: Partial<ConfigurationState>) => {
+export const setTestState = async (state: Partial<TestState>) => {
+  await driver.executeScript((s: Partial<TestState>) => {
     //eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (window as any).api.setTestState(s);
   }, state);
@@ -113,9 +113,9 @@ export const setTestState = async (state: Partial<ConfigurationState>) => {
 /**
  * Gets the current test state from the Electron app.
  * This function retrieves the current state of the application for testing purposes.
- * @returns Promise that resolves to the current ConfigurationState
+ * @returns Promise that resolves to the current TestState
  */
-export const getTestState = async (): Promise<ConfigurationState> => {
+export const getTestState = async (): Promise<TestState> => {
   return await driver.executeScript(() => {
     //eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (window as any).api.getTestState();

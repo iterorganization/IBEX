@@ -31,6 +31,12 @@ import { usePlotLayout } from './hooks/usePlotLayout';
 import { IconLink } from '@tabler/icons-react';
 interface SimplePlotlyProps {
   itemDataGrid: DataGridPlot;
+  /**
+   * Whether this grid is the one being edited. Optional because the
+   * customization and metadata previews render a detached copy of a grid and
+   * must not write back to the store.
+   */
+  isEditing?: boolean;
   width: number;
   height: number;
   showSliders: boolean;
@@ -43,6 +49,7 @@ interface SimplePlotlyProps {
 
 export const SimplePlotly = ({
   itemDataGrid,
+  isEditing = false,
   height,
   width,
   showSliders,
@@ -160,7 +167,7 @@ export const SimplePlotly = ({
    * `title` state below, so nothing here touches the layout.
    */
   useEffect(() => {
-    if (!itemDataGrid.isEditing || title === itemDataGrid.title) {
+    if (!isEditing || title === itemDataGrid.title) {
       return;
     }
 
@@ -371,7 +378,7 @@ export const SimplePlotly = ({
                   )
                 }
                 size="xs"
-                disabled={!itemDataGrid.isEditing}
+                disabled={!isEditing}
               />
             </Group>
 
@@ -412,7 +419,7 @@ export const SimplePlotly = ({
                             ? height - 80
                             : height - 80 - SELECT_AXIS_HEIGHT
                         }
-                        disabled={!itemDataGrid.isEditing}
+                        disabled={!isEditing}
                       />
                     ),
                 )}
@@ -452,7 +459,7 @@ export const SimplePlotly = ({
             <Plot
               className={classes.simplePlot}
               data={dataToPlotWithErrorBands}
-              config={getPlotConfig(itemDataGrid.static)}
+              config={getPlotConfig(isEditing)}
               layout={layoutPlot}
               onRelayout={handleRelayout}
               onAfterPlot={handleAfterPlot}

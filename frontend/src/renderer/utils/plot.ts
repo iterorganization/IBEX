@@ -716,7 +716,7 @@ export const handleExistingPlot = async (
       }
     } else {
       // Only get error bands of added plot when we don't have combined coordinates
-      await fetchErrorBandsInConfig(updatedActive, defaultUri);
+      await fetchErrorBandsInConfig(updatedActive, defaultUri, findDataPlot.i);
     }
 
     // Apply range to new error bands when adding another plot
@@ -866,12 +866,15 @@ const deleteExistingPlot = async (
  * Get error bands of the provided uri and update configuration
  * @param active
  * @param uri
+ * @param editingGridId The grid being edited, from the UI slice. It used to be
+ *   found by scanning `dataPlot` for the grid whose `isEditing` was set.
  */
 export const fetchErrorBandsInConfig = async (
   active: Configuration,
   uri: string,
+  editingGridId: string | null,
 ) => {
-  const selectedDataPlot = active.dataPlot.find((d) => d.isEditing);
+  const selectedDataPlot = active.dataPlot.find((d) => d.i === editingGridId);
   if (!selectedDataPlot) {
     // Don't get error bands when no editing dataPlot
     return;
@@ -897,7 +900,7 @@ export const fetchErrorBandsInConfig = async (
 
     if (errBandsResponse) {
       const updatedCheckedNodeURI = active.checkedNodeURI;
-      if (selectedDataPlot.isEditing && updatedPlot?.error_bands) {
+      if (updatedPlot?.error_bands) {
         // Check error bands in tree
         for (const error_band of updatedPlot.error_bands) {
           const newCheckedNode = {
@@ -1299,7 +1302,7 @@ export const fetchGeometries = async (
       }
     }
 
-    if (dataPlot.isEditing && dataPlot?.geometries && updatedCheckedNodeURI) {
+    if (dataPlot?.geometries && updatedCheckedNodeURI) {
       // Check geometries in tree
       for (const geometry of dataPlot.geometries) {
         for (const uriOfGeo of geometry.nodeUris) {
@@ -1827,9 +1830,7 @@ export function formatConfigBeforeLoadingURIs(
   const newListDataGridPlot: DataGridPlot[] = activeConfiguration.dataPlot.map(
     (data): DataGridPlot => ({
       ...data,
-      isEditing: false,
       dataType: data.dataType,
-      static: false,
       coordinates:
         data.coordinates && data.coordinates.length > 0
           ? data.coordinates.map((coord: BaseCoordinates): Coordinates => {

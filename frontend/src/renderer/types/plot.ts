@@ -158,7 +158,6 @@ export interface BaseDataGridPlot {
 
 export interface DataGridPlot extends Layout, BaseDataGridPlot {
   plot: DataPlotly[];
-  isEditing: boolean;
   dataType?: NodeInfoTypeEnum;
   coordinates?: Coordinates[];
   downsampled_method?: string;

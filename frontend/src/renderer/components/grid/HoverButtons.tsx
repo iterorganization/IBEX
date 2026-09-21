@@ -31,6 +31,8 @@ import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
   data: DataGridPlot;
+  /** Whether this grid is the one being edited (UI slice, not the grid). */
+  isEditing: boolean;
   shouldDisplayMetadata: boolean;
   handleEditGrid: (id: string) => void;
   handleInspectMetadata: (id: string) => void;
@@ -44,6 +46,7 @@ interface HoverButtonsProps {
 export const HoverButtons = React.memo(
   ({
     data,
+    isEditing,
     shouldDisplayMetadata,
     handleEditGrid,
     handleInspectMetadata,
@@ -130,6 +133,11 @@ export const HoverButtons = React.memo(
 
     useEffect(() => {
       const updateErrorBands = async () => {
+        // The grid being edited, not this panel's grid: `fetchErrorBandsInConfig`
+        // has always operated on whichever grid is open for editing, and
+        // returned early when none is - which is what keeps this effect from
+        // fetching error bands for every panel as it mounts.
+        const { editingGridId } = useIbexStore.getState();
         const updatedActive = structuredClone(active) as Configuration;
         if (data.displayErrorBand) {
           if (
@@ -142,7 +150,11 @@ export const HoverButtons = React.memo(
               (dataPlot) => dataPlot.i === data.i,
             );
             for (const plot of selectedDataPlot.plot) {
-              await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
+              await fetchErrorBandsInConfig(
+                updatedActive,
+                plot.nodeUri,
+                editingGridId,
+              );
             }
 
             if (previousValueDisplayErrorBands.current === false) {
@@ -242,11 +254,11 @@ export const HoverButtons = React.memo(
           )}
 
           {hovered ||
-          data.isEditing ||
+          isEditing ||
           plotTypeMenuOpened ||
           forcePlotTypeMenuOpened ? (
             <Group pos="absolute" right={'1rem'} top={5}>
-              {!is3DView && data.isEditing && !shouldDisplayMetadata && (
+              {!is3DView && isEditing && !shouldDisplayMetadata && (
                 <Switch
                   label="Error bands"
                   checked={data.displayErrorBand}
@@ -354,18 +366,16 @@ export const HoverButtons = React.memo(
                 </Tooltip>
               )}
 
-              <Tooltip
-                label={data.isEditing ? 'Save the edition' : 'Edit the grid'}
-              >
+              <Tooltip label={isEditing ? 'Save the edition' : 'Edit the grid'}>
                 <ActionIcon
                   variant="filled"
                   aria-label="Editing"
                   data-testid={`grid-edit-toggle-${data.i}`}
                   onClick={() => handleEditGrid(data.i)}
                   className={classes.actionButton}
-                  color={data.isEditing ? 'yellow' : 'green'}
+                  color={isEditing ? 'yellow' : 'green'}
                 >
-                  {data.isEditing ? (
+                  {isEditing ? (
                     <IconCheck
                       style={{ width: '70%', height: '70%' }}
                       stroke={1.5}

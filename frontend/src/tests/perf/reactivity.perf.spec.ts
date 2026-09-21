@@ -182,8 +182,8 @@ describe('Reactivity benchmark', function () {
     await findCssElementAndClickIt(`grid-edit-toggle-${gridId}`, 200, 100);
     await waitForValue(
       `grid ${index} left edit mode`,
-      async () => (await getTestState()).active.dataPlot[index].isEditing,
-      false,
+      async () => (await getTestState()).editingGridId,
+      null,
       undefined,
       SLOW.retries,
       SLOW.delay,
@@ -196,11 +196,8 @@ describe('Reactivity benchmark', function () {
       await findCssElementAndClickIt(`grid-edit-toggle-${lineGridId}`);
       await waitForValue(
         'grid entered edit mode',
-        async () =>
-          (await getTestState()).active.dataPlot.find(
-            (grid) => grid.i === lineGridId,
-          )?.isEditing,
-        true,
+        async () => (await getTestState()).editingGridId,
+        lineGridId,
         undefined,
         SLOW.retries,
         SLOW.delay,
@@ -224,7 +221,7 @@ describe('Reactivity benchmark', function () {
 
   it('stepping a coordinate slider queries nothing and spares other panels', async () => {
     // Coordinate sliders are only operable while their grid is being edited
-    // (Heatmap2D.tsx passes `disabled={!itemDataGrid.isEditing}`), so enter
+    // (Heatmap2D.tsx passes `disabled={!isEditing}`), so enter
     // edit mode first — outside the measured block, so its cost is not counted.
     await setGridEditing(heatmapGridId, true);
     const slider = await findEnabledSlider();
@@ -329,26 +326,19 @@ async function findEnabledSlider() {
   );
 }
 
-/** Puts one grid in or out of edit mode through the e2e state bridge. */
+/**
+ * Puts one grid in or out of edit mode through the e2e state bridge.
+ *
+ * Edit mode is a single id in the UI slice, so this no longer has to rewrite
+ * every grid to clear a flag - which is the whole point of the change it
+ * follows.
+ */
 async function setGridEditing(gridId: string, editing: boolean) {
-  const state = await getTestState();
-  await setTestState({
-    configurations: state.configurations,
-    active: {
-      ...state.active,
-      dataPlot: state.active.dataPlot.map((grid) =>
-        grid.i === gridId
-          ? { ...grid, isEditing: editing, static: editing }
-          : { ...grid, isEditing: false, static: false },
-      ),
-    },
-  });
+  await setTestState({ editingGridId: editing ? gridId : null });
   await waitForValue(
     `grid ${gridId} editing=${editing}`,
-    async () =>
-      (await getTestState()).active.dataPlot.find((g) => g.i === gridId)
-        ?.isEditing ?? false,
-    editing,
+    async () => (await getTestState()).editingGridId,
+    editing ? gridId : null,
     undefined,
     SLOW.retries,
     SLOW.delay,

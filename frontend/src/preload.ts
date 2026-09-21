@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-import { ConfigurationState } from './renderer/types';
+import { TestState } from './renderer/types';
 import { contextBridge, ipcRenderer } from 'electron';
 
 const STUB_BACKEND_FUNCTIONS = process.env.E2E_TEST;
@@ -79,7 +79,7 @@ export const API = {
 
   getConfig: () => ipcRenderer.invoke('getConfig'),
 
-  setTestState: (testState: Partial<ConfigurationState>) =>
+  setTestState: (testState: Partial<TestState>) =>
     ipcRenderer.invoke('setTestState', testState),
 
   getTestState: () => ipcRenderer.invoke('getTestState'),
@@ -87,7 +87,7 @@ export const API = {
   onUpdateTestState: (
     callback: (
       event: Electron.IpcRendererEvent,
-      state: Partial<ConfigurationState>,
+      state: Partial<TestState>,
     ) => void,
   ) => {
     ipcRenderer.on('updateTestState', callback);
@@ -96,7 +96,7 @@ export const API = {
   removeUpdateTestStateListener: (
     callback: (
       event: Electron.IpcRendererEvent,
-      state: Partial<ConfigurationState>,
+      state: Partial<TestState>,
     ) => void,
   ) => {
     ipcRenderer.removeListener('updateTestState', callback);

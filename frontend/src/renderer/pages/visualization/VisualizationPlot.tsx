@@ -25,6 +25,12 @@ export const VisualizationPlot = ({
   // does not change when a panel is added and a narrower selector would never
   // fire. Every writer does replace `active` itself.
   const active = useIbexStore((state) => state.active);
+  // `static` is derived, not stored. While it lived on the grid, entering edit
+  // mode changed the layout react-grid-layout derives from its children, RGL
+  // reported `onLayoutChange`, and the resulting write rebuilt every panel -
+  // the cycle stage 4 had to unpick by hand. A grid object no longer changes at
+  // all when edit mode is toggled, so the cycle cannot form.
+  const editingGridId = useIbexStore((state) => state.editingGridId);
   const dataPlot = active?.dataPlot ?? [];
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -84,7 +90,6 @@ export const VisualizationPlot = ({
           item.y === findUpdatedLayout.y &&
           item.w === findUpdatedLayout.w &&
           item.h === findUpdatedLayout.h &&
-          item.static === findUpdatedLayout.static &&
           item.minH === minH &&
           item.minW === minW
         ) {
@@ -92,9 +97,14 @@ export const VisualizationPlot = ({
         }
 
         changed = true;
+        // `static` is deliberately dropped from what RGL reports back: it is
+        // derived from the UI slice, and persisting it here is what used to
+        // turn a mode toggle into a full layout write.
+        const { static: reportedStatic, ...layout } = findUpdatedLayout;
+        void reportedStatic;
         return {
           ...item,
-          ...findUpdatedLayout,
+          ...layout,
           minH,
           minW,
         };
@@ -149,7 +159,7 @@ export const VisualizationPlot = ({
                 y: plotData.y,
                 w: plotData.w,
                 h: plotData.h,
-                static: plotData.static,
+                static: plotData.i === editingGridId,
                 minH: minHeightOf(plotData),
                 minW: minWidthOf(plotData),
               }}

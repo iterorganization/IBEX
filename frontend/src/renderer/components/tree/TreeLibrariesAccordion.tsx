@@ -65,8 +65,9 @@ export const TreeLibrariesAccordion = ({
   getCurrentSelectedURI,
 }: VisualizationTreeProps) => {
   const { active } = useIbexStore();
+  const editingGridId = useIbexStore((state) => state.editingGridId);
   const [editedDataPlot, setEditedDataPlot] = useState(
-    active?.dataPlot?.find((p) => p.isEditing),
+    active?.dataPlot?.find((p) => p.i === editingGridId),
   );
   const metadataGridLayout = useIbexStore(
     (state) => state.active?.metadataGridLayout,
@@ -85,8 +86,8 @@ export const TreeLibrariesAccordion = ({
   const previousEditedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setEditedDataPlot(active?.dataPlot?.find((p) => p.isEditing));
-  }, [active.dataPlot]);
+    setEditedDataPlot(active?.dataPlot?.find((p) => p.i === editingGridId));
+  }, [active.dataPlot, editingGridId]);
 
   useEffect(() => {
     const openAccordionToAccessNodes = async () => {

@@ -496,21 +496,27 @@ export const VisualizationTree = ({
         checkedNodeURI: [...nodes],
       };
 
+      const { editingGridId, setEditingGrid } = useIbexStore.getState();
+
       try {
         let findEditablePlot = updatedActive.dataPlot.find(
-          (plot) => plot.isEditing,
+          (plot) => plot.i === editingGridId,
         );
 
         if (!findEditablePlot) {
           updatedActive = await handleNewPlot(nodes, updatedActive);
-          findEditablePlot = updatedActive.dataPlot.find(
-            (plot) => plot.isEditing,
-          );
+          // `handleNewPlot` appends the grid it built, and that grid is the one
+          // the user is now editing.
+          findEditablePlot =
+            updatedActive.dataPlot[updatedActive.dataPlot.length - 1];
+          setEditingGrid(findEditablePlot?.i ?? null);
         } else {
           if (nodes.length === 0) {
+            // Unchecking the last node removes the grid, so nothing is edited.
             updatedActive.dataPlot = active.dataPlot.filter(
-              (plot) => !plot.isEditing,
+              (plot) => plot.i !== editingGridId,
             );
+            setEditingGrid(null);
           } else {
             updatedActive = await handleExistingPlot(
               nodes,

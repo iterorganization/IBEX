@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfigSync } from '../config';
-import { ConfigurationState } from 'src/renderer/types';
+import { TestState } from 'src/renderer/types';
 export default {
   initialize() {
     const config = getConfigSync();
@@ -113,7 +113,7 @@ export default {
 
     ipcMain.handle(
       'setTestState',
-      async (event, testState: Partial<ConfigurationState>) => {
+      async (event, testState: Partial<TestState>) => {
         const win = BrowserWindow.getAllWindows()[0]; // ou autre moyen d'avoir ta fenêtre principale
         if (win) {
           win.webContents.send('updateTestState', testState);
@@ -127,13 +127,10 @@ export default {
       const win = BrowserWindow.getAllWindows()[0];
       if (!win) return null;
 
-      return new Promise<ConfigurationState>((resolve) => {
+      return new Promise<TestState>((resolve) => {
         const replyChannel = 'getTestState:reply';
 
-        const listener = (
-          _event: Electron.IpcMainEvent,
-          state: ConfigurationState,
-        ) => {
+        const listener = (_event: Electron.IpcMainEvent, state: TestState) => {
           ipcMain.removeListener(replyChannel, listener);
           resolve(state);
         };

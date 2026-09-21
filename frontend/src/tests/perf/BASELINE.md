@@ -218,3 +218,45 @@ The inverse matters as much as the projection. `dataManipulation.ts` and
 flip one field, and `setState` replaces `configurations`/`active` wholesale — so
 without `mergeTestState` the first such round trip would silently empty every
 plot in the store. The two ship together and must stay together.
+
+## After moving edit mode out of the configuration (stage 7)
+
+| Scenario                   | requests | redraws | renders | ms   |
+| -------------------------- | -------- | ------- | ------- | ---- |
+| toggle edit mode (UI flag) | 0        | 1       | 4       | 930  |
+| coordinate slider, 2 steps | 0        | 6       | 28      | 1553 |
+| metadata panel, first open | 2        | 2       | 4       | 804  |
+| metadata panel, revisit    | 0        | 6       | 40      | 1137 |
+| idle (no interaction)      | 0        | 0       | 0       | 2133 |
+
+Unchanged again, and again that is the result: the counts were already at their
+floor for this scenario. What changed is what produces them.
+
+`isEditing` was a boolean on every grid that only one grid could ever hold —
+`handleEditGrid` cleared it on all the others on its way through, and stage 4
+had to add explicit identity preservation so that clearing it did not re-render
+every panel. It is now `editingGridId` in a `ui` slice, so entering or leaving
+edit mode writes one string and touches **no grid object at all**. The panels
+read it through a boolean selector, so only the two whose flag actually flips
+re-render.
+
+`static` went with it. It was a persisted grid field always equal to
+`isEditing`, and that is what made the stage-4 write cycle possible: setting it
+changed the layout react-grid-layout derives from its children, RGL reported
+`onLayoutChange`, and the report was written back. It is now derived where the
+`data-grid` prop is built, and `handleUpdateLayout` drops `static` from what RGL
+reports. The cycle cannot form rather than being unpicked after the fact.
+
+The remaining 1 redraw on the toggle is the toggled panel itself: its Plotly
+`config` genuinely changes (a grid in edit mode is the interactive one). The
+guard — the _untouched_ heatmap redrawing 0 times — still passes.
+
+### One translation to be careful with
+
+`fetchErrorBandsInConfig` used to locate its grid with
+`dataPlot.find((d) => d.isEditing)`, so it returned early whenever nothing was
+being edited. Passing each panel its own id instead looks equivalent and is not:
+`HoverButtons`' effect runs on mount for every panel with `displayErrorBand`
+defaulting to true, so every panel started fetching error bands as it appeared —
+`metadata panel, revisit` went from 0 requests to 12 before this was caught by
+the benchmark. It takes the editing grid's id, whichever grid that is.
