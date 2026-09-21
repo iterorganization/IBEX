@@ -260,3 +260,25 @@ being edited. Passing each panel its own id instead looks equivalent and is not:
 defaulting to true, so every panel started fetching error bands as it appeared —
 `metadata panel, revisit` went from 0 requests to 12 before this was caught by
 the benchmark. It takes the editing grid's id, whichever grid that is.
+
+### The metadata and customization panels follow (stage 7, second half)
+
+`metadataGridLayout` and `customizedGridLayout` joined `editingGridId` in the
+`ui` slice, so opening either panel writes one field and leaves the
+configuration - and every grid in it - untouched. Counts are unchanged again
+(0/1/4, 0/6/28, 2/2/4, 0/6/40, 0/0/0); the `JSON.stringify` memos
+`TreeLibrariesAccordion` needed to stabilise those two selectors are gone, since
+both are now plain ids.
+
+Moving them exposed an invariant that the old model held by accident. While the
+ids lived on the configuration, clearing the configuration took them with it.
+As session state they outlive it - and a stale `customizing` is not harmless:
+`TreeLibrary.handleDisableTree` disables the whole node tree whenever a panel is
+open, so an id belonging to a configuration that no longer exists leaves the
+tree dead with no panel on screen to explain why. Eight e2e specs failed on it,
+all of them reporting that checking a node plotted nothing.
+
+The fix belongs in the store, not in the specs: `pruneUiState` drops any ui id
+that does not name a grid of the active configuration, and `setActive`,
+`removeConfiguration` and `setState` apply it. Anyone adding a field to the `ui`
+slice that references a grid must add it there too.

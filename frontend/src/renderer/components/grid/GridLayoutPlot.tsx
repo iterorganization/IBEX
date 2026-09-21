@@ -266,7 +266,8 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
       (item: DataGridPlot) => item.i !== id,
     );
     // Deleting the grid being edited leaves edit mode; deleting another one
-    // leaves the tree selection alone.
+    // leaves the tree selection alone. The panels keyed on this grid close
+    // with it - `updatedConfiguration` below prunes them.
     const stillEditing = newDataPlot.some((item) => item.i === editingGridId);
     if (!stillEditing) setEditingGrid(null);
     const checkedNodeURI = stillEditing ? active.checkedNodeURI : [];
@@ -387,12 +388,9 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
    * Inspect metadata of plot
    */
   const handleInspectMetadata = useCallback((id: string) => {
-    const { active, updatedConfiguration } = useIbexStore.getState();
-    const updatedActive: Configuration = {
-      ...active,
-      metadataGridLayout: id,
-    };
-    updatedConfiguration(updatedActive);
+    // Which panel is open is not part of the saved configuration, so opening
+    // one no longer replaces it.
+    useIbexStore.getState().setMetadataGrid(id);
   }, []);
 
   /**
@@ -400,12 +398,7 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
    */
   const handleCustomization = useCallback(
     (id: string, typeOfEdition: CustomizedGridType) => {
-      const { active, updatedConfiguration } = useIbexStore.getState();
-      const updatedActive: Configuration = {
-        ...active,
-        customizedGridLayout: { id: id, type: typeOfEdition },
-      };
-      updatedConfiguration(updatedActive);
+      useIbexStore.getState().setCustomizing({ id, type: typeOfEdition });
     },
     [],
   );

@@ -1,3 +1,5 @@
+import { CustomizedGrid } from '..';
+
 /**
  * Transient state: what the session is doing, as opposed to what the
  * configuration *is*. None of it is written to `<name>IbexState.json`.
@@ -14,5 +16,13 @@ export interface UiState {
    */
   editingGridId: string | null;
 
+  /** The grid whose metadata panel is open, or `null`. */
+  metadataGridId: string | null;
+
+  /** The grid whose customization panel is open, and which half of it. */
+  customizing: CustomizedGrid | null;
+
   setEditingGrid?: (id: string | null) => void;
+  setMetadataGrid?: (id: string | null) => void;
+  setCustomizing?: (customizing: CustomizedGrid | null) => void;
 }

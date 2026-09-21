@@ -88,6 +88,8 @@ export const projectTestState = (state: TestState): TestState => ({
   configurations: state.configurations?.map(projectConfiguration) ?? [],
   active: state.active ? projectConfiguration(state.active) : state.active,
   editingGridId: state.editingGridId ?? null,
+  metadataGridId: state.metadataGridId ?? null,
+  customizing: state.customizing ?? null,
 });
 
 /**

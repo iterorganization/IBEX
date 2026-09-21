@@ -15,7 +15,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SimplePlotly, TabsListCustom } from '../../components';
 import {
   ArraySummaryResponse,
-  Configuration,
   DataGridPlot,
   DataPlotly,
   PlotCoordinatesResponse,
@@ -248,7 +247,8 @@ export const VisualizationMetaData = () => {
   const [containerWidth, setContainerWidth] = useState(0);
   const WIDTH_PLOT = Math.floor(containerWidth * (5 / 12));
   const HEIGHT_PLOT = 390;
-  const { active, updatedConfiguration } = useIbexStore();
+  const { active } = useIbexStore();
+  const metadataGridId = useIbexStore((state) => state.metadataGridId);
   const [tabsValue, setTabsValue] = useState<string | null>();
   const [itemDataGrid, setItemDataGrid] = useState<DataGridPlot | null>(null);
   const [dataGridLayout, setDataGridLayout] = useState<DataGridPlot | null>(
@@ -259,9 +259,9 @@ export const VisualizationMetaData = () => {
    * Handle find grid layout corresponding to the selected tab
    */
   useEffect(() => {
-    if (active?.metadataGridLayout) {
+    if (metadataGridId) {
       const data = active.dataPlot.find(
-        (item: DataGridPlot) => item.i === active.metadataGridLayout,
+        (item: DataGridPlot) => item.i === metadataGridId,
       );
       if (data) {
         setDataGridLayout(data);
@@ -300,12 +300,9 @@ export const VisualizationMetaData = () => {
    * Handle the switch grid event
    */
   const closeWithoutSaving = useCallback(() => {
-    const updatedActive: Configuration = {
-      ...active,
-      metadataGridLayout: null,
-    };
-    updatedConfiguration(updatedActive);
-  }, [active]);
+    // Closing the panel is UI state; the configuration is untouched.
+    useIbexStore.getState().setMetadataGrid(null);
+  }, []);
 
   /**
    * Handle selected tab change

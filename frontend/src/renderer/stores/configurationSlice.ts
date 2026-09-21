@@ -1,10 +1,15 @@
 import { StateCreator } from 'zustand';
-import { ConfigurationState } from 'src/renderer/types';
+import { ConfigurationState, ibexState } from 'src/renderer/types';
+import { pruneUiState } from './uiSlice';
 
-export const configurationSlice: StateCreator<ConfigurationState> = (
-  set,
-  get,
-) => ({
+// Typed against the whole store, not just its own slice: `pruneUiState` below
+// reads and writes the ui fields, because the invariant it enforces spans both.
+export const configurationSlice: StateCreator<
+  ibexState,
+  [],
+  [],
+  ConfigurationState
+> = (set, get) => ({
   configurations: [],
   active: null,
 
@@ -49,6 +54,7 @@ export const configurationSlice: StateCreator<ConfigurationState> = (
       return {
         configurations: updatedConfigurations,
         active: updateActive,
+        ...pruneUiState(state, updateActive),
       };
     });
   },
@@ -61,14 +67,17 @@ export const configurationSlice: StateCreator<ConfigurationState> = (
       return {
         ...state,
         active: configuration,
+        ...pruneUiState(state, configuration),
       };
     });
   },
   setState: (newState) => {
-    set((state) => ({
-      ...state,
-      ...newState,
-    }));
+    set((state) => {
+      const merged = { ...state, ...newState };
+      // The e2e bridge can replace the active configuration wholesale, so the
+      // same invariant applies here.
+      return { ...merged, ...pruneUiState(merged, merged.active) };
+    });
   },
 
   getState: () => {

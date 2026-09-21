@@ -253,7 +253,7 @@ describe('Reactivity benchmark', function () {
       await setMetadataPanel(lineGridId);
       await waitForValue(
         'metadata panel open',
-        async () => Boolean((await getTestState()).active.metadataGridLayout),
+        async () => Boolean((await getTestState()).metadataGridId),
         true,
         undefined,
         SLOW.retries,
@@ -265,7 +265,7 @@ describe('Reactivity benchmark', function () {
       await setMetadataPanel(null);
       await waitForValue(
         'metadata panel closed',
-        async () => Boolean((await getTestState()).active.metadataGridLayout),
+        async () => Boolean((await getTestState()).metadataGridId),
         false,
         undefined,
         SLOW.retries,
@@ -274,7 +274,7 @@ describe('Reactivity benchmark', function () {
       await setMetadataPanel(lineGridId);
       await waitForValue(
         'metadata panel reopened',
-        async () => Boolean((await getTestState()).active.metadataGridLayout),
+        async () => Boolean((await getTestState()).metadataGridId),
         true,
         undefined,
         SLOW.retries,
@@ -350,9 +350,5 @@ async function setGridEditing(gridId: string, editing: boolean) {
  * measured is the panel's data fetching, not the button that opens it.
  */
 async function setMetadataPanel(gridId: string | null) {
-  const state = await getTestState();
-  await setTestState({
-    configurations: state.configurations,
-    active: { ...state.active, metadataGridLayout: gridId },
-  });
+  await setTestState({ metadataGridId: gridId });
 }

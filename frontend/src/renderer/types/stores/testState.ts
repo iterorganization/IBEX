@@ -1,4 +1,4 @@
-import { Configuration } from '..';
+import { Configuration, CustomizedGrid } from '..';
 
 /**
  * The shape the E2E bridge exchanges: the configuration and the transient state
@@ -12,4 +12,6 @@ export interface TestState {
   configurations: Configuration[];
   active: Configuration | null;
   editingGridId: string | null;
+  metadataGridId: string | null;
+  customizing: CustomizedGrid | null;
 }

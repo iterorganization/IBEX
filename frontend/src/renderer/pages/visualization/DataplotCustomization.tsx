@@ -41,6 +41,7 @@ export const DataplotCustomization = () => {
   const WIDTH_PLOT = Math.floor(containerWidth * (6 / 12));
   const HEIGHT_PLOT = 390;
   const { active, updatedConfiguration } = useIbexStore();
+  const customizing = useIbexStore((state) => state.customizing);
   const [tabsValue, setTabsValue] = useState<string | null>();
   const [customizedDataGrid, setCustomizedDataGrid] =
     useState<DataGridPlot | null>(null);
@@ -77,11 +78,9 @@ export const DataplotCustomization = () => {
    * Handle find grid layout corresponding to the selected tab
    */
   useEffect(() => {
-    if (active?.customizedGridLayout) {
+    if (customizing) {
       const data = structuredClone(
-        active.dataPlot.find(
-          (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
-        ),
+        active.dataPlot.find((item: DataGridPlot) => item.i === customizing.id),
       );
       if (data) {
         setDataGridLayout(data);
@@ -119,30 +118,24 @@ export const DataplotCustomization = () => {
    * Handle close of customization
    */
   const closeWithoutSaving = useCallback(() => {
-    // Closing the panel changes one field; there is nothing to deep-copy.
-    const updatedActive: Configuration = {
-      ...active,
-      customizedGridLayout: null,
-    };
-    updatedConfiguration(updatedActive);
-  }, [active]);
+    // Closing the panel is UI state; the configuration is untouched.
+    useIbexStore.getState().setCustomizing(null);
+  }, []);
 
   /**
    * Handle save & close of customization
    */
   const saveAndClose = useCallback(() => {
+    useIbexStore.getState().setCustomizing(null);
     const updatedActive: Configuration = {
       ...active,
-      customizedGridLayout: null,
       saved: false,
     };
     const oldDataGrid = updatedActive.dataPlot.find(
-      (dp) => dp.i === active.customizedGridLayout.id,
+      (dp) => dp.i === customizing.id,
     );
     const updatedDataPlot: DataGridPlot[] = [
-      ...updatedActive.dataPlot.filter(
-        (dp) => dp.i !== active.customizedGridLayout.id,
-      ),
+      ...updatedActive.dataPlot.filter((dp) => dp.i !== customizing.id),
       customizedDataGrid,
     ];
 
@@ -306,7 +299,7 @@ export const DataplotCustomization = () => {
                       <Grid.Col span={6}>
                         <Customization
                           customizedDataGrid={customizedDataGrid}
-                          customizedType={active.customizedGridLayout.type}
+                          customizedType={customizing.type}
                           selectedAccordion={selectedAccordion}
                           selectedPlot={selectedPlot}
                           applyToAllHeatmap={applyToAllHeatmap}
