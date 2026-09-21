@@ -5,28 +5,31 @@ import { Notifications } from '@mantine/notifications';
 import { ModalsProvider } from '@mantine/modals';
 import { useIbexStore } from './stores';
 import { ConfigurationState } from './types';
+import { mergeTestState, projectTestState } from './utils';
 
 export function App() {
-  const { setState, getState } = useIbexStore();
-
   useEffect(() => {
+    // The store is read at call time rather than subscribed to: this is the
+    // root component, so a subscription here re-renders the whole tree on every
+    // store write, for a bridge only the e2e suite ever uses.
     const updateHandler = (
-      event: Electron.IpcRendererEvent,
-      testState: ConfigurationState,
+      _event: Electron.IpcRendererEvent,
+      testState: Partial<ConfigurationState>,
     ) => {
-      setState(testState);
+      const { setState, getState } = useIbexStore.getState();
+      // The snapshot the spec sends back lost its payloads on the way out, so
+      // they are re-attached from what the store still holds.
+      setState(mergeTestState(testState, getState()));
     };
 
     const getStateHandler = (
       _event: Electron.IpcRendererEvent,
       replyChannel: string,
     ) => {
-      const fullState = getState();
-      const { configurations, active } = fullState;
-
-      // N'envoie que ce qui est sérialisable
-      const serializableState: ConfigurationState = { configurations, active };
-      window.api.send(replyChannel, serializableState);
+      // Sends the configuration and the derived vectors, never the bulk
+      // payloads - see `utils/testState.ts` for the contract. This also drops
+      // the actions, which are not structured-cloneable.
+      window.api.send(replyChannel, projectTestState(useIbexStore.getState()));
     };
 
     window.api.onUpdateTestState(updateHandler);

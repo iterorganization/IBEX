@@ -177,3 +177,44 @@ Two notes for whoever runs this again:
   downsamples a 2-D node (`imas_python_source.py:488` and `:1369` gate on
   `ndim == 1`), so the whole matrix crosses the wire at full resolution. That is
   a separate, API-shaped change.
+
+## After shrinking the e2e state bridge (stage 6)
+
+| Scenario                   | requests | redraws | renders | ms   |
+| -------------------------- | -------- | ------- | ------- | ---- |
+| toggle edit mode (UI flag) | 0        | 1       | 4       | 945  |
+| coordinate slider, 2 steps | 0        | 6       | 28      | 2146 |
+| metadata panel, first open | 2        | 2       | 4       | 810  |
+| metadata panel, revisit    | 0        | 6       | 40      | 1136 |
+| idle (no interaction)      | 0        | 0       | 0       | 2130 |
+
+Every count is unchanged, which is the point: this stage moves no renderer code,
+only what the test bridge is allowed to serialize.
+
+`getStateHandler` used to hand Electron's structured clone — and then the
+WebDriver JSON bridge — the whole store, payloads included. `utils/testState.ts`
+now drops four families on the way out (`plot[].yData`,
+`plot[].error_bands[].yData`, `coordinates[].data`, `geometries[].x`/`.y`) and
+re-attaches them on the way back in. The derived vectors `plot.x`, `plot.y`,
+`plot.customdata` and `error_bands[].array` still cross: the specs assert exact
+floats on them, and they are a single row, so they stay small at any entry size.
+
+Measured on `imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106`, one
+panel plotting `equilibrium/time_slice/profiles_2d/psi` (coordinate shapes
+`[871,1,65] [871,1,129] [871,1] [871]`):
+
+| One `getTestState()` poll | before               | after              |
+| ------------------------- | -------------------- | ------------------ |
+| wall clock                | `ScriptTimeoutError` | 52 ms, then 5-6 ms |
+| snapshot size             | the psi matrix       | 17 kB              |
+
+The "before" column is not an estimate — the old handler was restored, the app
+relaunched, and the same measurement re-run: WebDriver gives up before the
+renderer finishes serializing. That is what `BASELINE.md` meant by "drive it
+from the DOM"; the specs can now poll the store on a production entry instead.
+
+The inverse matters as much as the projection. `dataManipulation.ts` and
+`reactivity.perf.spec.ts` read the whole state and write it straight back to
+flip one field, and `setState` replaces `configurations`/`active` wholesale — so
+without `mergeTestState` the first such round trip would silently empty every
+plot in the store. The two ship together and must stay together.
