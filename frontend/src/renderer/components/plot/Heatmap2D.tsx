@@ -413,6 +413,7 @@ export const Heatmap2D = ({
                     <Text>{targetAxis}</Text>
                     <Select
                       label=""
+                      data-testid={`heatmap-axis-${targetAxis}-${itemDataGrid.i}`}
                       value={
                         itemDataGrid.coordinates.find(
                           (coord: Coordinates) =>

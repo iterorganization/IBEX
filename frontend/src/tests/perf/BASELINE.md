@@ -334,3 +334,87 @@ what the transposition and range stages do.
 the key algebra and the sweep: 16 tests, no Electron, no renderer, ~20 ms. One
 constraint for anything added under it — import relatively, not through the
 `src/*` alias, which ts-node does not resolve without `tsconfig-paths/register`.
+
+## After making a transposition a named payload (stage 9)
+
+| Scenario                   | requests | redraws | renders | payloads | elements | derived | ms   |
+| -------------------------- | -------- | ------- | ------- | -------- | -------- | ------- | ---- |
+| toggle edit mode (UI flag) | 0        | 1       | 4       | 8        | 25785    | 0       | 952  |
+| coordinate slider, 2 steps | 0        | 6       | 28      | 8        | 25785    | 0       | 1851 |
+| swap two axes              | 0        | 3       | 10      | 9        | 50985    | 1       | 988  |
+| swap the same axes back    | 0        | 3       | 10      | 9        | 50985    | 1       | 920  |
+| metadata panel, first open | 2        | 2       | 4       | 11       | 50991    | 1       | 785  |
+| metadata panel, revisit    | 0        | 6       | 40      | 9        | 50985    | 1       | 1090 |
+| idle (no interaction)      | 0        | 0       | 0       | 9        | 50985    | 1       | 2237 |
+
+The existing rows are unchanged. The two new ones are the stage, and the column
+that carries it is `derived`: how many arrays the session computed from another
+array rather than fetching.
+
+Swapping two axes derives one payload - the transposed psi matrix, 25200
+elements on top of the 25785 already resident. Swapping the same two axes back
+derives **nothing**. That is the whole point of the change: a transposed matrix
+is now a payload with a name, and the name is the permutation _composed onto the
+source key_, so going back composes to the identity and names the untransposed
+array the registry still holds. Undoing a transposition moves no bytes at all.
+
+Composition is what makes this work, and it is worth being precise about. A
+transposition permutes axes - `out.dim[k] = in.dim[p[k]]` - so applying `q` to
+an array already held as the base under `p` leaves the base under `p[q[k]]`.
+Keys therefore never stack: every axis order of one payload names one entry,
+whichever route reached it. `transposedKey` in the registry does this and
+`payloadRegistry.test.ts` pins it, including the swap-and-swap-back identity.
+
+The `elements` column goes up and stays up, from 25785 to 50985. That is the
+trade and it is deliberate: the sweep treats a payload and every view derived
+from it as one family, so a live base keeps its views and a live view keeps its
+base. Freeing the untransposed array the moment the user looks at the transposed
+one would make going back cost a full transpose again. The family is bounded by
+what the user actually asked for, and deleting the grid still frees all of it -
+the `metadata panel` rows show the sweep still running (11 entries while that
+panel fetches, 9 afterwards).
+
+### What this stage is not
+
+The plan called for a stride scheme - `{ value, shape, strides, offset }` - so a
+transposition would permute strides and move nothing. That is deferred to stage
+11 by agreement. A stride representation only pays once something _reads through
+it_; while the derived vectors still live in the store, every transform has to
+materialise at the boundary anyway, so introducing a second array representation
+now would add a translation layer without removing a copy. `transposeAxis`,
+`transposeMatrix`, `transposeDataGrid` and `reapplyAxisOrder` therefore all
+stay - the back end still answers in default axis order, so there is still
+something to re-apply after a re-fetch.
+
+### The clones that went with it
+
+Three deep copies on the transposition path are gone, replaced by
+`utils/cloneGrid.ts`. `cloneGridStructure` copies every object a transform
+assigns fields on - the grid, each coordinate, each trace, each error band, each
+geometry, the axis descriptors - and shares the arrays hanging off them.
+
+- `swapAxis` deep-cloned **every grid of the active configuration** to modify
+  one. It now copies that one grid's structure and keeps the others by
+  reference, so the panels showing them do not re-render either.
+- `getErrorYVectors` deep-cloned every error payload to replace one derived
+  vector per band. It runs on every slider tick.
+- `transposeDataGrid` cloned the coordinates only to read `axeIndex` off them,
+  and `reapplyAxisOrder` cloned a whole grid to build a temporary one.
+
+Sharing arrays between a grid and its replacement is only sound because nothing
+writes _into_ a payload: a grep for element assignment, `push` and `splice` on
+`yData` and `coordinate.data` finds nothing anywhere in the renderer. Transforms
+replace arrays wholesale. Anything added later that edits a payload in place
+would corrupt every grid sharing it, which is what the note in `cloneGrid.ts`
+says and what freezing on registration will eventually enforce.
+
+### On the numbers
+
+The fixture matrix is 3x1x120x70, so the transpose this stage avoids is
+sub-millisecond and the `ms` column cannot show it - the counts are the proof,
+not the timings. The saving is one tfjs transpose plus one `array()`
+materialisation per trace and per error band, and it scales with the payload:
+on the ITER entry whose coordinates are `[871,1,65] [871,1,129]` it is the
+difference between rebuilding a 112k-element matrix and a `Map` lookup. That
+real-data pass was not re-run for this stage; the next one worth doing is after
+stage 11, when the slider row finally moves.

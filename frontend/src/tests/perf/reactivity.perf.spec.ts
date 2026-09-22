@@ -14,6 +14,7 @@ import {
   findCssElementAndClickIt,
   getDatasetPath,
   resetAppState,
+  selectMantineOption,
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
@@ -244,6 +245,61 @@ describe('Reactivity benchmark', function () {
       snapshot.redraws[lineGridId] ?? 0,
       'stepping the heatmap slider must not redraw the 1-D panel',
     ).to.equal(0);
+
+    await setGridEditing(heatmapGridId, false);
+  });
+
+  it('swapping two axes back reuses the payload it started from', async () => {
+    // A transposed matrix is a payload of its own, named by composing the
+    // permutation onto the source key. Swapping back composes to the identity
+    // and so names the *untransposed* base, which the registry still holds -
+    // undoing a transposition must therefore move no bytes and fetch nothing.
+    await setGridEditing(heatmapGridId, true);
+
+    const axisNameAt = async (axeIndex: number) =>
+      (await getTestState()).active.dataPlot[0].coordinates.find(
+        (coordinate) => coordinate.axeIndex === axeIndex,
+      ).name;
+    const xName = await axisNameAt(0);
+    const yName = await axisNameAt(1);
+
+    /** Puts `name` on the x axis and waits for the store to report it there. */
+    const putOnXAxis = async (name: string) => {
+      await selectMantineOption(`heatmap-axis-x-${heatmapGridId}`, name);
+      await waitForValue(
+        `x axis is ${name}`,
+        async () => axisNameAt(0),
+        name,
+        undefined,
+        SLOW.retries,
+        SLOW.delay,
+      );
+    };
+
+    const swapped = await measure('swap two axes', async () => {
+      await putOnXAxis(yName);
+    });
+    expect(
+      dataRequests(swapped),
+      'transposing is a view change, not a fetch',
+    ).to.have.length(0);
+    const derivations = swapped.payloads?.derivations ?? 0;
+    expect(
+      derivations,
+      'the transposed matrix must be registered as a derived payload',
+    ).to.be.greaterThan(0);
+
+    const restored = await measure('swap the same axes back', async () => {
+      await putOnXAxis(xName);
+    });
+    expect(
+      dataRequests(restored),
+      'undoing a transposition must not fetch',
+    ).to.have.length(0);
+    expect(
+      restored.payloads?.derivations ?? 0,
+      'undoing a transposition must reuse the untransposed payload',
+    ).to.equal(derivations);
 
     await setGridEditing(heatmapGridId, false);
   });

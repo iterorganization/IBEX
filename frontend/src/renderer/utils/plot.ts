@@ -43,6 +43,12 @@ import {
 } from './matrix';
 import * as tf from '@tensorflow/tfjs';
 import { containsFloat, removeSuffix, rgbToRgba } from './functions';
+import { cloneGridStructure } from './cloneGrid';
+import {
+  readPayload,
+  registerPayload,
+  transposedKey,
+} from '../stores/payloadRegistry';
 
 const defaultColorsRGB = [
   'rgb(31, 119, 180)',
@@ -2213,10 +2219,10 @@ export const transposeDataGrid = async (
   wantedAxeIndexOrder: number[],
   keepValueIndex?: boolean,
 ) => {
-  let actualAxeIndexOrder = (
-    structuredClone(updatedDataGrid.coordinates) as Coordinates[]
-  ).map((coord) => coord.axeIndex);
-  let transposedDataGrid = structuredClone(updatedDataGrid) as DataGridPlot;
+  let actualAxeIndexOrder = updatedDataGrid.coordinates.map(
+    (coord) => coord.axeIndex,
+  );
+  let transposedDataGrid = cloneGridStructure(updatedDataGrid);
   if (
     JSON.stringify(wantedAxeIndexOrder) !== JSON.stringify(actualAxeIndexOrder)
   ) {
@@ -2263,7 +2269,7 @@ export const reapplyAxisOrder = async (
 
   if (targetPlot) {
     // Transpose only the target plot through a temporary grid with default axeIndex
-    const tempGrid = structuredClone(updatedDataPlot) as DataGridPlot;
+    const tempGrid = cloneGridStructure(updatedDataPlot);
     tempGrid.plot = tempGrid.plot.filter((p) => p.name === targetPlot.name);
     tempGrid.coordinates.forEach((coord, index) => {
       coord.axeIndex = index;
@@ -2343,16 +2349,13 @@ export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
 }
 
 export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
-  // Get error bands vectors switch coordinates indexes
-  const updated_error_bands: ErrorBandData[] = structuredClone(
-    plot.error_bands,
-  );
-  for (const updated_error_band of updated_error_bands) {
-    updated_error_band.array = getVectorData(
-      coordinates,
-      updated_error_band.yData,
-    );
-  }
+  // Get error bands vectors switch coordinates indexes. Only `array` changes,
+  // and it is replaced rather than edited, so the band objects are copied and
+  // the payload each one points at is shared - this runs on every slider tick.
+  const updated_error_bands: ErrorBandData[] = plot.error_bands.map((band) => ({
+    ...band,
+    array: getVectorData(coordinates, band.yData),
+  }));
   return updated_error_bands;
 }
 
@@ -2508,13 +2511,25 @@ export const swapAxis = async (
     (coordinate) => coordinate.axeIndex === axeIndexToSwap,
   );
 
-  const updatedDataPlotList: DataGridPlot[] =
-    active && updatedConfiguration ? structuredClone(active.dataPlot) : null;
-  const updatedDataPlot = updatedDataPlotList
-    ? updatedDataPlotList.find(
-        (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
+  // Structural copies, not deep ones. A transposition replaces payload arrays,
+  // it never writes into them, so the swapped grid can share them with the one
+  // it replaces - and the grids this swap does not touch keep their identity,
+  // so the panels showing them do not re-render.
+  const usesStore = Boolean(active && updatedConfiguration);
+  const updatedDataPlot = cloneGridStructure(
+    usesStore
+      ? active.dataPlot.find(
+          (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
+        )
+      : itemDataGrid,
+  );
+  const updatedDataPlotList: DataGridPlot[] = usesStore
+    ? active.dataPlot.map((dataPlotToUpdate) =>
+        dataPlotToUpdate.i === itemDataGrid.i
+          ? updatedDataPlot
+          : dataPlotToUpdate,
       )
-    : (structuredClone(itemDataGrid) as DataGridPlot);
+    : null;
 
   // Swap axis
   updatedDataPlot.coordinates[actualTargetAxisIndex].axeIndex = axeIndexToSwap;
@@ -2712,37 +2727,102 @@ async function transposeMatrix(yData: AxisData, newPositions: number[]) {
   return dataTransposed;
 }
 
+/**
+ * The axis permutation that swapping two display axes applies to the payload.
+ *
+ * It depends only on the coordinates, and a transposition does not touch those,
+ * so it is computed once for the grid rather than once per trace.
+ */
+const transposePermutation = (
+  coordinates: Coordinates[],
+  axeIndexToSwap: number,
+  axeIndexOfTargetAxis: number,
+): number[] => {
+  // Initial position, reversed to get axeIndex order
+  const newPositions = coordinates
+    .map((coord) => coord.axeIndex)
+    .sort((a, b) => a - b)
+    .reverse();
+  // SWAP axeIndexOfTargetAxis with axeIndexToSwap
+  const tempSwap = newPositions[axeIndexOfTargetAxis];
+  newPositions[axeIndexOfTargetAxis] = newPositions[axeIndexToSwap];
+  newPositions[axeIndexToSwap] = tempSwap;
+  // Reverse for getting position => [0, 1, 3, 2]
+  newPositions.reverse();
+  return newPositions;
+};
+
+/** Permutes a shape the way `newPositions` permutes the data it describes. */
+const permuteShape = (shape: number[], newPositions: number[]): number[] =>
+  newPositions.map((axis) => shape[axis]);
+
+/**
+ * Transposes one payload, through the registry.
+ *
+ * The result is a payload in its own right, named by composing the permutation
+ * onto the source key, so an axis order reached twice is computed once. Swapping
+ * back composes to the identity and names the untransposed base, which is still
+ * resident because the sweep keeps a payload and its views together - so undoing
+ * a transposition moves no bytes at all.
+ *
+ * A trace whose payload has no key (one a transform already replaced) still
+ * transposes, it just cannot be memoised.
+ */
+const transposePayload = async (
+  payload: {
+    value: AxisData;
+    ref?: string;
+    shape?: number[];
+    /** Whether the caller stores a shape and therefore needs one back. */
+    needsShape: boolean;
+  },
+  newPositions: number[],
+): Promise<{ value: AxisData; ref?: string; shape?: number[] }> => {
+  const key = payload.ref
+    ? transposedKey(payload.ref, newPositions)
+    : undefined;
+  // Only the tensor can produce a shape the caller needs but cannot derive.
+  const known =
+    payload.needsShape && !payload.shape ? undefined : readPayload(key);
+  if (key && known) {
+    return {
+      value: known,
+      ref: key,
+      shape: payload.shape && permuteShape(payload.shape, newPositions),
+    };
+  }
+
+  const tensor = await transposeMatrix(payload.value, newPositions);
+  const transposed = (await tensor.array()) as AxisData;
+  if (key) registerPayload(key, transposed, tensor.shape);
+  return { value: transposed, ref: key, shape: tensor.shape };
+};
+
 async function transposeAxis(
   updatedDataPlot: DataGridPlot,
   axeIndexToSwap: number,
   axeIndexOfTargetAxis: number,
 ) {
+  const newPositions = transposePermutation(
+    updatedDataPlot.coordinates,
+    axeIndexToSwap,
+    axeIndexOfTargetAxis,
+  );
+
   // Modify each plot in graph
   for (const plotToTranspose of updatedDataPlot.plot) {
-    // DETERMINE WHICH AXIS TO TRANSPOSE
-    // Initial position
-    const newPositions: number[] = structuredClone(updatedDataPlot.coordinates)
-      .map((coord: Coordinates) => coord.axeIndex)
-      .sort((a: number, b: number) => a - b)
-      .reverse(); // Reverse to get axeIndex order
-    // SWAP axeIndexOfTargetAxis with axeIndexToSwap
-    const tempSwap = newPositions[axeIndexOfTargetAxis];
-    newPositions[axeIndexOfTargetAxis] = newPositions[axeIndexToSwap];
-    newPositions[axeIndexToSwap] = tempSwap;
-    // Reverse for getting position => [0, 1, 3, 2]
-    newPositions.reverse();
-
-    // Transpose dataY matrix
-    const tensorizedDataY = await transposeMatrix(
-      plotToTranspose.yData,
+    const transposedY = await transposePayload(
+      {
+        value: plotToTranspose.yData,
+        ref: plotToTranspose.yDataRef,
+        shape: plotToTranspose.shape,
+        needsShape: true,
+      },
       newPositions,
     );
-    const transposedDataY = (await tensorizedDataY.array()) as AxisData;
-    plotToTranspose.yData = transposedDataY;
-    // A transposed array is a different payload. Deriving a key for it is what
-    // the transposition stage does; until then the trace simply has none.
-    plotToTranspose.yDataRef = undefined;
-    plotToTranspose.shape = tensorizedDataY.shape;
+    plotToTranspose.yData = transposedY.value;
+    plotToTranspose.yDataRef = transposedY.ref;
+    plotToTranspose.shape = transposedY.shape;
 
     if (plotToTranspose?.error_bands) {
       for (const error_band of plotToTranspose.error_bands) {
@@ -2750,15 +2830,16 @@ async function transposeAxis(
           // Control to prevent from transposing error y axis when unplottable data
           continue;
         }
-        // Transpose each error band matrix
-        const tensorizedErrorBand = await transposeMatrix(
-          error_band.yData,
+        const transposedBand = await transposePayload(
+          {
+            value: error_band.yData,
+            ref: error_band.yDataRef,
+            needsShape: false,
+          },
           newPositions,
         );
-        const transposedErrorBand =
-          (await tensorizedErrorBand.array()) as AxisData;
-        error_band.yData = transposedErrorBand;
-        error_band.yDataRef = undefined;
+        error_band.yData = transposedBand.value;
+        error_band.yDataRef = transposedBand.ref;
       }
     }
   }

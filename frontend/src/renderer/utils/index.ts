@@ -1,3 +1,4 @@
+export * from './cloneGrid';
 export * from './fetchData';
 export * from './grid';
 export * from './matrix';

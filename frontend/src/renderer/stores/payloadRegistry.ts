@@ -77,9 +77,63 @@ const elementsOf = (shape: number[] | 'irregular' | undefined): number =>
 export const payloadKey = (endpoint: string, member: string): PayloadKey =>
   `${requestCacheKey(endpoint)}#${member}`;
 
-/** Names the result of applying one derivation step to another payload. */
+/**
+ * Names the result of applying one derivation step to another payload.
+ *
+ * `|` separates the steps, and cannot occur inside a base key: `requestCacheKey`
+ * percent-encodes every parameter value and the paths it keeps are fixed
+ * back-end routes.
+ */
 export const derivedKey = (base: PayloadKey, step: string): PayloadKey =>
   `${base}|${step}`;
+
+/** The request key a derived key was built from: everything before the steps. */
+export const baseOf = (key: PayloadKey): PayloadKey => {
+  const separator = key.indexOf('|');
+  return separator === -1 ? key : key.slice(0, separator);
+};
+
+/** The derivation steps of a key, in application order. */
+export const stepsOf = (key: PayloadKey): string[] => {
+  const separator = key.indexOf('|');
+  return separator === -1 ? [] : key.slice(separator + 1).split('|');
+};
+
+const TRANSPOSE = 'transpose:';
+
+const isIdentity = (permutation: number[]): boolean =>
+  permutation.every((axis, position) => axis === position);
+
+/**
+ * Names the transposition of `ref` by `permutation`, composed against the base.
+ *
+ * A transposition permutes axes: `out.dim[k] = in.dim[permutation[k]]`. Applying
+ * `q` to an array that is already the base under `p` therefore leaves the base
+ * under `p[q[k]]` - one step, never a stack of them. Two consequences, and both
+ * are the reason this is not a plain `derivedKey` call:
+ *
+ * - Swapping two axes and swapping them back composes to the identity, which
+ *   names the base itself. Undoing a transposition is a lookup, not a transpose.
+ * - Reaching the same axis order by different routes names the same entry.
+ */
+export const transposedKey = (
+  ref: PayloadKey,
+  permutation: number[],
+): PayloadKey => {
+  const steps = stepsOf(ref);
+  const last = steps[steps.length - 1];
+  const previous = last?.startsWith(TRANSPOSE)
+    ? last.slice(TRANSPOSE.length).split(',').map(Number)
+    : null;
+  const composed = previous
+    ? permutation.map((axis) => previous[axis])
+    : permutation;
+  const kept = previous ? steps.slice(0, -1) : steps;
+  const tail = isIdentity(composed)
+    ? kept
+    : [...kept, `${TRANSPOSE}${composed.join(',')}`];
+  return [baseOf(ref), ...tail].join('|');
+};
 
 /**
  * Records a payload under its key and returns that key.
@@ -100,6 +154,7 @@ export const registerPayload = (
   }
   payloads.set(key, { value, elements: elementsOf(shape) });
   stats.registered += 1;
+  if (key !== baseOf(key)) stats.derivations += 1;
   return key;
 };
 
@@ -157,8 +212,16 @@ export const sweep = (
   let freed = 0;
   let elements = 0;
 
+  // Reachability is per family, not per key: a payload and every view derived
+  // from it live and die together. Keeping the base of a reachable derivation
+  // is what makes undoing one free; keeping the derivations of a reachable base
+  // is what makes redoing one free. Both are bounded by what the user actually
+  // asked for, and a deleted grid takes the whole family with it.
+  const liveBases = new Set<PayloadKey>();
+  for (const key of reachable) liveBases.add(baseOf(key));
+
   for (const [key, entry] of payloads) {
-    if (reachable.has(key) || pins.has(key)) continue;
+    if (liveBases.has(baseOf(key)) || pins.has(key)) continue;
     freed += 1;
     elements += entry.elements;
     if (!audit) payloads.delete(key);

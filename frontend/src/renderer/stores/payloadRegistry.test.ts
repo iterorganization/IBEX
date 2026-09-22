@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import {
+  baseOf,
   clearPayloads,
   derivedKey,
   keysOf,
@@ -8,7 +9,9 @@ import {
   pin,
   readPayload,
   registerPayload,
+  stepsOf,
   sweep,
+  transposedKey,
   unpin,
 } from './payloadRegistry';
 import { requestCacheKey } from '../utils/requestCache';
@@ -94,6 +97,54 @@ describe('payloadRegistry', () => {
       expect(
         derivedKey(derivedKey(base, 'transpose:1,0'), 'range:1:4-8'),
       ).to.equal(`${base}|transpose:1,0|range:1:4-8`);
+    });
+
+    it('splits a key into the request that produced it and its steps', () => {
+      const base = payloadKey('/d?uri=x', 'value');
+      const derived = derivedKey(derivedKey(base, 'transpose:1,0'), 'r:2-9');
+
+      expect(baseOf(derived)).to.equal(base);
+      expect(stepsOf(derived)).to.deep.equal(['transpose:1,0', 'r:2-9']);
+      expect(baseOf(base)).to.equal(base);
+      expect(stepsOf(base)).to.deep.equal([]);
+    });
+  });
+
+  describe('transposition keys', () => {
+    const base = payloadKey('/data/plot_data?uri=x', 'value');
+
+    it('names the base itself when the permutation changes nothing', () => {
+      expect(transposedKey(base, [0, 1, 2])).to.equal(base);
+    });
+
+    it('composes onto the base instead of stacking steps', () => {
+      // out.dim[k] = in.dim[p[k]], so applying q to the base under p leaves the
+      // base under p[q[k]] - here [1,0,2] then [0,2,1] gives [1,2,0].
+      const once = transposedKey(base, [1, 0, 2]);
+      expect(transposedKey(once, [0, 2, 1])).to.equal(
+        `${base}|transpose:1,2,0`,
+      );
+    });
+
+    it('names the base again after a swap and a swap back', () => {
+      // This is what makes undoing a transposition free.
+      const swapped = transposedKey(base, [1, 0, 2]);
+      expect(swapped).to.not.equal(base);
+      expect(transposedKey(swapped, [1, 0, 2])).to.equal(base);
+    });
+
+    it('gives one name to an axis order reached by different routes', () => {
+      const viaOneSwap = transposedKey(base, [2, 1, 0]);
+      const viaThree = transposedKey(
+        transposedKey(transposedKey(base, [1, 0, 2]), [0, 2, 1]),
+        [1, 0, 2],
+      );
+      expect(viaThree).to.equal(viaOneSwap);
+    });
+
+    it('leaves the steps it does not understand alone', () => {
+      const ranged = derivedKey(base, 'range:1:4-8');
+      expect(transposedKey(ranged, [1, 0])).to.equal(`${ranged}|transpose:1,0`);
     });
   });
 
@@ -183,6 +234,47 @@ describe('payloadRegistry', () => {
       unpin('pinned');
       sweep(new Set());
       expect(readPayload('pinned')).to.deep.equal([3]);
+    });
+
+    it('keeps the base of a payload the store reaches through a view', () => {
+      // The store holds the transposed array; the untransposed one is what
+      // swapping back returns to, so freeing it would cost a full transpose.
+      const base = registerPayload('base', [1]);
+      const view = registerPayload(derivedKey(base, 'transpose:1,0'), [2]);
+
+      sweep(new Set([view]));
+
+      expect(readPayload(base)).to.deep.equal([1]);
+      expect(readPayload(view)).to.deep.equal([2]);
+    });
+
+    it('keeps the views of a payload the store still reaches', () => {
+      const base = registerPayload('base', [1]);
+      const view = registerPayload(derivedKey(base, 'transpose:1,0'), [2]);
+
+      sweep(new Set([base]));
+
+      expect(readPayload(view)).to.deep.equal([2]);
+    });
+
+    it('frees a whole family once nothing in it is reachable', () => {
+      const base = registerPayload('base', [1]);
+      registerPayload(derivedKey(base, 'transpose:1,0'), [2]);
+      registerPayload(derivedKey(base, 'range:1:4-8'), [3]);
+      const other = registerPayload('other', [4]);
+
+      const result = sweep(new Set([other]));
+
+      expect(result.freed).to.equal(3);
+      expect(readPayload(base)).to.equal(undefined);
+    });
+
+    it('counts a derivation apart from a fetched payload', () => {
+      const before = payloadStats().derivations;
+      const base = registerPayload('base', [1]);
+      registerPayload(derivedKey(base, 'transpose:1,0'), [2]);
+
+      expect(payloadStats().derivations).to.equal(before + 1);
     });
   });
 });
