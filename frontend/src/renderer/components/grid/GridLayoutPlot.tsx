@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
-  Axis,
   Configuration,
   Coordinates,
   CustomizedGridType,
@@ -14,16 +13,8 @@ import { Center, Container, Text } from '@mantine/core';
 import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
 import { countRender } from '../../utils/perf';
-import {
-  getArrayValueFromDependance,
-  getErrorYVectors,
-  getLastIndexedField,
-  getVectorData,
-  isSameAxisData,
-  limitSlidersToMaxLength,
-  normalizeIndices,
-  updateIndexFieldName,
-} from '../../utils';
+import { normalizeIndices } from '../../utils';
+import { lineVector } from '../../derive/vectors';
 import { MetaDataInfos } from '../../pages/visualization/VisualizationMetaData';
 import { HoverButtons } from './HoverButtons';
 
@@ -65,142 +56,19 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
   const [shouldDisplayMetadata, setShouldDisplayMetadata] = useState(false);
 
   /**
-   * updateslider coordinate value
+   * Move a coordinate's cursor.
+   *
+   * One store action writing integers and labels. What is drawn is derived from
+   * the payload and those integers at render time, so this no longer rebuilds
+   * every trace of this grid and of every grid synchronized with it - which is
+   * why its cost no longer depends on how big the payload is.
    */
-  const handleUpdateCoordinate = async (
-    coordinate: Coordinates,
-    valueIndex: number,
-  ) => {
-    // Read at call time rather than from a subscription: a slider tick must not
-    // depend on this component having re-rendered for the latest state.
-    const { active, updatedConfiguration } = useIbexStore.getState();
-    // Check if the coordinate has a target
-    const lastTargetLastName = getLastIndexedField(coordinate.target);
-    if (!lastTargetLastName)
-      return console.warn('No indexed field found in target');
-
-    const updatedActive: Configuration = {
-      ...active,
-      dataPlot: active.dataPlot.map((item: DataGridPlot) => {
-        const mainDataGrid = item.i === data.i;
-        const isSynchronized = data.synchronizedGrids.list.includes(item.i);
-        const coordWithSameName = item.coordinates.find(
-          (ic) => ic.name === coordinate.name,
-        );
-        const sameCoordinate =
-          coordWithSameName &&
-          isSameAxisData(coordinate.data, coordWithSameName.data);
-
-        if (mainDataGrid || (isSynchronized && sameCoordinate)) {
-          // Update main slider with new valueIndex & update synchronized ones matching with the same coordinate
-          const updatedCoordinatesValue = item.coordinates.map((coordItem) => {
-            const updatedPath = updateIndexFieldName(
-              coordItem.path,
-              lastTargetLastName,
-              valueIndex,
-            );
-            const updatedTarget = updateIndexFieldName(
-              coordItem.target,
-              lastTargetLastName,
-              valueIndex,
-            );
-
-            return {
-              ...coordItem,
-              path: updatedPath,
-              target: updatedTarget,
-              valueIndex:
-                coordItem.name === coordinate.name
-                  ? valueIndex
-                  : coordItem.valueIndex,
-            };
-          }) as Coordinates[];
-          limitSlidersToMaxLength(updatedCoordinatesValue);
-
-          const updatedXAxisData: Axis = {
-            ...item.xAxisData,
-            path: updateIndexFieldName(
-              item.xAxisData?.path || '',
-              lastTargetLastName,
-              valueIndex,
-            ),
-          };
-
-          // Get x values switch x dependances
-          const newXData = getArrayValueFromDependance(
-            updatedCoordinatesValue,
-            0,
-          );
-
-          const updatedPlot = item.plot.map((plotItem) => {
-            const updatedNodeUri = updateIndexFieldName(
-              plotItem.nodeUri,
-              lastTargetLastName,
-              valueIndex,
-            );
-
-            const updatedPath = updateIndexFieldName(
-              plotItem.path || '',
-              lastTargetLastName,
-              valueIndex,
-            );
-
-            const newYData = getVectorData(
-              updatedCoordinatesValue,
-              plotItem.yData,
-            );
-
-            if (plotItem?.error_bands?.length) {
-              const updated_error_bands = getErrorYVectors(
-                plotItem,
-                updatedCoordinatesValue,
-              );
-              let customdata;
-              if (plotItem.error_bands.length === 2) {
-                customdata = plotItem.error_bands[0].array.map((v, i) => [
-                  plotItem.error_bands[0].array[i],
-                  plotItem.error_bands[1].array[i],
-                ]);
-              } else {
-                customdata = plotItem.error_bands[0].array.map((v, i) => [
-                  plotItem.error_bands[0].array[i],
-                ]);
-              }
-
-              return {
-                ...plotItem,
-                x: [...newXData],
-                y: [...newYData],
-                customdata: customdata,
-                error_bands: updated_error_bands,
-                nodeUri: updatedNodeUri,
-                path: updatedPath,
-              };
-            } else {
-              return {
-                ...plotItem,
-                x: [...newXData],
-                y: [...newYData],
-                nodeUri: updatedNodeUri,
-                path: updatedPath,
-              };
-            }
-          });
-
-          return {
-            ...item,
-            coordinates: updatedCoordinatesValue,
-            plot: updatedPlot,
-            xAxisData: updatedXAxisData,
-          };
-        }
-
-        return item;
-      }) as DataGridPlot[],
-    };
-
-    updatedConfiguration(updatedActive);
-  };
+  const handleUpdateCoordinate = useCallback(
+    async (coordinate: Coordinates, valueIndex: number) => {
+      useIbexStore.getState().setCursor(data.i, coordinate.name, valueIndex);
+    },
+    [data.i],
+  );
 
   useEffect(() => {
     let forceToDisplayMetadata = false;
@@ -208,11 +76,9 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
     // Rule to force to show metadata when y data is of type string
     let isYDataString = false;
     for (const plot of data.plot) {
-      if (plot.y) {
-        const typeOfYData = typeof plot.y[0];
-        if (typeOfYData === 'string') {
-          isYDataString = true;
-        }
+      const drawn = lineVector(plot.yData, data.coordinates);
+      if (drawn && typeof drawn[0] === 'string') {
+        isYDataString = true;
       }
     }
 
@@ -434,6 +300,7 @@ export const GridLayoutPlot = memo(function GridLayoutPlot({
                   key={`metadata_${data.i}`}
                   gridLayoutKey={data.i}
                   data={plot}
+                  gridCoordinates={data.coordinates}
                   yAxis={plot.yaxis !== '' ? data.y2AxisData : data.yAxisData}
                   height={(heightGrid - 72).toString()} // 72px is equivalent to paddings (40px from top + 2rem for y padding)
                   tabsSelected={plot.path}

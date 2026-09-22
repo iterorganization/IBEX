@@ -3,9 +3,7 @@ import { DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
   fetchErrorBands,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
-  getVectorData,
   normalizeIndices,
   getInterpolationMethods,
   getUrisToInterpolate,
@@ -113,16 +111,8 @@ export const CustomizeInterpolation = ({
 
         // Update plot with interpolated data
         plot.shape = dataPlotInterpolated.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotInterpolated.data.value;
         plot.yDataRef = dataPlotInterpolated.data.valueRef;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
 
         plotIndex++;
       }

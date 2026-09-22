@@ -4,10 +4,8 @@ import {
   fetchDataPlot,
   fetchDownsamplingMethods,
   fetchErrorBands,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getUrisToInterpolate,
-  getVectorData,
   normalizeIndices,
   reapplyAxisOrder,
 } from '../../../utils';
@@ -108,16 +106,8 @@ export const CustomizeDownsampling = ({
 
         // Update plot with downsampled data
         plot.shape = dataPlotDownsampled.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotDownsampled.data.value;
         plot.yDataRef = dataPlotDownsampled.data.valueRef;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
 
         plotIndex++;
       }

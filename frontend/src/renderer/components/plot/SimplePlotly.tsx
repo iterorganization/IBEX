@@ -2,19 +2,14 @@ import { Center, Grid, Group, Select, Text } from '@mantine/core';
 import { Layout } from 'plotly.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
-import {
-  Configuration,
-  Coordinates,
-  DataGridPlot,
-  DataPlotly,
-} from 'src/renderer/types';
+import { Configuration, Coordinates, DataGridPlot } from 'src/renderer/types';
 import { VerticalSlider } from '../verticalSlider';
 import { useIbexStore } from '../../stores';
 import {
   compareByAxeIndex,
   emptyUserRelayout,
   getArrayValueFromDependance,
-  getErrorsAreaToPlot,
+  buildTraces,
   initPlotColors,
   isMatrixPlottable,
   mergeAxisRelayout,
@@ -23,6 +18,7 @@ import {
   swapAxis,
   UserRelayout,
 } from '../../utils';
+import { axisVector, lineVector } from '../../derive/vectors';
 import classes from './SimplePlotly.module.css';
 import { countRedraw, countRender } from '../../utils/perf';
 import { getPlotConfig } from './plotConfig';
@@ -62,23 +58,28 @@ export const SimplePlotly = ({
     [itemDataGrid.i],
   );
 
-  const dataToPlotWithErrorBands = useMemo(() => {
-    // getErrorsAreaToPlot writes connectgaps, customdata and hovertemplate onto
-    // each plot, and Plotly is handed the same objects, so they must not be the
-    // store's. Only the objects need copying though, plus the two vectors that
-    // are actually plotted: structuredClone used to deep-copy `yData` and every
-    // coordinate as well - megabytes, on every slider tick - when both are only
-    // read from here.
-    return getErrorsAreaToPlot(
-      itemDataGrid.plot.map((plot) => {
-        const plotCopy = { ...plot };
-        if (Array.isArray(plot.x)) plotCopy.x = [...plot.x] as DataPlotly['x'];
-        if (Array.isArray(plot.y)) plotCopy.y = [...plot.y] as DataPlotly['y'];
-        return plotCopy;
-      }),
-      itemDataGrid.coordinates,
-    );
-  }, [itemDataGrid.plot, itemDataGrid.coordinates]);
+  // The traces Plotly draws, derived from the payloads and the cursor. Plotly
+  // compares `data` by reference and mutates what it is handed, so this has to
+  // be one memo producing objects the store does not own - and the vectors in
+  // them are derived rather than copied out of the store, because the store no
+  // longer holds them.
+  const dataToPlotWithErrorBands = useMemo(
+    () => buildTraces(itemDataGrid.plot, itemDataGrid.coordinates),
+    [itemDataGrid.plot, itemDataGrid.coordinates],
+  );
+
+  /** The drawn row of each trace, for the checks that decide what to show. */
+  const drawnRows = useMemo(
+    () =>
+      itemDataGrid.plot.map((plot) =>
+        lineVector(plot.yData, itemDataGrid.coordinates),
+      ),
+    [itemDataGrid.plot, itemDataGrid.coordinates],
+  );
+  const drawnX = useMemo(
+    () => axisVector(itemDataGrid.coordinates, 0),
+    [itemDataGrid.coordinates],
+  );
   const coordsUsedInAxes: 1 | 2 = 1;
   const SELECT_AXIS_HEIGHT = 40; // Height of the select axis component
   // Plotly compares `layout` by reference, so the layout is derived in one
@@ -441,9 +442,7 @@ export const SimplePlotly = ({
           </Grid.Col>
         )}
 
-      {itemDataGrid.plot.some((plot) =>
-        [plot.x, plot.y].every(isMatrixPlottable),
-      ) ? (
+      {drawnRows.some((row) => [drawnX, row].every(isMatrixPlottable)) ? (
         <Grid.Col
           span="auto"
           pos="relative"
@@ -468,7 +467,8 @@ export const SimplePlotly = ({
           </div>
         </Grid.Col>
       ) : itemDataGrid.plot.some(
-          (plot) => ![plot.x, plot.y, plot.yData].some(isMatrixPlottable),
+          (plot, index) =>
+            ![drawnX, drawnRows[index], plot.yData].some(isMatrixPlottable),
         ) ? (
         <Grid.Col
           span="auto"

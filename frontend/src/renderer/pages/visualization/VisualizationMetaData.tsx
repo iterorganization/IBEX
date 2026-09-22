@@ -17,6 +17,7 @@ import {
   ArraySummaryResponse,
   DataGridPlot,
   DataPlotly,
+  Coordinates,
   PlotCoordinatesResponse,
   Axis,
   PlotDataResponse,
@@ -26,10 +27,13 @@ import {
   fetchDataPlot,
   getUrisToInterpolate,
 } from '../../utils';
+import { lineVector } from '../../derive/vectors';
 
 interface MetaDataInfosProps {
   gridLayoutKey: string;
   data: DataPlotly;
+  /** The grid's coordinates, so the drawn row can be derived; see `derive/vectors.ts`. */
+  gridCoordinates?: Coordinates[];
   yAxis: Axis;
   tabsSelected: string | null;
   height?: string;
@@ -151,10 +155,14 @@ const RenderMetaDataCoordinates = ({
 export const MetaDataInfos = ({
   gridLayoutKey,
   data,
+  gridCoordinates,
   yAxis,
   height,
   tabsSelected,
 }: MetaDataInfosProps) => {
+  // The drawn row, derived: the store holds the payload and the cursor, not the
+  // vector taken with it.
+  const drawn = lineVector(data.yData, gridCoordinates ?? []);
   const { active } = useIbexStore();
   const [coordinates, setCoordinates] = useState<PlotCoordinatesResponse[]>([]);
   const [summary, setSummary] = useState<ArraySummaryResponse>(null);
@@ -224,8 +232,8 @@ export const MetaDataInfos = ({
             {renderField('dimension', data?.dimensions.toString())}
             {renderSpoiler(
               'value',
-              data.y.length
-                ? data.y
+              drawn?.length
+                ? drawn
                 : (data.yData as string | number | (string | number)[]),
             )}
             {renderField('min', summary?.min)}
@@ -366,6 +374,7 @@ export const VisualizationMetaData = () => {
                         <MetaDataInfos
                           gridLayoutKey={dataGridLayout.i}
                           data={item}
+                          gridCoordinates={dataGridLayout.coordinates}
                           yAxis={
                             item.yaxis !== ''
                               ? dataGridLayout.y2AxisData

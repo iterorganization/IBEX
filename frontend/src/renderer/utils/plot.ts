@@ -10,7 +10,7 @@ import {
   DataGridPlot,
   DataOperation,
   DataPlotly,
-  ErrorBandData,
+  Datum,
   Geometry,
   FieldValueResponse,
   NodeInfoTypeEnum,
@@ -38,8 +38,10 @@ import {
   updateIndexFieldName,
 } from './uri';
 import {
+  compareByAxeIndex,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
+  getVectorData,
 } from './matrix';
 import { containsFloat, removeSuffix, rgbToRgba } from './functions';
 import { cloneGridStructure } from './cloneGrid';
@@ -54,6 +56,12 @@ import {
   transposedKey,
 } from '../stores/payloadRegistry';
 import { baseRank, sliceFromBase } from '../derive/ranges';
+import {
+  axisVector,
+  bandVectors,
+  customdataOf,
+  lineVector,
+} from '../derive/vectors';
 
 const defaultColorsRGB = [
   'rgb(31, 119, 180)',
@@ -75,7 +83,7 @@ const defaultColorsRGB = [
 export const plotData = (
   dataPlot: DataGridPlot,
   name: string,
-  xValue: number[],
+  /** Only its emptiness is read, to warn that a node holds nothing to draw. */
   yValue: number[],
   yData: AxisData,
   nodeUri: string,
@@ -91,8 +99,6 @@ export const plotData = (
   yDataRef?: string,
 ): DataGridPlot => {
   const trace: DataPlotly = {
-    x: xValue,
-    y: yValue,
     yData: yData,
     yDataRef: yDataRef,
     name: name ? `${name}_${labelUri}` : '',
@@ -133,55 +139,6 @@ export const plotData = (
     forceXyRatio: dataPlot?.forceXyRatio ?? false,
   };
 };
-
-/**
- * @description Deep equality for coordinate or axis data, with an early exit on the first
- * difference. Replaces `JSON.stringify(a) === JSON.stringify(b)`, which allocated a full
- * serialization of both arrays - megabytes, on every slider tick, for every grid - before
- * comparing them.
- *
- * Matches the semantics of the comparison it replaces: NaN equals NaN, and null equals
- * undefined, because JSON.stringify writes both as `null` inside an array.
- * @param a First value.
- * @param b Second value.
- * @returns Whether the two hold the same values.
- */
-export function isSameAxisData(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a == null || b == null) return a == null && b == null;
-
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-      return false;
-    }
-    for (let index = 0; index < a.length; index++) {
-      if (!isSameAxisData(a[index], b[index])) return false;
-    }
-    return true;
-  }
-
-  if (typeof a === 'number' && typeof b === 'number') {
-    // JSON.stringify writes NaN as null, so the old comparison saw two NaNs as equal.
-    return Number.isNaN(a) && Number.isNaN(b);
-  }
-
-  if (typeof a === 'object' && typeof b === 'object') {
-    // Complex values, stored as { r, i } pairs.
-    const keysOfA = Object.keys(a);
-    const keysOfB = Object.keys(b);
-    return (
-      keysOfA.length === keysOfB.length &&
-      keysOfA.every((key) =>
-        isSameAxisData(
-          (a as Record<string, unknown>)[key],
-          (b as Record<string, unknown>)[key],
-        ),
-      )
-    );
-  }
-
-  return false;
-}
 
 /**
  * @description Computes the default axis-ratio rule for a newly created grid, based on the 2D
@@ -250,14 +207,6 @@ export const handleNewPlot = async (
     nodes[0],
   );
 
-  let defaultXValue: number[] = [];
-  if (response.data.coordinates.length > 0) {
-    defaultXValue = getFirstArrayValueFromShape(
-      response.data.coordinates[0].value,
-      response.data.coordinates[0].shape as number[],
-    );
-  }
-
   const defaultYValue = getFirstArrayValueFromShape(
     response.data.value,
     response.data.shape as number[],
@@ -266,7 +215,6 @@ export const handleNewPlot = async (
   const updatedPlot: DataGridPlot = plotData(
     newGrid,
     yAxis.name,
-    defaultXValue,
     defaultYValue,
     response.data.value,
     defaultUri,
@@ -360,18 +308,6 @@ const updateInterpolatedPlots = async (
       interpolatedDataPlot.coordinates = formattedCoordinates;
     }
 
-    const wantedX = getArrayValueFromDependance(
-      interpolatedDataPlot.coordinates,
-      0,
-    );
-    const wantedY = getVectorData(
-      interpolatedDataPlot.coordinates,
-      plotInterpolated.data.value,
-    );
-
-    // Update x, y & yData
-    plot.x = wantedX;
-    plot.y = wantedY;
     plot.yData = plotInterpolated.data.value;
     plot.yDataRef = plotInterpolated.data.valueRef;
     plot.shape = plotInterpolated.data.downsampled_shape;
@@ -644,14 +580,6 @@ export const handleExistingPlot = async (
       unit: unit,
     };
 
-    let defaultXValue: number[] = [];
-    if (response.data.coordinates.length > 0) {
-      defaultXValue = getFirstArrayValueFromShape(
-        response.data.coordinates[0].value,
-        response.data.coordinates[0].downsampled_shape as number[],
-      );
-    }
-
     const defaultYValue = getVectorData(
       findDataPlot.coordinates,
       response.data.value,
@@ -662,7 +590,6 @@ export const handleExistingPlot = async (
       updatedPlot = await plotData(
         findDataPlot,
         yAxis.name,
-        defaultXValue,
         defaultYValue,
         response.data.value,
         defaultUri,
@@ -686,7 +613,6 @@ export const handleExistingPlot = async (
       updatedPlot = await plotData(
         findDataPlot,
         yAxis.name,
-        defaultXValue,
         defaultYValue,
         response.data.value,
         defaultUri,
@@ -1508,18 +1434,18 @@ const formatErrorBands = (
     path: normalizeIndices(nodeUri),
     yData: yData,
     yDataRef: yDataRef,
-    array: yValue,
   });
 };
 
 const formatErrorBandLayout = (
   error_band_type: 'upper' | 'lower',
   mainPlot: DataPlotly,
-  coordinates: Coordinates[],
+  x: (string | number)[],
+  mainY: number[],
+  bands: Datum[][],
   plotIndex: number,
   symmetricalCase?: boolean,
 ) => {
-  const mainY = mainPlot.y as number[];
   const lineShape = (mainPlot.line?.shape ?? 'linear') as 'linear' | 'hv';
 
   const errBandTypePosition = symmetricalCase
@@ -1527,11 +1453,8 @@ const formatErrorBandLayout = (
     : error_band_type === 'lower'
       ? 1
       : 0;
-  const yDiff = getVectorData(
-    coordinates,
-    mainPlot.error_bands[errBandTypePosition].yData,
-  );
-  const length = Math.min(mainPlot.y.length, yDiff.length);
+  const yDiff = (bands[errBandTypePosition] ?? []) as number[];
+  const length = Math.min(mainY.length, yDiff.length);
   const yErrBandPart = new Array<number>(length);
   for (let i = 0; i < length; i++) {
     if (error_band_type === 'lower') {
@@ -1541,7 +1464,7 @@ const formatErrorBandLayout = (
     }
   }
   const errBandPartPlot: Partial<ScatterData> = {
-    x: [...mainPlot.x],
+    x: [...x],
     y: [...yErrBandPart],
     type: 'scatter',
     mode: 'lines',
@@ -1564,25 +1487,44 @@ const formatErrorBandLayout = (
   return errBandPartPlot;
 };
 
-export function getErrorsAreaToPlot(
-  mainPlots: DataPlotly[],
+/**
+ * Everything Plotly is handed for one grid, built from the payloads and the
+ * cursor.
+ *
+ * The traces are new objects every time, and the store's are never among them:
+ * Plotly keeps and mutates what it is given. That used to be arranged by
+ * copying each stored trace here and letting this function write back onto the
+ * copy; the vectors are now derived rather than copied, so there is nothing to
+ * copy from.
+ */
+export function buildTraces(
+  plots: DataPlotly[],
   coordinates: Coordinates[],
-) {
+): (Partial<ScatterData> | DataPlotly)[] {
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
+  const x = axisVector(coordinates, 0) ?? [];
 
-  for (const [plotIndex, mainPlot] of mainPlots.entries()) {
-    // Each plot should have connectgaps equals to true to prevent gap in combined data cases
-    mainPlot.connectgaps = true;
+  for (const [plotIndex, storedPlot] of plots.entries()) {
+    const y = (lineVector(storedPlot.yData, coordinates) ?? []) as number[];
+    const bands = bandVectors(storedPlot, coordinates);
 
-    // Add main plot
+    const mainPlot = {
+      ...storedPlot,
+      x: [...x],
+      y: [...y],
+      // Each plot should have connectgaps equals to true to prevent gap in combined data cases
+      connectgaps: true,
+    } as DataPlotly;
     entirePlotList.push(mainPlot);
 
-    if (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) {
+    if (storedPlot?.error_bands && storedPlot.error_bands.length === 2) {
       // Add lower and upper
       const lowerPlot = formatErrorBandLayout(
         'lower',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
       );
       lowerPlot.connectgaps = true;
@@ -1590,17 +1532,21 @@ export function getErrorsAreaToPlot(
       const upperPlot = formatErrorBandLayout(
         'upper',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
       );
       upperPlot.connectgaps = true;
       entirePlotList.push(upperPlot);
-    } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
+    } else if (storedPlot?.error_bands && storedPlot.error_bands.length === 1) {
       // Symmetrical case: use upper for the interval
       const lowerPlot = formatErrorBandLayout(
         'lower',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
         true,
       );
@@ -1609,7 +1555,9 @@ export function getErrorsAreaToPlot(
       const upperPlot = formatErrorBandLayout(
         'upper',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
         true,
       );
@@ -1617,26 +1565,14 @@ export function getErrorsAreaToPlot(
       entirePlotList.push(upperPlot);
     }
 
-    if (mainPlot?.error_bands) {
-      // Add main plot
-      if (mainPlot.error_bands.length === 2) {
-        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
-          mainPlot.error_bands[0].array[i],
-          mainPlot.error_bands[1].array[i],
-        ]);
-      } else {
-        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
-          mainPlot.error_bands[0].array[i],
-        ]);
-      }
-      mainPlot.hovertemplate = 'x: %{x}<br>' + 'y: %{y}<br>';
-      if (mainPlot?.error_bands?.length) {
-        mainPlot.hovertemplate +=
-          mainPlot.error_bands.length === 2
-            ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
-            : 'y error bands: ±%{customdata[0]}<br>';
-      }
-      mainPlot.hovertemplate += '<extra></extra>';
+    if (storedPlot?.error_bands?.length) {
+      mainPlot.customdata = customdataOf(bands);
+      mainPlot.hovertemplate =
+        'x: %{x}<br>y: %{y}<br>' +
+        (storedPlot.error_bands.length === 2
+          ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
+          : 'y error bands: \u00b1%{customdata[0]}<br>') +
+        '<extra></extra>';
     }
   }
   return entirePlotList;
@@ -1869,8 +1805,6 @@ export function formatConfigBeforeLoadingURIs(
             activeConfiguration.dataURI,
           ),
           yData: [],
-          x: [],
-          y: [],
           unit: '',
         } as DataPlotly;
       }),
@@ -2264,8 +2198,6 @@ export const reapplyAxisOrder = async (
     targetPlot.yData = transposedPlot.yData;
     targetPlot.yDataRef = transposedPlot.yDataRef;
     targetPlot.shape = transposedPlot.shape;
-    targetPlot.x = transposedPlot.x;
-    targetPlot.y = transposedPlot.y;
     return;
   }
 
@@ -2281,81 +2213,6 @@ export const reapplyAxisOrder = async (
   updatedDataPlot.coordinates = transposed.coordinates;
   updatedDataPlot.plot = transposed.plot;
 };
-
-/**
- * @description Retrieves vector data from a plot item based on the provided URI and coordinates.
- * @param uri The URI to retrieve the vector data from.
- * @param coordinates The coordinates to use for retrieving the vector data.
- * @param plotItem The plot item containing the yData to extract the vector from.
- * @returns The vector data as an array of numbers, or undefined if the indices are invalid
- */
-export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
-  const coordinatesLength: number = coordinates.length;
-
-  // Extract only matrix indexes.
-  // Only `axeIndex` and `valueIndex` are read, so project onto those two
-  // numbers before sorting: cloning the coordinates would deep-copy every
-  // coordinate's full `data` array, and this runs on every slider tick and on
-  // the render path of every plot.
-  const matrixIndexes = coordinates
-    .map((coord: Coordinates) => ({
-      axeIndex: coord.axeIndex,
-      valueIndex: coord.valueIndex,
-    }))
-    .sort(compareByAxeIndex)
-    .reverse()
-    .filter((coord) => coord.axeIndex !== 0)
-    .map((coord) => coord.valueIndex);
-
-  // Retrieve vector to plot
-  /* eslint-disable  @typescript-eslint/no-explicit-any */
-  let result: any = yData;
-  let shapeIndex = 0;
-  for (const index of matrixIndexes) {
-    if (shapeIndex < coordinatesLength && index < result.length) {
-      result = result[index];
-      shapeIndex++;
-    } else {
-      if (!(shapeIndex < coordinatesLength)) {
-        break;
-      } else {
-        console.warn('Impossible to plot: invalid index or incorrect length');
-        return undefined;
-      }
-    }
-  }
-  const vectorData: number[] = result;
-  return vectorData;
-}
-
-export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
-  // Get error bands vectors switch coordinates indexes. Only `array` changes,
-  // and it is replaced rather than edited, so the band objects are copied and
-  // the payload each one points at is shared - this runs on every slider tick.
-  const updated_error_bands: ErrorBandData[] = plot.error_bands.map((band) => ({
-    ...band,
-    array: getVectorData(coordinates, band.yData),
-  }));
-  return updated_error_bands;
-}
-
-/**
- * @description Compares two Coordinates objects by their axeIndex.
- * @param a The first Coordinates object.
- * @param b The second Coordinates object.
- * @returns A negative number if a's axeIndex is less than b's, a positive number if greater, or 0 if equal.
- */
-export function compareByAxeIndex(
-  a: { axeIndex: number },
-  b: { axeIndex: number },
-) {
-  if (a.axeIndex < b.axeIndex) {
-    return -1;
-  } else if (a.axeIndex > b.axeIndex) {
-    return 1;
-  }
-  return 0;
-}
 
 /**
  * @description
@@ -2566,25 +2423,8 @@ export const swapAxis = async (
   // Transpose yData with resetted valueIndex
   await transposeAxis(updatedDataPlot, axeIndexToSwap, axeIndexOfTargetAxis);
 
-  // Update x & y with translated dataY
-  for (const plot of updatedDataPlot.plot) {
-    const vectorData = getVectorData(updatedDataPlot.coordinates, plot.yData);
-    plot.y = vectorData;
-    // Get x values switch x dependances
-    plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-
-    if (plot?.error_bands?.length) {
-      // Update error_bands vectors after transpositions
-      const swapped_error_bands = getErrorYVectors(
-        plot,
-        updatedDataPlot.coordinates,
-      );
-      plot.error_bands = swapped_error_bands;
-    }
-  }
-
   // Limit coordinate sliders to the max of their new shape
-  limitSlidersToMaxLength(updatedDataPlot.coordinates);
+  clampCursors(updatedDataPlot.coordinates);
 
   if (updatedDataPlot.geometries) {
     // Swap geometries x & y in the case we swap x & y coordinates
@@ -2607,10 +2447,14 @@ export const swapAxis = async (
 };
 
 /**
- * Update coordinates to limit sliders to maximum length.
- * @param coordinates The coordinates to check and update if necessary.
+ * Pull every cursor back inside its axis.
+ *
+ * A cursor is an index, so narrowing a range or transposing can leave one
+ * pointing past the end of the axis it indexes. Nothing derives a row from an
+ * out-of-range cursor, so it has to be corrected on the document rather than
+ * worked around at the point of use.
  */
-export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
+export function clampCursors(coordinates: Coordinates[]) {
   for (const coord of coordinates) {
     const coordLength = getArrayValueFromDependance(
       coordinates,
@@ -2625,6 +2469,7 @@ export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
 /**
  * Convert all last children of shape [number, number] into {r, i} objects.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export function transformComplexData(arr: any[]): any[] {
   const maxDepth = getMaxShape(arr).length;
 
@@ -2896,16 +2741,9 @@ export const applyRangesToGrid = async (
       error_band.yData = derivedBand.value;
       error_band.yDataRef = derivedBand.ref;
     }
-
-    // Get x values switch x dependances
-    plot.x = getArrayValueFromDependance(coordinates, 0);
-    plot.y = getVectorData(coordinates, plot.yData);
-    if (plot.error_bands?.length) {
-      plot.error_bands = getErrorYVectors(plot, coordinates);
-    }
   }
 
-  limitSlidersToMaxLength(coordinates);
+  clampCursors(coordinates);
   return next;
 };
 

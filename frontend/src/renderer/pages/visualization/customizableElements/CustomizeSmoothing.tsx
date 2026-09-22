@@ -13,11 +13,9 @@ import {
   formatOperations,
   formatSignalOperations,
   GAUSSIAN_FILTER,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getSmoothingMethods,
   getUrisToInterpolate,
-  getVectorData,
   MIN_GAUSSIAN_SMOOTHING_SIGMA,
   normalizeIndices,
   reapplyAxisOrder,
@@ -150,10 +148,8 @@ export const CustomizeSmoothing = ({
 
       // Update only the selected plot with the new data
       plot.shape = dataPlotSmoothed.data.downsampled_shape;
-      plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotSmoothed.data.value;
       plot.yDataRef = dataPlotSmoothed.data.valueRef;
-      plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
       if (action === 'restore') {
         plot.smoothing = undefined;
       }

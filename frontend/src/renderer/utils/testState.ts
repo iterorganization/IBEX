@@ -7,6 +7,12 @@ import {
   Geometry,
   TestState,
 } from '../types';
+import {
+  axisVector,
+  bandVectors,
+  customdataOf,
+  lineVector,
+} from '../derive/vectors';
 
 /**
  * The projection the E2E state bridge sends, and its inverse.
@@ -24,10 +30,13 @@ import {
  *   dataPlot[].coordinates[].data
  *   dataPlot[].geometries[].x / .y
  *
- * Everything else passes through, including the derived vectors `plot.x`,
- * `plot.y`, `plot.customdata` and `error_bands[].array` that the specs assert
- * exact floats on: those are a single row, so they stay small whatever the
- * entry's size.
+ * Everything else passes through, and the derived vectors `plot.x`, `plot.y`,
+ * `plot.customdata` and `error_bands[].array` are *computed* on the way out.
+ * The store stopped holding them once derivation moved to the render path (see
+ * `derive/vectors.ts`), but the specs assert exact floats on them, so the
+ * projection derives them through the same functions the renderer draws from -
+ * which is also what keeps those specs honest about what is drawn. They are a
+ * single row each, so they stay small whatever the entry's size.
  *
  * This is deliberately a *denylist*. A spec reading a field nobody thought to
  * enumerate keeps working; only the four families above can go missing.
@@ -45,26 +54,35 @@ import {
 /** Set on a projected grid so the inverse knows its payloads were stripped. */
 type ProjectedGrid = DataGridPlot & { __payloadsOmitted?: true };
 
-const projectTrace = (plot: DataPlotly): DataPlotly => {
+const projectTrace = (
+  plot: DataPlotly,
+  coordinates: Coordinates[],
+  x: (string | number)[] | undefined,
+): DataPlotly => {
   const { yData, error_bands, ...rest } = plot;
-  void yData;
   const projected = rest as DataPlotly;
+  projected.x = x;
+  projected.y = lineVector(yData, coordinates) as DataPlotly['y'];
   if (!error_bands) return projected;
 
+  const bands = bandVectors(plot, coordinates);
   return {
     ...projected,
-    error_bands: error_bands.map((band) => {
+    customdata: customdataOf(bands),
+    error_bands: error_bands.map((band, index) => {
       const { yData: bandData, ...bandRest } = band;
       void bandData;
-      return bandRest as ErrorBandData;
+      return { ...bandRest, array: bands[index] } as ErrorBandData;
     }),
-  };
+  } as DataPlotly;
 };
 
 const projectGrid = (grid: DataGridPlot): ProjectedGrid => ({
   ...grid,
   __payloadsOmitted: true,
-  plot: grid.plot?.map(projectTrace),
+  plot: grid.plot?.map((plot) =>
+    projectTrace(plot, grid.coordinates ?? [], axisVector(grid.coordinates, 0)),
+  ),
   coordinates: grid.coordinates?.map((coordinate) => {
     const { data, ...rest } = coordinate;
     void data;
@@ -114,11 +132,19 @@ const rehydrateTrace = (
 ): DataPlotly => {
   if (!source) return plot;
 
-  const rehydrated: DataPlotly = { ...plot, yData: source.yData };
+  // The derived vectors go back out: they are computed on the way in, and
+  // writing them back would put into the store exactly what this stage took out
+  // of it - where they would then go stale the moment a cursor moved.
+  const { x, y, customdata, ...stored } = plot;
+  void x;
+  void y;
+  void customdata;
+  const rehydrated: DataPlotly = { ...stored, yData: source.yData };
   if (!plot.error_bands) return rehydrated;
 
   rehydrated.error_bands = plot.error_bands.map((band) => ({
     ...band,
+    array: undefined,
     yData:
       source.error_bands?.find((candidate) => candidate.path === band.path)
         ?.yData ??

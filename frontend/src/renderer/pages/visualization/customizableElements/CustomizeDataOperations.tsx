@@ -12,13 +12,11 @@ import {
   fetchDataPlot,
   formatOperations,
   formatSignalOperations,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getOperationKind,
   getOperationMethods,
   getSignalOperationMethods,
   getUrisToInterpolate,
-  getVectorData,
   isNotifiedError,
   isSignalOperation,
   normalizeIndices,
@@ -258,10 +256,8 @@ export const CustomizeDataOperations = ({
 
       // Update only the selected plot with the new data
       plot.shape = dataPlotOperated.data.downsampled_shape;
-      plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotOperated.data.value;
       plot.yDataRef = dataPlotOperated.data.valueRef;
-      plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
       // A multiplication or a division between signals changes the unit, which
       // may require moving the plot to the secondary y axis
       const newUnit = dataPlotOperated.data.unit;

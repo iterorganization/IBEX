@@ -537,3 +537,105 @@ The plan expected it to go with the rest, but the cursor is still an index into
 the window rather than into the payload, so it still has to be reset when the
 window moves and left alone when the same window is merely re-applied. It dies
 in stage 11, when the cursor stops indexing a stored array at all.
+
+## After moving the drawn vectors out of the store (stage 11)
+
+Branch `perf/split_configuration_store_object`, same canvas and same scenarios.
+
+| Scenario | req | redraws | renders | payloads | elements | derived | ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| toggle edit mode (UI flag) | 0 | 1 | 4 | 8 | 25785 | 9 | 975 |
+| **coordinate slider, 2 steps** | 0 | **2** | **16** | 8 | 25785 | 9 | 1391 |
+| swap two axes | 0 | **1** | **4** | 9 | 50985 | 10 | 960 |
+| swap the same axes back | 0 | **1** | **4** | 9 | 50985 | 10 | 884 |
+| apply a data range | 0 | 12 | 54 | 11 | 63690 | 12 | 1869 |
+| restore the data range | 0 | 12 | 54 | 13 | 89100 | 14 | 1701 |
+| apply the same range again | 0 | 12 | 54 | 13 | 89100 | 14 | 1691 |
+| restore the data range again | 0 | 12 | 54 | 13 | 89100 | 14 | 1661 |
+| metadata panel, first open | 2 | 2 | 4 | 15 | 89106 | 14 | 775 |
+| metadata panel, revisit | 0 | 10 | 44 | 13 | 89100 | 14 | 1212 |
+| idle (no interaction) | 0 | 0 | 0 | 13 | 89100 | 14 | 2134 |
+
+The slider row has not moved since stage 2. It moves here: **6 redraws to 2**,
+one per step, and 28 renders to 16. Swapping two axes goes from 3 redraws and
+10 renders to 1 and 4.
+
+### What a slider tick is now
+
+`handleUpdateCoordinate` was 130 lines in `GridLayoutPlot.tsx` that rebuilt, on
+every tick, every trace of the grid and of every grid synchronized with it: a
+new `x`, a new `y`, a new `customdata`, a new array per error band, each copied
+out of the payload with `[...]`. It is now a call to one store action,
+`setCursor`, which writes integers and labels and no array at all - so what a
+tick costs no longer depends on how big the payload is.
+
+What is drawn comes from `derive/vectors.ts` instead, called on the render path:
+
+- `axisVector(coordinates, axeIndex)` - the vector of the axis on display;
+- `lineVector(payload, coordinates)` - the row the cursor points at;
+- `bandVectors` / `customdataOf` - the same for error bands;
+- `slabMatrix` - the 2-D slab a heatmap draws.
+
+Each is memoised on **the payload array itself**, and within that on the cursor.
+Two consequences that the counts above depend on: moving one grid's cursor does
+not invalidate another grid's rows, and two synchronized grids sitting at the
+same cursor derive once between them. The map is weak on the payload, so a
+family the sweep frees takes its derived rows with it and there is no bookkeeping
+to get wrong. Entries are dropped oldest-first past eight cursors, because
+dragging a slider walks through indices that will never be asked for again.
+
+`isSameAxisData` is gone. It walked both coordinates element by element, on
+every tick, to decide whether a synchronized grid was showing the same data;
+`setCursor` compares the payload keys instead, which is a string compare and is
+also more correct - two grids can hold equal numbers from different nodes.
+`limitSlidersToMaxLength` survives, renamed `clampCursors`: a cursor is an index,
+and narrowing a range can still leave one pointing past the end of its axis.
+
+### Where the other two redraws went
+
+Heatmap2D held `x`, `y`, `z`, three axis descriptors and an `are3DAxisInit` flag
+in `useState`, filled by a chain of `useEffect`s. Plotly compares `data` by
+reference, so each link in that chain was a separate draw of the panel - which
+is why one slider step cost three. They are all pure functions of the payload
+and the cursor, so they are one `useMemo` now.
+
+That is also why the rows that open a customization panel show **three more
+redraws** than in stage 10 (12 against 9, and 10 against 7 for the metadata
+revisit) while showing four fewer renders. The panel's preview used to stay
+blank until its effects had settled, so the renders before that produced no
+draw; it now has its vectors on the first render and draws straight away. Fewer
+React renders, the preview appears sooner, and the intermediate states are drawn
+rather than skipped. Opening a panel is a deliberate, occasional action, and the
+guards - idle 0/0, a UI toggle not redrawing the untouched heatmap, a slider
+step issuing no request, a metadata revisit issuing no `plot_data` - all still
+hold.
+
+### The store no longer holds a vector it can compute
+
+`plot.x`, `plot.y`, `plot.customdata` and `error_bands[].array` are not written
+anywhere any more - not by `plotData`, not by `swapAxis`, not by
+`applyRangesToGrid`, not by the four `Customize*` panels that each rebuilt them
+after a fetch. `getErrorsAreaToPlot` became `buildTraces`, which *creates* the
+objects Plotly is handed instead of copying the store's and writing back onto
+the copy. They stay on the `DataPlotly` type as optional, because the render
+path and the e2e projection both build traces that carry them; a grid in the
+store does not.
+
+`projectTestState` computes them on the way out, through the same functions the
+renderer draws from, and `mergeTestState` drops them again on the way back in.
+That is what keeps `plot-ui.spec.ts`'s exact-float assertions working with no
+spec edits - and it makes them assert on what is actually drawn rather than on a
+copy that a writer might have forgotten to refresh.
+
+### The stride scheme, revisited as agreed
+
+Deferred from stage 9 to be looked at here, and the answer is that it still does
+not belong here. Deriving a row is now a handful of pointer chases into the
+nested arrays, memoised - there is no copy left on the read path for strides to
+remove. What does still materialise a whole matrix is the *transform* path:
+`derive/ranges.ts` tensorises a payload and calls `.array()` to get nested
+arrays back, ~670 ms for the 871x1x129x65 psi. Fixing that means changing what a
+payload *is* - a flat `Float64Array` with a shape and strides, materialised only
+at the boundary - which is the item the plan already parks until after stage 12,
+and it wants the request cache merged first so there is one ingest path to
+change rather than twenty.

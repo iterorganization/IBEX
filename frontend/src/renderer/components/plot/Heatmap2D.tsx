@@ -1,14 +1,7 @@
 import Plot from 'react-plotly.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Data, Layout } from 'plotly.js';
-import {
-  Axis,
-  AxisData,
-  Complex,
-  Configuration,
-  Coordinates,
-  DataGridPlot,
-} from '../../types';
+import { Axis, Configuration, Coordinates, DataGridPlot } from '../../types';
 import classe from './SimplePlotly.module.css';
 import { Center, Grid, Group, Select, Stack, Text } from '@mantine/core';
 import { VerticalSlider } from '../verticalSlider';
@@ -26,6 +19,7 @@ import {
 import classes from './Heatmap2D.module.css';
 import { useIbexStore } from '../../stores';
 import { countRedraw, countRender } from '../../utils/perf';
+import { axisVector, slabMatrix } from '../../derive/vectors';
 import { getPlotConfig } from './plotConfig';
 import { NoDataForURI } from '.';
 import { usePlotLayout } from './hooks/usePlotLayout';
@@ -68,16 +62,33 @@ export const Heatmap2D = ({
   );
   const coordsUsedInAxes: 1 | 2 = 2;
   const SELECT_AXIS_HEIGHT = 90; // Height of the select axis container
-  const [xAxis, setXAxis] = useState<Axis>(null);
-  const [yAxis, setYAxis] = useState<Axis>(null);
-  const [zAxis, setZAxis] = useState<Axis>(null);
-  const [data3D, setData3D] = useState<AxisData | null>(null);
-  const [are3DAxisInit, setAre3DAxisInit] = useState(false);
-  const [x, setX] = useState<number[]>([]);
-  const [y, setY] = useState<number[]>([]);
-  const [z, setZ] = useState<(number | string)[][]>([]);
   const plotRef = useRef<Plot | null>(null);
   const selectedPlot = itemDataGrid.plot[parseInt(plotIndex)];
+
+  // The three vectors the heatmap draws, and the three axis descriptors, all
+  // derived in one pass from the payload and the cursor. They used to be six
+  // pieces of state filled by a chain of effects, so one slider tick produced a
+  // render - and a Plotly redraw - per link in the chain.
+  const { xAxis, yAxis, zAxis, x, y, z } = useMemo(() => {
+    const coordinates = itemDataGrid.coordinates ?? [];
+    const xCoord = coordinates.find((coord) => coord.axeIndex === 0);
+    const yCoord = coordinates.find((coord) => coord.axeIndex === 1);
+    return {
+      xAxis: xCoord && ({ name: xCoord.name, unit: xCoord.unit } as Axis),
+      yAxis: yCoord && ({ name: yCoord.name, unit: yCoord.unit } as Axis),
+      zAxis: {
+        name:
+          selectedPlot?.name.replace(`_${selectedPlot.labelUri}`, '') ||
+          'Z Axis',
+        unit: selectedPlot?.unit || '',
+      } as Axis,
+      x: axisVector(coordinates, 0) as number[],
+      y: axisVector(coordinates, 1) as number[],
+      z: slabMatrix(selectedPlot?.yData, coordinates),
+    };
+  }, [itemDataGrid.coordinates, selectedPlot]);
+
+  const are3DAxisInit = Boolean(selectedPlot?.yData && x && y && z);
   // Axis types and grid display, derived rather than pushed into the layout by
   // effects: Plotly compares `layout` by reference, so every push was a redraw.
   const axisLayout = usePlotLayout({ itemDataGrid });
@@ -147,49 +158,6 @@ export const Heatmap2D = ({
       previous === emptyUserRelayout ? previous : emptyUserRelayout,
     );
   }, [plottedNodes]);
-
-  const init3DAxis = useCallback(async () => {
-    // Transpose data matrix to orign values
-    const selectedDataMatrix = selectedPlot?.yData;
-    if (!selectedDataMatrix) {
-      return;
-    }
-    setData3D(selectedDataMatrix);
-
-    // get colorscale name and unit linked to selected plot
-    const colorscaleName =
-      selectedPlot?.name.replace(`_${selectedPlot.labelUri}`, '') || 'Z Axis';
-    const colorscaleUnit = selectedPlot?.unit || '';
-
-    //Initialize xAxis, yAxis, zAxis
-    setZAxis({
-      name: colorscaleName,
-      unit: colorscaleUnit,
-    });
-
-    const xAxisAtHeatmap = {
-      name: itemDataGrid.coordinates.find((xCoord) => xCoord.axeIndex === 0)
-        .name,
-      unit: itemDataGrid.coordinates.find((xCoord) => xCoord.axeIndex === 0)
-        .unit,
-    };
-    setXAxis(xAxisAtHeatmap);
-
-    const yCoord = itemDataGrid.coordinates.find(
-      (yCoord) => yCoord.axeIndex === 1,
-    );
-    const yAxisAtHeatmap = {
-      name: yCoord.name,
-      unit: yCoord.unit,
-    };
-    setYAxis(yAxisAtHeatmap);
-  }, [itemDataGrid.plot, itemDataGrid.coordinates, plotIndex]);
-
-  /* Initialize data3D with generated data */
-  useEffect(() => {
-    //Get first plot data
-    init3DAxis();
-  }, [itemDataGrid.plot, itemDataGrid.coordinates, plotIndex]);
 
   /**
    * The whole Plotly layout, derived in one go: the axis titles from the axes
@@ -270,69 +238,6 @@ export const Heatmap2D = ({
     axisLayout,
     userRelayout,
   ]);
-
-  useEffect(() => {
-    if (data3D && selectedPlot) {
-      // Update x, y & z useStates to plot heatmap
-      // These vectors index into the store's arrays, and Plotly keeps and
-      // mutates whatever it is handed. Copy once here - this effect only runs
-      // when the data or the coordinates change - rather than copying the whole
-      // matrix again on every render.
-      // `getArrayValueFromDependance` returns undefined for an invalid index,
-      // so copy only when there is something to copy.
-      const xValues = getArrayValueFromDependance(
-        itemDataGrid.coordinates,
-        0,
-      ) as number[];
-      const yValues = getArrayValueFromDependance(
-        itemDataGrid.coordinates,
-        1,
-      ) as number[];
-      setX(Array.isArray(xValues) ? [...xValues] : xValues);
-      setY(Array.isArray(yValues) ? [...yValues] : yValues);
-      // Get matrix [[]] needed for z in 3D
-      let zData: AxisData | number | string | Complex = selectedPlot.yData;
-
-      // Depth of the nested array. Replaces a tf.tensor() that was built only
-      // to read shape.length: it copied the entire matrix and was never
-      // disposed.
-      let depth = 0;
-      let probe: unknown = zData;
-      while (Array.isArray(probe)) {
-        depth += 1;
-        probe = probe[0];
-      }
-      const depthToGoThrough = depth - 2; // z needs a vector of depth 2 ([][])
-      for (let index = 0; index < depthToGoThrough; index++) {
-        if (Array.isArray(zData)) {
-          zData =
-            zData[
-              itemDataGrid.coordinates.find(
-                (coord) =>
-                  coord.axeIndex ===
-                  itemDataGrid.coordinates.length - 1 - index,
-              ).valueIndex
-            ];
-        }
-      }
-      // zData is only a matrix once the loop above has walked down to depth 2;
-      // for malformed data it can still be a scalar, which must pass through
-      // untouched exactly as it did before.
-      setZ(
-        Array.isArray(zData)
-          ? (zData as (number | string)[][]).map((row) =>
-              Array.isArray(row) ? [...row] : row,
-            )
-          : (zData as unknown as (number | string)[][]),
-      );
-    }
-  }, [data3D, itemDataGrid.coordinates]);
-
-  useEffect(() => {
-    if (data3D && x && y && z) {
-      setAre3DAxisInit(true);
-    }
-  }, [data3D, x, y, z]);
 
   /**
    * Plotly compares `data` by reference, so this array must keep its identity
