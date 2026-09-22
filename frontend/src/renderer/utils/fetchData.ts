@@ -22,7 +22,8 @@ import {
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
-import { getTensorizedMatrix, transformComplexData } from './plot';
+import { transformComplexData } from './plot';
+import { getTensorizedMatrix } from './tensor';
 import { replaceNullsWithNaN } from './functions';
 import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';

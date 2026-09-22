@@ -9,8 +9,11 @@ import {
   pin,
   readPayload,
   registerPayload,
+  rangedKey,
+  rangesOf,
   stepsOf,
   sweep,
+  transposeOf,
   transposedKey,
   unpin,
 } from './payloadRegistry';
@@ -145,6 +148,69 @@ describe('payloadRegistry', () => {
     it('leaves the steps it does not understand alone', () => {
       const ranged = derivedKey(base, 'range:1:4-8');
       expect(transposedKey(ranged, [1, 0])).to.equal(`${ranged}|transpose:1,0`);
+    });
+  });
+
+  describe('range keys', () => {
+    const base = payloadKey('/data/plot_data?uri=x', 'value');
+
+    it('names the base itself when there is no window', () => {
+      expect(rangedKey(base, {})).to.equal(base);
+    });
+
+    it('reads its own bounds back', () => {
+      const key = rangedKey(base, { 1: [4, 8], 3: [0, 2] });
+      expect(rangesOf(key)).to.deep.equal({ 1: [4, 8], 3: [0, 2] });
+    });
+
+    it('orders the axes so one window has one name', () => {
+      expect(rangedKey(base, { 3: [0, 2], 1: [4, 8] })).to.equal(
+        rangedKey(base, { 1: [4, 8], 3: [0, 2] }),
+      );
+    });
+
+    it('replaces a window rather than narrowing the one before it', () => {
+      // Applying [40,120] and then [50,60] is the same array as applying
+      // [50,60] to the untouched payload - which is what makes it reversible.
+      const narrow = rangedKey(rangedKey(base, { 1: [40, 120] }), {
+        1: [50, 60],
+      });
+      expect(narrow).to.equal(rangedKey(base, { 1: [50, 60] }));
+    });
+
+    it('names the base again once the window is dropped', () => {
+      // This is the whole of "restore range": no fetch, no slice, a lookup.
+      const windowed = rangedKey(base, { 1: [40, 120] });
+      expect(rangedKey(windowed, {})).to.equal(base);
+    });
+
+    it('widens without going through the range it is widening from', () => {
+      const narrow = rangedKey(base, { 0: [50, 60] });
+      expect(rangedKey(narrow, { 0: [40, 120] })).to.equal(
+        rangedKey(base, { 0: [40, 120] }),
+      );
+    });
+
+    it('keeps the axis order a window was taken in', () => {
+      const transposed = transposedKey(base, [1, 0, 2]);
+      const windowed = rangedKey(transposed, { 2: [1, 5] });
+      expect(transposeOf(windowed)).to.deep.equal([1, 0, 2]);
+      expect(rangesOf(windowed)).to.deep.equal({ 2: [1, 5] });
+    });
+
+    it('lets a window and a transposition be applied in either order', () => {
+      const windowThenSwap = transposedKey(
+        rangedKey(base, { 1: [2, 6] }),
+        [1, 0],
+      );
+      const swapThenWindow = rangedKey(transposedKey(base, [1, 0]), {
+        1: [2, 6],
+      });
+      expect(windowThenSwap).to.equal(swapThenWindow);
+    });
+
+    it('reports no permutation for an untransposed key', () => {
+      expect(transposeOf(rangedKey(base, { 0: [1, 2] }))).to.equal(null);
     });
   });
 

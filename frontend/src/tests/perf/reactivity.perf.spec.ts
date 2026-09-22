@@ -12,6 +12,7 @@ import {
   addUriAndAwaitSelection,
   ensureCssElementIsDisplayed,
   findCssElementAndClickIt,
+  getCssElementFromDataTestId,
   getDatasetPath,
   resetAppState,
   selectMantineOption,
@@ -302,6 +303,124 @@ describe('Reactivity benchmark', function () {
     ).to.equal(derivations);
 
     await setGridEditing(heatmapGridId, false);
+  });
+
+  it('applying and restoring a data range never goes back to the backend', async () => {
+    // A range is a window on the fetched array, not a smaller array: the
+    // payload it was cut from stays resident, so restoring the range - and
+    // re-applying one that was used before - is a lookup. Restoring used to
+    // refetch once per trace, plus once per error band, purely to recover the
+    // values the trim had thrown away.
+    const heatmapGrid = async () =>
+      (await getTestState()).active.dataPlot.find(
+        (grid) => grid.i === heatmapGridId,
+      );
+    const xValues = (await heatmapGrid()).plot[0].x as number[];
+    const low = xValues[Math.floor(xValues.length * 0.25)];
+    const high = xValues[Math.floor(xValues.length * 0.75)];
+    const fullWidth = xValues.length;
+
+    /** Opens the panel's range section without going through the grid button,
+     * which is not addressable per grid. */
+    const openRangeSection = async () => {
+      await setTestState({
+        customizing: { id: heatmapGridId, type: 'visual' },
+      });
+      await findCssElementAndClickIt('customization-Axis range-accordion');
+      await ensureCssElementIsDisplayed('data-range-apply-input');
+    };
+
+    /** Waits for a panel button to stop reporting itself as loading. */
+    const settle = async (testId: string) =>
+      waitForValue(
+        `${testId} finished`,
+        async () =>
+          (await getCssElementFromDataTestId(testId)).getAttribute(
+            'data-loading',
+          ),
+        null,
+        (actual, expected) => actual === expected,
+        SLOW.retries,
+        SLOW.delay,
+      );
+
+    const save = async () => {
+      await findCssElementAndClickIt('customization-save-button');
+      await setTestState({ customizing: null });
+    };
+
+    const applyRange = async () => {
+      await openRangeSection();
+      await writeTextInCssElement('data-range-min-input', String(low), true);
+      await writeTextInCssElement('data-range-max-input', String(high), true);
+      await findCssElementAndClickIt('data-range-apply-input');
+      await settle('data-range-apply-input');
+      await save();
+      await waitForValue(
+        'the heatmap is windowed',
+        async () => (await heatmapGrid()).plot[0].x.length < fullWidth,
+        true,
+        (actual, expected) => actual === expected,
+        SLOW.retries,
+        SLOW.delay,
+      );
+    };
+
+    const restoreRange = async () => {
+      await openRangeSection();
+      await findCssElementAndClickIt('data-range-restore-input');
+      await settle('data-range-restore-input');
+      await save();
+      await waitForValue(
+        'the heatmap is back to its full width',
+        async () => (await heatmapGrid()).plot[0].x.length,
+        fullWidth,
+        undefined,
+        SLOW.retries,
+        SLOW.delay,
+      );
+    };
+
+    const applied = await measure('apply a data range', applyRange);
+    expect(
+      dataRequests(applied),
+      'windowing a payload is a view change, not a fetch',
+    ).to.have.length(0);
+    const afterApply = applied.payloads?.derivations ?? 0;
+    expect(
+      afterApply,
+      'the windowed array must be registered as a derived payload',
+    ).to.be.greaterThan(0);
+
+    const restored = await measure('restore the data range', restoreRange);
+    expect(
+      dataRequests(restored),
+      'restoring a range must not fetch: the full payload never left',
+    ).to.have.length(0);
+
+    const reapplied = await measure('apply the same range again', applyRange);
+    expect(
+      dataRequests(reapplied),
+      're-applying a range must not fetch',
+    ).to.have.length(0);
+    const afterRestore = restored.payloads?.derivations ?? 0;
+    expect(
+      reapplied.payloads?.derivations ?? 0,
+      'a range applied before must be reused, not recomputed',
+    ).to.equal(afterRestore);
+
+    const restoredAgain = await measure(
+      'restore the data range again',
+      restoreRange,
+    );
+    expect(
+      dataRequests(restoredAgain),
+      'restoring a range again must not fetch',
+    ).to.have.length(0);
+    expect(
+      restoredAgain.payloads?.derivations ?? 0,
+      'restoring a range twice must reuse the full window it made the first time',
+    ).to.equal(afterRestore);
   });
 
   it('revisiting a metadata tab does not re-download the payload', async () => {

@@ -26,7 +26,7 @@ import {
   DataGridPlot,
   PlotType,
 } from '../../types';
-import { applyRange, fetchErrorBandsInConfig } from '../../utils';
+import { applyRangesToGrid, fetchErrorBandsInConfig } from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
@@ -158,26 +158,12 @@ export const HoverButtons = React.memo(
             }
 
             if (previousValueDisplayErrorBands.current === false) {
-              // Apply ranges to the new error bands added with switch "display error bands" and if not already applied at load
-              for (const coordinate of selectedDataPlot.coordinates) {
-                if (coordinate?.range) {
-                  const keepValueIndex = true;
-                  await applyRange(
-                    coordinate,
-                    coordinate.rangeValues,
-                    selectedDataPlot,
-                    [
-                      ...selectedDataPlot.plot.map(
-                        (plot) => plot.nodeUri + '_error_upper',
-                      ),
-                      ...selectedDataPlot.plot.map(
-                        (plot) => plot.nodeUri + '_error_lower',
-                      ),
-                    ],
-                    keepValueIndex,
-                  );
-                }
-              }
+              // Cut the bands that just arrived to the windows the grid has.
+              // The sliders stay where they are: nothing about the grid changed,
+              // only what is drawn on it.
+              const index = updatedActive.dataPlot.indexOf(selectedDataPlot);
+              updatedActive.dataPlot[index] =
+                await applyRangesToGrid(selectedDataPlot);
             }
           }
         } else {

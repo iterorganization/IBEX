@@ -41,14 +41,19 @@ import {
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
 } from './matrix';
-import * as tf from '@tensorflow/tfjs';
 import { containsFloat, removeSuffix, rgbToRgba } from './functions';
 import { cloneGridStructure } from './cloneGrid';
+import { getMaxShape, getTensorizedMatrix } from './tensor';
 import {
+  Ranges,
+  baseOf,
+  payloadShape,
   readPayload,
   registerPayload,
+  transposeOf,
   transposedKey,
 } from '../stores/payloadRegistry';
+import { baseRank, sliceFromBase } from '../derive/ranges';
 
 const defaultColorsRGB = [
   'rgb(31, 119, 180)',
@@ -372,17 +377,9 @@ const updateInterpolatedPlots = async (
     plot.shape = plotInterpolated.data.downsampled_shape;
 
     if (isInDeleteCase) {
-      // Apply range in delete case
-      for (const coordinate of interpolatedDataPlot.coordinates) {
-        if (coordinate?.rangeValues) {
-          interpolatedDataPlot = await applyRange(
-            coordinate,
-            coordinate.rangeValues,
-            interpolatedDataPlot,
-            [plot.nodeUri],
-          );
-        }
-      }
+      // Fit the refetched trace to the windows the grid already has. The ranges
+      // are absolute, so this does not need to know which traces were narrowed.
+      interpolatedDataPlot = await applyRangesToGrid(interpolatedDataPlot);
     }
   }
   return interpolatedDataPlot;
@@ -733,17 +730,8 @@ export const handleExistingPlot = async (
       await fetchErrorBandsInConfig(updatedActive, defaultUri, findDataPlot.i);
     }
 
-    // Apply range to new error bands when adding another plot
-    for (const coordinate of updatedPlot.coordinates) {
-      if (coordinate?.rangeValues) {
-        updatedPlot = await applyRange(
-          coordinate,
-          coordinate.rangeValues,
-          updatedPlot,
-          [defaultUri],
-        );
-      }
-    }
+    // Fit the trace and its error bands to the windows the grid already has
+    updatedPlot = await applyRangesToGrid(updatedPlot);
   }
 
   return updatedActive;
@@ -2169,19 +2157,11 @@ export async function plotNodeUriLoaded(
           }
         }
 
-        // Apply range to coordinates, dependencies & new error bands when loading a config
-        for (const coordinate of dataPlot.coordinates) {
-          if (coordinate?.range) {
-            const keepValueIndex = true;
-            await applyRange(
-              coordinate,
-              coordinate.rangeValues,
-              dataPlot,
-              [...dataPlot.plot.map((plot) => plot.nodeUri)],
-              keepValueIndex,
-              true, // apply range origin when loading a config (get coordinates for first time)
-            );
-          }
+        // Cut the freshly fetched arrays to the ranges the saved configuration
+        // carries. The sliders keep the positions the configuration saved.
+        if (dataPlot.coordinates?.some((coordinate) => coordinate.range)) {
+          const windowed = await applyRangesToGrid(dataPlot);
+          updatedDataGridPlot[updatedDataGridPlot.indexOf(dataPlot)] = windowed;
         }
       }
     }
@@ -2474,18 +2454,6 @@ function getLastDimLength(value: AxisData): number | null {
 }
 
 /**
- * Return a tensorized matrix using tensorflow
- * @param matrix
- * @returns
- */
-export const getTensorizedMatrix = async (matrix: AxisData) => {
-  const shape = getMaxShape(matrix);
-  const reshapedMatrix = reshapeMatrix(matrix, shape);
-  const dataTensorized = tf.tensor(reshapedMatrix);
-  return dataTensorized;
-};
-
-/**
  * Transpose all plots from a dataGrid and update paths with related value indexes
  * @param itemDataGrid
  * @param axeIndexToSwap
@@ -2655,27 +2623,6 @@ export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
 }
 
 /**
- * Find the maximum shape of a potentially irregular array.
- */
-function getMaxShape(arr: any[]): number[] {
-  const shape: number[] = [];
-
-  function goThrough(node: any, depth: number) {
-    if (!Array.isArray(node)) return;
-
-    // Update max shape to this length
-    shape[depth] = Math.max(shape[depth] ?? 0, node.length);
-
-    for (const item of node) {
-      goThrough(item, depth + 1);
-    }
-  }
-
-  goThrough(arr, 0);
-  return shape;
-}
-
-/**
  * Convert all last children of shape [number, number] into {r, i} objects.
  */
 export function transformComplexData(arr: any[]): any[] {
@@ -2694,30 +2641,6 @@ export function transformComplexData(arr: any[]): any[] {
   }
 
   return transform(arr, 0);
-}
-
-/**
- * Recursively fills an irregular array with NaN
- * to match a given shape.
- */
-function reshapeMatrix(arr: any[], shape: number[], depth = 0): any[] {
-  const size = shape[depth];
-  const result = [...arr];
-
-  for (let i = 0; i < size; i++) {
-    if (result[i] === undefined) {
-      // If an element is missing, either NaN or a subarray filled with NaN is inserted
-      if (shape.length > depth + 1) {
-        result[i] = reshapeMatrix([], shape, depth + 1);
-      } else {
-        result[i] = NaN;
-      }
-    } else if (Array.isArray(result[i])) {
-      result[i] = reshapeMatrix(result[i], shape, depth + 1);
-    }
-  }
-
-  return result;
 }
 
 async function transposeMatrix(yData: AxisData, newPositions: number[]) {
@@ -2781,15 +2704,14 @@ const transposePayload = async (
   const key = payload.ref
     ? transposedKey(payload.ref, newPositions)
     : undefined;
-  // Only the tensor can produce a shape the caller needs but cannot derive.
-  const known =
-    payload.needsShape && !payload.shape ? undefined : readPayload(key);
-  if (key && known) {
-    return {
-      value: known,
-      ref: key,
-      shape: payload.shape && permuteShape(payload.shape, newPositions),
-    };
+  const known = readPayload(key);
+  // A shape the caller needs but the registry has never recorded is one only
+  // the tensor can produce.
+  const knownShape =
+    payloadShape(key) ??
+    (payload.shape && permuteShape(payload.shape, newPositions));
+  if (key && known && (knownShape || !payload.needsShape)) {
+    return { value: known, ref: key, shape: knownShape };
   }
 
   const tensor = await transposeMatrix(payload.value, newPositions);
@@ -2846,169 +2768,185 @@ async function transposeAxis(
 }
 
 /**
- * Reduce size of a coordinate data by slicing to the range provided
- * @param coordinates
- * @param coordNameToUpdate
- * @param newRange
- * @param dependencyIndex optional: determined the shape index of the dependency
- * @param shouldApplyRangeOriginInCoord optional: determine if it's a new range to be applied to the data (begin to the range instead of 0)
- * @returns Return the sliced data
+ * The coordinates as the backend sent them: full payloads, with each cursor
+ * shifted back onto the full vector it indexes a window of.
+ *
+ * Resolving a typed range against these, rather than against what the grid is
+ * currently showing, is what makes a range absolute - and therefore what lets a
+ * wider range be typed over a narrower one without restoring first.
  */
-const trimCoordData = async (
+const baseCoordinates = (coordinates: Coordinates[]): Coordinates[] =>
+  coordinates.map((coord) => {
+    const key = coord.dataRef ? baseOf(coord.dataRef) : undefined;
+    const base = readPayload(key);
+    if (!base) return coord;
+    return {
+      ...coord,
+      data: base,
+      shape: payloadShape(key) ?? coord.shape,
+      valueIndex: coord.valueIndex + (coord.range?.[0] ?? 0),
+    };
+  });
+
+/** The untrimmed vector of one display axis. */
+const baseVector = (coordinates: Coordinates[], axeIndex: number) =>
+  getArrayValueFromDependance(baseCoordinates(coordinates), axeIndex);
+
+/**
+ * The windows that apply to one coordinate's own payload.
+ *
+ * A coordinate is windowed along its own axis by its own range, and along each
+ * axis it depends on by that dependency's range - the dependency ordering is
+ * reversed because dependencies are listed outermost-first and axes are not.
+ */
+const coordinateRanges = (
   coordinates: Coordinates[],
-  coordNameToUpdate: string,
-  newValueRange: [number, number] | [string, string],
-  newRange: [number, number],
-  oldRange: [number, number],
-  dependencyIndex?: number,
-  shouldApplyRangeOriginInCoord?: boolean,
-) => {
-  const updatedCoord = coordinates.find(
-    (coord) => coord.name === coordNameToUpdate,
-  );
-  const dataRangeMin = newRange[0];
-  const dataRangeMax = newRange[1];
+  coord: Coordinates,
+  rank: number,
+): Ranges => {
+  const ranges: Ranges = {};
+  const dependencies = [...(coord.coord_dependencies ?? [])].reverse();
+  dependencies.forEach((name, axis) => {
+    const dependency = coordinates.find((other) => other.name === name);
+    if (dependency?.range && axis < rank) ranges[axis] = dependency.range;
+  });
+  if (coord.range) ranges[rank - 1] = coord.range;
+  return ranges;
+};
 
-  const dataTensorized = await getTensorizedMatrix(updatedCoord.data);
+/**
+ * The windows that apply to a trace's payload, in the axes of the **base**.
+ *
+ * Coordinates are ordered by the axis they are displayed on, which after a
+ * transposition is no longer the axis they occupy in the fetched array, so each
+ * one is carried back through the permutation the payload's key records.
+ */
+const plotRanges = (
+  coordinates: Coordinates[],
+  permutation: number[] | null,
+  rank: number,
+): Ranges => {
+  const ranges: Ranges = {};
+  [...coordinates]
+    .sort(compareByAxeIndex)
+    .reverse()
+    .forEach((coord, displayedAxis) => {
+      if (!coord.range || displayedAxis >= rank) return;
+      const axis = permutation ? permutation[displayedAxis] : displayedAxis;
+      ranges[axis] = coord.range;
+    });
+  return ranges;
+};
 
-  // Get new shape to apply
-  const shapeIndex = dependencyIndex ?? dataTensorized.shape.length - 1;
-  const minRangeOrigin = oldRange ? oldRange[0] : 0;
-  const originShape = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex
-      ? shouldApplyRangeOriginInCoord
-        ? minRangeOrigin
-        : dataRangeMin - minRangeOrigin
-      : 0,
-  );
-  const shapeSize = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
-  );
+/**
+ * Re-cut every array of `grid` from its base at the ranges its coordinates
+ * carry, and rebuild the vectors that are drawn from the result.
+ *
+ * Idempotent, because the ranges are absolute. That is the whole reason there is
+ * one function here rather than an `applyRangeInCoord` and an
+ * `applyRangeInPlot` threading a previous range and a list of traces that have
+ * not been narrowed yet: running this after a trace arrives full, after one
+ * arrives already narrowed, or twice in a row, all give the same grid.
+ */
+export const applyRangesToGrid = async (
+  grid: DataGridPlot,
+): Promise<DataGridPlot> => {
+  const next = cloneGridStructure(grid);
+  const coordinates = next.coordinates ?? [];
 
-  const trimmed = tf.slice(dataTensorized, originShape, shapeSize);
+  for (const coord of coordinates) {
+    const rank = await baseRank(coord.dataRef, coord.data);
+    const derived = await sliceFromBase(
+      coord.dataRef,
+      coord.data,
+      coordinateRanges(coordinates, coord, rank),
+    );
+    coord.data = derived.value;
+    coord.dataRef = derived.ref;
+    if (derived.shape) coord.shape = derived.shape;
+  }
 
-  if (dependencyIndex === undefined) {
-    // Update the new range when updating the main coordinate
-    updatedCoord.range = newRange;
-    if (typeof newValueRange[0] === 'string') {
-      // Set first and last value from sliced data in rangeValues
-      const axisData = (await trimmed.array()) as AxisData;
-      const firstArrayValue = getFirstArrayValueFromShape(
-        axisData,
-        trimmed.shape,
-      ) as unknown as string[];
-      updatedCoord.rangeValues = [
-        firstArrayValue[0],
-        firstArrayValue[firstArrayValue.length - 1],
-      ];
-    } else {
-      // Set typed number in value range
-      updatedCoord.rangeValues = newValueRange;
+  for (const plot of next.plot ?? []) {
+    const rank = await baseRank(plot.yDataRef, plot.yData);
+    const derived = await sliceFromBase(
+      plot.yDataRef,
+      plot.yData,
+      plotRanges(coordinates, transposeOf(plot.yDataRef), rank),
+    );
+    plot.yData = derived.value;
+    plot.yDataRef = derived.ref;
+    if (derived.shape) plot.shape = derived.shape;
+
+    for (const error_band of plot.error_bands ?? []) {
+      if (
+        error_band.array?.length === 0 &&
+        (error_band.path.endsWith('_error_upper') ||
+          error_band.path.endsWith('_error_lower'))
+      ) {
+        // A band the backend has nothing for: there is no payload to window.
+        continue;
+      }
+      const bandRank = await baseRank(error_band.yDataRef, error_band.yData);
+      const derivedBand = await sliceFromBase(
+        error_band.yDataRef,
+        error_band.yData,
+        plotRanges(coordinates, transposeOf(error_band.yDataRef), bandRank),
+        false,
+      );
+      error_band.yData = derivedBand.value;
+      error_band.yDataRef = derivedBand.ref;
+    }
+
+    // Get x values switch x dependances
+    plot.x = getArrayValueFromDependance(coordinates, 0);
+    plot.y = getVectorData(coordinates, plot.yData);
+    if (plot.error_bands?.length) {
+      plot.error_bands = getErrorYVectors(plot, coordinates);
     }
   }
 
-  return trimmed;
+  limitSlidersToMaxLength(coordinates);
+  return next;
 };
 
 /**
- * Trim a plot data
- * @param updatedPlot
- * @param coordinates
- * @param axeIndexToUpdate
- * @param newRange
- * @param oldRange
- * @returns
+ * Move the cursor of a coordinate, and of everything indexed by it, back to the
+ * start of the new window.
  */
-const trimPlotData = async (
-  updatedPlot: DataPlotly | ErrorBandData,
-  coordinates: Coordinates[],
-  axeIndexToUpdate: number,
-  newRange: [number, number],
-  oldRange?: [number, number],
-) => {
-  const dataRangeMin = newRange[0];
-  const dataRangeMax = newRange[1];
-
-  // Reshape matrix with NaN instead of null (to prevent from replacing them by 0)
-  const dataTensorized = await getTensorizedMatrix(updatedPlot.yData);
-
-  // Get new shape to apply
-  const reversedCoords = structuredClone(coordinates)
-    .sort(compareByAxeIndex)
-    .reverse() as Coordinates[];
-  const shapeIndex = reversedCoords.findIndex(
-    (coord) => coord.axeIndex === axeIndexToUpdate,
-  );
-  const minRangeOrigin = oldRange ? oldRange[0] : 0;
-  const originShape: number[] = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMin - minRangeOrigin : 0,
-  );
-  const shapeSize = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
-  );
-
-  return tf.slice(dataTensorized, originShape, shapeSize);
-};
-
-/**
- * Format trimmed coordinate by updating all concerned data (data, shape, downsampled_shape, valueIndex, target, path)
- * @param updatedCoord
- * @param trimmed
- * @param coordinateAffectingDependency
- * @param keepValueIndex
- */
-const formatTrimmedCoordinate = async (
-  updatedCoord: Coordinates,
-  trimmed: tf.Tensor<tf.Rank>,
-  coordinateAffectingDependency?: Coordinates,
-  keepValueIndex?: boolean,
-) => {
-  const depValues = (await trimmed.array()) as AxisData;
-  // Update data
-  updatedCoord.data = depValues;
-  updatedCoord.dataRef = undefined;
-
-  // Update shapes
-  updatedCoord.shape = trimmed.shape;
-
-  if (!keepValueIndex) {
-    // Update valueIndex, target & path
-    updatedCoord.valueIndex = 0;
-    const lastTargetLastName = getLastIndexedField(
-      coordinateAffectingDependency?.target ?? updatedCoord.target,
-    );
-    const updatedPath = updateIndexFieldName(
-      updatedCoord.path,
-      lastTargetLastName,
-      0,
-    );
-    const updatedTarget = updateIndexFieldName(
-      updatedCoord.target,
-      lastTargetLastName,
-      0,
-    );
-    updatedCoord.path = updatedPath;
-    updatedCoord.target = updatedTarget;
+const resetCursor = (coordinates: Coordinates[], updatedCoord: Coordinates) => {
+  const lastTargetLastName = getLastIndexedField(updatedCoord.target);
+  for (const coord of coordinates) {
+    if (
+      coord.name !== updatedCoord.name &&
+      !(coord.coord_dependencies ?? []).includes(updatedCoord.name)
+    ) {
+      continue;
+    }
+    coord.valueIndex = 0;
+    coord.path = updateIndexFieldName(coord.path, lastTargetLastName, 0);
+    coord.target = updateIndexFieldName(coord.target, lastTargetLastName, 0);
   }
 };
 
-export const getRangeIndex = async (
+/**
+ * Turn a typed value range into indices of the untrimmed coordinate vector.
+ *
+ * The indices returned are absolute, so they mean the same thing whatever range
+ * is applied at the time - including none.
+ */
+export const getRangeIndex = (
   newValueRange: [number, number] | [string, string],
   updatedDataPlot: DataGridPlot,
   coordinate: Coordinates,
-  shouldApplyRangeOriginInCoord?: boolean,
-) => {
+): [number, number] => {
   const coordToUpdate = updatedDataPlot.coordinates.find(
     (coord) => coord.name === coordinate.name,
   );
-  const coordVector = getArrayValueFromDependance(
+  const coordVector = baseVector(
     updatedDataPlot.coordinates,
     coordToUpdate.axeIndex,
   );
-  let newRange: [number, number] = coordinate?.range || [
-    0,
-    coordVector.length - 1,
-  ];
+  let newRange: [number, number] = [0, coordVector.length - 1];
 
   const rangeMatched = [];
   if (typeof newValueRange[0] === 'number') {
@@ -3016,24 +2954,20 @@ export const getRangeIndex = async (
     const max = newValueRange[1] as number;
 
     for (let i = 0; i < coordVector.length; i++) {
+      // Matched against the value the plot draws, not the one the backend sent:
+      // everything on the render path has been through a tfjs tensor, which is
+      // single precision, and a bound typed as 0.6 has to pick the same point
+      // the axis labels 0.6.
+      const value = Math.fround(coordVector[i] as number);
+
       // Get min range
-      if (
-        rangeMatched.length === 0 &&
-        (coordVector[i] as number) >= min &&
-        (coordVector[i] as number) <= max
-      ) {
-        rangeMatched.push(shouldApplyRangeOriginInCoord ? i : newRange[0] + i);
+      if (rangeMatched.length === 0 && value >= min && value <= max) {
+        rangeMatched.push(i);
       }
 
       // Get max range
-      if (
-        rangeMatched.length === 1 &&
-        (coordVector[i] as number) > max &&
-        i !== 0
-      ) {
-        rangeMatched.push(
-          shouldApplyRangeOriginInCoord ? i - 1 : newRange[0] + i - 1,
-        );
+      if (rangeMatched.length === 1 && value > max && i !== 0) {
+        rangeMatched.push(i - 1);
         break;
       }
     }
@@ -3049,7 +2983,8 @@ export const getRangeIndex = async (
         newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
     );
     // Get index of last occurence
-    let secondIndex = (structuredClone(coordVector) as string[])
+    let secondIndex = (coordVector as string[])
+      .map((value) => value)
       .reverse()
       .findIndex(
         (val) =>
@@ -3059,243 +2994,86 @@ export const getRangeIndex = async (
       secondIndex = coordVector.length - 1 - secondIndex;
     }
 
-    if (firstIndex !== -1) {
-      rangeMatched.push(
-        shouldApplyRangeOriginInCoord ? firstIndex : newRange[0] + firstIndex,
-      );
-    } else {
-      rangeMatched.push(shouldApplyRangeOriginInCoord ? 0 : newRange[0]);
-    }
-
-    if (secondIndex !== -1) {
-      rangeMatched.push(
-        shouldApplyRangeOriginInCoord ? secondIndex : newRange[0] + secondIndex,
-      );
-    } else {
-      rangeMatched.push(
-        shouldApplyRangeOriginInCoord
-          ? coordVector.length - 1
-          : newRange[0] + coordVector.length - 1,
-      );
-    }
-
-    if (rangeMatched.length === 2) {
-      newRange = rangeMatched as [number, number];
-    } else if (rangeMatched.length === 1) {
-      newRange[0] = rangeMatched[0];
-    }
+    rangeMatched.push(firstIndex !== -1 ? firstIndex : 0);
+    rangeMatched.push(
+      secondIndex !== -1 ? secondIndex : coordVector.length - 1,
+    );
+    newRange = rangeMatched as [number, number];
   }
   return newRange;
 };
 
+/** The typed range, rendered back as the values the panel shows. */
+const rangeValuesOf = (
+  coordinates: Coordinates[],
+  coord: Coordinates,
+  newRange: [number, number],
+  newValueRange: [number, number] | [string, string],
+): [number, number] | [string, string] => {
+  if (typeof newValueRange[0] !== 'string') {
+    return newValueRange as [number, number];
+  }
+  const vector = baseVector(coordinates, coord.axeIndex) as string[];
+  return [vector[newRange[0]], vector[newRange[1]]];
+};
+
+/**
+ * Window `coordinate` to the typed value range, and re-cut the grid to match.
+ *
+ * Pure: the grid handed in is not touched, and the one handed back shares every
+ * payload it did not have to change.
+ *
+ * @param keepCursor Leave the sliders where they are. Set when the range is not
+ *   new - loading a saved configuration, or fitting a trace that has just
+ *   arrived to the window the grid already has.
+ */
 export const applyRange = async (
   coordinate: Coordinates,
   newValueRange: [number, number] | [string, string],
   customizedDataGrid: DataGridPlot,
-  newPlotsUri?: string[],
-  keepValueIndex?: boolean,
-  shouldApplyRangeOriginInCoord?: boolean,
+  keepCursor?: boolean,
 ) => {
   try {
-    const updatedDataPlot = customizedDataGrid;
-    const coordinates = structuredClone(
-      updatedDataPlot.coordinates,
-    ) as Coordinates[];
-    const oldRange = coordinates.find(
-      (coord) => coord.axeIndex === coordinate.axeIndex,
-    )?.range;
-
-    // get newRange
-    const newRange = await getRangeIndex(
-      newValueRange,
-      updatedDataPlot,
-      coordinate,
-      shouldApplyRangeOriginInCoord,
+    const next = cloneGridStructure(customizedDataGrid);
+    const updatedCoord = next.coordinates.find(
+      (coord) => coord.name === coordinate.name,
     );
+    const newRange = getRangeIndex(newValueRange, next, coordinate);
 
-    // Trim coordinate
-    await applyRangeInCoord(
-      updatedDataPlot.coordinates,
-      coordinate.name,
-      newValueRange,
+    updatedCoord.range = newRange;
+    updatedCoord.rangeValues = rangeValuesOf(
+      next.coordinates,
+      updatedCoord,
       newRange,
-      oldRange,
-      keepValueIndex,
-      shouldApplyRangeOriginInCoord,
+      newValueRange,
     );
+    if (!keepCursor) resetCursor(next.coordinates, updatedCoord);
 
-    // Trim plots
-    await applyRangeInPlot(
-      updatedDataPlot.coordinates,
-      updatedDataPlot.plot,
-      coordinate.axeIndex,
-      newRange,
-      oldRange,
-      newPlotsUri,
-    );
-
-    return {
-      ...customizedDataGrid,
-      coordinates: [...updatedDataPlot.coordinates],
-      plot: [...updatedDataPlot.plot],
-    } as DataGridPlot;
+    return await applyRangesToGrid(next);
   } catch (error) {
     console.error('Error applying the range: ', error);
   }
 };
 
 /**
- * Update the coordinate to apply the range
- * @param updatedCoords
- * @param coordNameToUpdate
- * @param newValueRange
- * @param newRange
- * @param oldRange
- * @param keepValueIndex
- * @param shouldApplyRangeOriginInCoord
+ * Drop `coordinate`'s window and re-cut the grid to the full payload.
+ *
+ * Costs nothing: the full array is the base, and the sweep keeps a payload and
+ * its windows together, so it is still resident.
  */
-export async function applyRangeInCoord(
-  updatedCoords: Coordinates[],
-  coordNameToUpdate: string,
-  newValueRange: [number, number] | [string, string],
-  newRange: [number, number],
-  oldRange: [number, number],
-  keepValueIndex?: boolean,
-  shouldApplyRangeOriginInCoord?: boolean,
-) {
-  const updatedCoord = updatedCoords.find(
-    (coord) => coord.name === coordNameToUpdate,
+export const restoreRangeInGrid = async (
+  coordinate: Coordinates,
+  customizedDataGrid: DataGridPlot,
+) => {
+  const next = cloneGridStructure(customizedDataGrid);
+  const updatedCoord = next.coordinates.find(
+    (coord) => coord.name === coordinate.name,
   );
-  const coordinate = structuredClone(updatedCoord);
-
-  // Trim coordinate.data
-  const trimmed = await trimCoordData(
-    updatedCoords,
-    updatedCoord.name,
-    newValueRange,
-    newRange,
-    oldRange,
-    undefined,
-    shouldApplyRangeOriginInCoord,
-  );
-  // Format coordinate with trimmed data
-  await formatTrimmedCoordinate(
-    updatedCoord,
-    trimmed,
-    undefined,
-    keepValueIndex,
-  );
-
-  // Trim coordinates having dependencies
-  for (const coordDependencie of updatedCoords) {
-    if (coordDependencie.name === coordinate.name) {
-      // Don't check dependencies of updated coordinate
-      continue;
-    }
-
-    const dependencyIndex = (
-      structuredClone(coordDependencie.coord_dependencies) as string[]
-    )
-      .reverse() // We reverse dependencies to get dependency index in the order of the matrix
-      .findIndex((dep) => dep === coordinate.name);
-    if (dependencyIndex === -1) {
-      // No dependencies with updated coordinate
-      continue;
-    }
-
-    const trimmedDep = await trimCoordData(
-      updatedCoords,
-      coordDependencie.name,
-      newValueRange,
-      newRange,
-      oldRange,
-      dependencyIndex,
-      shouldApplyRangeOriginInCoord,
-    );
-    await formatTrimmedCoordinate(
-      coordDependencie,
-      trimmedDep,
-      updatedCoord,
-      keepValueIndex,
-    );
-  }
-}
-
-export async function applyRangeInPlot(
-  coordinates: Coordinates[],
-  updatedPlots: DataPlotly[],
-  axeIndexToUpdate: number,
-  newRange: [number, number],
-  oldRange?: [number, number],
-  newPlotsUri?: string[],
-) {
-  for (const updatedPlot of updatedPlots) {
-    // Update plot.x with trimmed coordinates
-    const newX = getArrayValueFromDependance(coordinates, 0);
-    updatedPlot.x = newX;
-
-    let rangeAlreadyAppliedInPlot = true;
-    if (newPlotsUri && newPlotsUri.includes(updatedPlot.nodeUri)) {
-      // Boolean used for determined if range has already been applied in this plot
-      rangeAlreadyAppliedInPlot = false;
-    }
-
-    // Trim plot.yData
-    const trimmed = await trimPlotData(
-      updatedPlot,
-      structuredClone(coordinates),
-      axeIndexToUpdate,
-      newRange,
-      rangeAlreadyAppliedInPlot === true ? oldRange : null,
-    );
-    const newYData = (await trimmed.array()) as AxisData;
-    updatedPlot.yData = newYData;
-    // A trimmed array is a different payload; see the note in `transposeAxis`.
-    updatedPlot.yDataRef = undefined;
-    updatedPlot.shape = trimmed.shape;
-
-    // Update plot.y with trimmed plot.yData
-    const newY = getVectorData(coordinates, updatedPlot.yData);
-    updatedPlot.y = newY;
-
-    // Trim error bands if existing
-    if (updatedPlot?.error_bands) {
-      for (const error_band of updatedPlot.error_bands) {
-        if (
-          (error_band.path.endsWith('_error_upper') &&
-            error_band.array.length === 0) ||
-          (error_band.path.endsWith('_error_lower') &&
-            error_band.array.length === 0)
-        ) {
-          continue;
-        }
-        const upperOrLower = error_band.path.endsWith('_error_upper')
-          ? '_error_upper'
-          : '_error_lower';
-        if (
-          newPlotsUri &&
-          newPlotsUri.includes(updatedPlot.nodeUri + upperOrLower)
-        ) {
-          // Check if error band has already been applied
-          rangeAlreadyAppliedInPlot = false;
-        }
-
-        const trimmed = await trimPlotData(
-          error_band,
-          structuredClone(coordinates),
-          axeIndexToUpdate,
-          newRange,
-          rangeAlreadyAppliedInPlot === true ? oldRange : null,
-        );
-        const newYData = (await trimmed.array()) as AxisData;
-        error_band.yData = newYData;
-        error_band.yDataRef = undefined;
-      }
-      const swapped_error_bands = getErrorYVectors(updatedPlot, coordinates);
-      updatedPlot.error_bands = swapped_error_bands;
-    }
-  }
-}
+  delete updatedCoord.range;
+  delete updatedCoord.rangeValues;
+  resetCursor(next.coordinates, updatedCoord);
+  return applyRangesToGrid(next);
+};
 
 export function formatGeometriesToSave(
   geometries: Geometry[],

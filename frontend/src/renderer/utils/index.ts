@@ -3,6 +3,7 @@ export * from './fetchData';
 export * from './grid';
 export * from './matrix';
 export * from './plot';
+export * from './tensor';
 export * from './tree';
 export * from './uuid';
 export * from './uri';

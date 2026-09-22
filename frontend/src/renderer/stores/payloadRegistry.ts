@@ -48,6 +48,8 @@ export type PayloadKey = string;
 
 interface PayloadEntry {
   value: AxisData;
+  /** The shape, once known. `undefined` while the backend only said "irregular". */
+  shape?: number[];
   /** Element count, from the response's shape - a cheap stand-in for bytes. */
   elements: number;
 }
@@ -135,6 +137,60 @@ export const transposedKey = (
   return [baseOf(ref), ...tail].join('|');
 };
 
+const RANGE = 'range:';
+
+/**
+ * Absolute, inclusive bounds per axis of the **base**, not of whatever the grid
+ * is currently showing. `{ 3: [10, 50] }` means "elements 10 to 50 of axis 3 of
+ * the fetched array", whether or not a narrower range was applied before.
+ */
+export type Ranges = Record<number, [number, number]>;
+
+/** The permutation a key ends with, or `null` when it names an untransposed array. */
+export const transposeOf = (key: PayloadKey | undefined): number[] | null => {
+  const steps = key === undefined ? [] : stepsOf(key);
+  const last = steps[steps.length - 1];
+  return last?.startsWith(TRANSPOSE)
+    ? last.slice(TRANSPOSE.length).split(',').map(Number)
+    : null;
+};
+
+/** The ranges a key applies to its base, by base axis. */
+export const rangesOf = (key: PayloadKey | undefined): Ranges => {
+  const ranges: Ranges = {};
+  for (const step of key === undefined ? [] : stepsOf(key)) {
+    if (!step.startsWith(RANGE)) continue;
+    const [axis, bounds] = step.slice(RANGE.length).split(':');
+    const [low, high] = bounds.split('-').map(Number);
+    ranges[Number(axis)] = [low, high];
+  }
+  return ranges;
+};
+
+/**
+ * Names the slice of `ref`'s **base** given by `ranges`, keeping whatever axis
+ * order `ref` is held in.
+ *
+ * Ranges are written before the transposition, in base axes, and they replace
+ * rather than stack: a range is a window on the fetched array, so applying
+ * [40,120] and then [50,60] names `|range:3:50-60` off the base, and asking for
+ * no ranges at all names the base itself. That is what makes restoring a range
+ * - and widening one - a lookup rather than a fetch, and it is why nothing here
+ * needs to know which range was applied before.
+ *
+ * Keeping the transposition last is what lets `transposedKey` compose by looking
+ * at a single step, and means a transposition and a range commute.
+ */
+export const rangedKey = (ref: PayloadKey, ranges: Ranges): PayloadKey => {
+  const steps = Object.keys(ranges)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((axis) => `${RANGE}${axis}:${ranges[axis][0]}-${ranges[axis][1]}`);
+  const permutation = transposeOf(ref);
+  const tail = permutation ? [`${TRANSPOSE}${permutation.join(',')}`] : [];
+  return [baseOf(ref), ...steps, ...tail].join('|');
+};
+
 /**
  * Records a payload under its key and returns that key.
  *
@@ -152,7 +208,11 @@ export const registerPayload = (
     stats.hits += 1;
     return key;
   }
-  payloads.set(key, { value, elements: elementsOf(shape) });
+  payloads.set(key, {
+    value,
+    shape: Array.isArray(shape) ? shape : undefined,
+    elements: elementsOf(shape),
+  });
   stats.registered += 1;
   if (key !== baseOf(key)) stats.derivations += 1;
   return key;
@@ -163,6 +223,30 @@ export const readPayload = (
   key: PayloadKey | undefined,
 ): AxisData | undefined =>
   key === undefined ? undefined : payloads.get(key)?.value;
+
+/**
+ * The shape of a registered payload, or `undefined` when nothing has computed
+ * one - the backend reports some arrays as `irregular` and only a tensorisation
+ * can then say how big they are.
+ */
+export const payloadShape = (
+  key: PayloadKey | undefined,
+): number[] | undefined =>
+  key === undefined ? undefined : payloads.get(key)?.shape;
+
+/**
+ * Records a shape worked out after registration, so the next derivation from
+ * this payload does not have to tensorise it again to find its rank.
+ */
+export const rememberPayloadShape = (
+  key: PayloadKey | undefined,
+  shape: number[],
+): void => {
+  const entry = key === undefined ? undefined : payloads.get(key);
+  if (!entry || entry.shape) return;
+  entry.shape = shape;
+  entry.elements = elementsOf(shape);
+};
 
 /** Keeps a key alive while something outside the store references it. */
 export const pin = (key: PayloadKey | undefined): void => {

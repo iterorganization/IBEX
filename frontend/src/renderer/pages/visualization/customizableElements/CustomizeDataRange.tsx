@@ -1,18 +1,9 @@
 import { useState } from 'react';
-import { AxisData, Coordinates, DataGridPlot } from '../../../types';
+import { Coordinates, DataGridPlot } from '../../../types';
 import {
-  fetchDataPlot,
-  getArrayValueFromDependance,
-  getFirstArrayValueFromShape,
-  getVectorData,
-  normalizeIndices,
-  getTensorizedMatrix,
-  fetchErrorBands,
   applyRange,
-  updateIndexFieldName,
-  getLastIndexedField,
-  transposeDataGrid,
-  getUrisToInterpolate,
+  getArrayValueFromDependance,
+  restoreRangeInGrid,
 } from '../../../utils';
 import {
   Button,
@@ -55,9 +46,6 @@ export const CustomizeDataRange = ({
       coordinateToApply: Coordinates,
       newValueRange: [number, number] | [string, string],
       customizedDataGrid: DataGridPlot,
-      newPlotsUri?: string[],
-      shouldApplyRangeOriginInCoord?: boolean,
-      isAlreadyRestored?: boolean,
     ) => {
       if (!newValueRange) {
         return;
@@ -98,209 +86,24 @@ export const CustomizeDataRange = ({
         }
       }
 
-      // Check old range to restore data if needed
+      // A range is resolved against the full payload, never against the window
+      // currently shown, so a range wider than the one applied needs no restore
+      // first - it is the same operation as a narrower one.
       setIsLoadingApply(true);
-
-      if (
-        isAlreadyRestored !== true &&
-        // Check if numbers min or max are out of actual range
-        ((coordinateToApply?.rangeValues &&
-          typeof newValueRange[0] === 'number' &&
-          ((newValueRange[0] as number) <
-            (coordinateToApply.rangeValues[0] as number) ||
-            newValueRange[1] > coordinateToApply.rangeValues[1])) ||
-          // Check if strings min or max are not included in actual range
-          (coordinateToApply?.rangeValues &&
-            typeof newValueRange[0] === 'string'))
-      ) {
-        // Restore automatically range before applying new range if types range is out of actual range
-        const appliedRange = await handleRestoreAndApply(
-          newValueRange,
-          newPlotsUri,
-          shouldApplyRangeOriginInCoord,
-        );
-        setCustomizedDataGrid(appliedRange);
-      } else {
-        const appliedRange = await applyRange(
-          coordinateToApply,
-          newValueRange,
-          customizedDataGrid,
-          newPlotsUri,
-          undefined,
-          shouldApplyRangeOriginInCoord,
-        );
-        setCustomizedDataGrid(appliedRange);
-      }
+      setCustomizedDataGrid(
+        await applyRange(coordinateToApply, newValueRange, customizedDataGrid),
+      );
       setIsLoadingApply(false);
     };
 
     const handleRestoreRange = async () => {
       setIsLoadingRestore(true);
-      await restoreRange();
+      // No fetch: the full array is the base every window was cut from, and it
+      // is still in the registry.
+      setCustomizedDataGrid(
+        await restoreRangeInGrid(coordinate, customizedDataGrid),
+      );
       setIsLoadingRestore(false);
-    };
-
-    const handleRestoreAndApply = async (
-      newValueRange: [number, number] | [string, string],
-      newPlotsUri: string[],
-      shouldApplyRangeOriginInCoord: boolean,
-    ) => {
-      const restoredDataGrid = await restoreRange();
-      const restoredCoordinate = restoredDataGrid.coordinates.find(
-        (coord) => coord.axeIndex === coordinate.axeIndex,
-      );
-
-      const appliedRange = await applyRange(
-        restoredCoordinate,
-        newValueRange,
-        restoredDataGrid,
-        newPlotsUri,
-        undefined,
-        shouldApplyRangeOriginInCoord,
-      );
-      return appliedRange;
-    };
-
-    const restoreRange = async () => {
-      try {
-        const updatedDataPlot = structuredClone(
-          customizedDataGrid,
-        ) as DataGridPlot;
-        // Step 1 => get full original data (coordinates + plots) && applyRange in coordinates having range (not main range since we'll delete it)
-        let plotIndex = 0;
-        for (const plot of updatedDataPlot.plot) {
-          // Get original data for each plot
-          const urisToInterpolate = getUrisToInterpolate(
-            plot.nodeUri,
-            updatedDataPlot.plot,
-          );
-          const dataRestored = await fetchDataPlot(
-            normalizeIndices(plot.nodeUri),
-            updatedDataPlot?.downsampled_method,
-            updatedDataPlot?.downsampled_size,
-            updatedDataPlot?.dataType,
-            urisToInterpolate,
-            updatedDataPlot?.interpolated_method,
-          );
-
-          if (plot?.error_bands?.length > 0) {
-            // Downsample restored error bands with latest parameters used if error bands exists for this plot
-            await fetchErrorBands(updatedDataPlot, plot.nodeUri);
-          }
-
-          if (plotIndex === 0) {
-            // Update coordinates (their shape & data) only once because each plots have same coordinates
-            let coordinateIndex = 0;
-            for (const coordinate of updatedDataPlot.coordinates) {
-              // Reset coordinates
-              coordinate.shape =
-                dataRestored.data.coordinates[
-                  coordinateIndex
-                ].downsampled_shape;
-              coordinate.data =
-                dataRestored.data.coordinates[coordinateIndex].value;
-              coordinate.dataRef =
-                dataRestored.data.coordinates[coordinateIndex].valueRef;
-              coordinate.axeIndex = coordinateIndex;
-              coordinateIndex++;
-            }
-          }
-
-          // Update plot with downsampled data
-          plot.shape = dataRestored.data.downsampled_shape;
-          // Get x axis switch coordinates dependances
-          plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-          plot.yData = dataRestored.data.value;
-          plot.yDataRef = dataRestored.data.valueRef;
-          // Get y axis
-          const vectorData = getVectorData(
-            updatedDataPlot.coordinates,
-            plot.yData,
-          );
-          plot.y = vectorData;
-
-          plotIndex++;
-        }
-
-        // Apply swap axis if different from default
-        const wantedAxeIndexOrder = customizedDataGrid.coordinates.map(
-          (coord) => coord.axeIndex,
-        );
-
-        const transposedDataPlot = await transposeDataGrid(
-          updatedDataPlot,
-          wantedAxeIndexOrder,
-        );
-        updatedDataPlot.coordinates = transposedDataPlot.coordinates;
-        updatedDataPlot.plot = transposedDataPlot.plot;
-
-        // Apply ranges
-        const updatedCoord = updatedDataPlot.coordinates.find(
-          (coord) => coord.axeIndex === coordinate.axeIndex,
-        );
-        const lastTargetLastName = getLastIndexedField(updatedCoord.target);
-        for (const coord of updatedDataPlot.coordinates) {
-          // Get full range
-          const dataTensorized = await getTensorizedMatrix(coord.data);
-          coord.shape = dataTensorized.shape;
-          coord.data = (await dataTensorized.array()) as AxisData;
-          coord.dataRef = undefined;
-
-          // Update target & path with index 0
-          const updatedPath = updateIndexFieldName(
-            coord.path,
-            lastTargetLastName,
-            0,
-          );
-          const updatedTarget = updateIndexFieldName(
-            coord.target,
-            lastTargetLastName,
-            0,
-          );
-          coord.path = updatedPath;
-          coord.target = updatedTarget;
-          if (coord.name === updatedCoord.name) {
-            coord.valueIndex = 0;
-          }
-        }
-
-        // delete range & rangeValues to apply full range
-        delete updatedCoord.range;
-        delete updatedCoord.rangeValues;
-
-        for (const coord of updatedDataPlot.coordinates) {
-          if (coordinate.name !== coord.name) {
-            const tensorizedMatrix = await getTensorizedMatrix(coord.data);
-            const forcedRangeValues = coord?.rangeValues || [
-              getFirstArrayValueFromShape(
-                coord.data,
-                tensorizedMatrix.shape,
-              )[0],
-              getFirstArrayValueFromShape(coord.data, tensorizedMatrix.shape)[
-                tensorizedMatrix.shape[tensorizedMatrix.shape.length - 1] - 1
-              ],
-            ];
-            await handleApplyRange(
-              coord,
-              forcedRangeValues,
-              updatedDataPlot,
-              [...updatedDataPlot.plot.map((plot) => plot.nodeUri)],
-              true,
-              true,
-            );
-          }
-        }
-
-        const newCustomizedDataGrid = {
-          ...customizedDataGrid,
-          coordinates: [...updatedDataPlot.coordinates],
-          plot: [...updatedDataPlot.plot],
-        } as DataGridPlot;
-        setCustomizedDataGrid(newCustomizedDataGrid);
-        return newCustomizedDataGrid;
-      } catch (error) {
-        console.error('Error restoring the range: ', error);
-      }
     };
 
     return (

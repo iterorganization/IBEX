@@ -418,3 +418,122 @@ on the ITER entry whose coordinates are `[871,1,65] [871,1,129]` it is the
 difference between rebuilding a 112k-element matrix and a `Map` lookup. That
 real-data pass was not re-run for this stage; the next one worth doing is after
 stage 11, when the slider row finally moves.
+
+## After making a range a window rather than a smaller array (stage 10)
+
+Branch `perf/split_configuration_store_object`, on the same canvas, with the
+range scenario inserted between the axis swap and the metadata panel.
+
+| Scenario | req | redraws | renders | payloads | elements | derived | ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| toggle edit mode (UI flag) | 0 | 1 | 4 | 8 | 25785 | 0 | 952 |
+| coordinate slider, 2 steps | 0 | 6 | 28 | 8 | 25785 | 0 | 1561 |
+| swap two axes | 0 | 3 | 10 | 9 | 50985 | 1 | 993 |
+| swap the same axes back | 0 | 3 | 10 | 9 | 50985 | 1 | 939 |
+| apply a data range | 0 | 9 | 58 | 11 | 63690 | 3 | 1965 |
+| **restore the data range** | **0** | 9 | 58 | 13 | 89100 | 5 | 1748 |
+| apply the same range again | 0 | 9 | 58 | 13 | 89100 | **5** | 1799 |
+| restore the data range again | 0 | 9 | 58 | 13 | 89100 | **5** | 1650 |
+| metadata panel, first open | 2 | 2 | 4 | 15 | 89106 | 5 | 786 |
+| metadata panel, revisit | 0 | 7 | 48 | 13 | 89100 | 5 | 1197 |
+| idle (no interaction) | 0 | 0 | 0 | 13 | 89100 | 5 | 2133 |
+
+The row this stage is about is `restore the data range`. It used to issue one
+`plot_data` per trace of the grid, plus one `fetchErrorBands` per trace that had
+any, for no reason other than to recover the values the trim had destroyed. It
+now issues none. The two rows after it are the other half of the claim: applying
+a range that was applied before, and restoring again, both add **zero**
+derivations - they are `Map` lookups.
+
+`apply a data range` costs three derivations (the windowed matrix and the
+windowed coordinates) and `restore the data range` costs two more. That second
+pair is not an oversight, see "Why restoring is not free the first time" below.
+
+`derived` is cumulative from app start, so its absolute value depends on what
+ran before the benchmark - a run taken straight after `test:e2e` starts at 9
+rather than 0. The claim is in the deltas, and those reproduce: +3, +2, 0, 0.
+
+### What a range means now
+
+A range used to be applied by cutting the array in the store down to size, which
+made it a one-way operation: the wider data was gone, and the only way back was
+to ask the back end again. Widening a range, or adding a trace to a grid that
+already had one, therefore had to be special-cased - `oldRange` threaded through
+five async functions to convert an absolute range into an offset into the array
+that had already been cut, and `rangeAlreadyAppliedInPlot`, flipped by
+membership of a `newPlotsUri` list, to guess whether a *particular* trace had
+been narrowed yet. None of that had a test.
+
+A range is now a **window on the payload**, expressed as absolute bounds against
+the array the back end sent, and named: `…#value|range:3:119-177`. Windows
+replace rather than stack, so applying [40,120] and then [50,60] names the same
+entry as applying [50,60] to the untouched payload, and asking for no window at
+all names the payload itself. Three consequences, all in
+`payloadRegistry.test.ts`:
+
+- widening needs no restore first, because the bounds are resolved against the
+  full vector either way;
+- a range applied twice is computed once;
+- re-applying the grid's ranges is idempotent, so a trace that arrives narrowed
+  and a trace that arrives full converge on the same answer.
+
+That last one is what let `applyRangeInCoord`, `applyRangeInPlot`,
+`trimCoordData`, `trimPlotData` and `formatTrimmedCoordinate` collapse into one
+`applyRangesToGrid`, and it deleted `oldRange`, `rangeAlreadyAppliedInPlot`,
+`shouldApplyRangeOriginInCoord` and the `newPlotsUri` plumbing outright.
+`applyRange` is now pure - it returns a grid rather than mutating the one handed
+to it - which cost two call sites a write-back.
+
+Windows are written before the transposition in a key and in the axes of the
+base, so a window and a transposition commute: `transposedKey` still composes by
+looking at a single trailing step, and the two can be applied in either order.
+
+### Why restoring is not free the first time
+
+Restoring lands on the *full window* of the payload, not on the payload itself,
+and that costs one slice the first time. It has to: the base is the response as
+it was parsed, in double precision, while every window is a tfjs slice of it and
+therefore single precision. Landing on the base would move every value slightly
+the moment a range was dropped - `plot-ui.spec.ts` asserts on exact floats at
+restoration and pins precisely that. Naming the full window means the second
+restore is a lookup, which is the `restore the data range again` row.
+
+The same precision argument decides where a typed bound is resolved. Bounds are
+matched against `Math.fround` of the coordinate, because everything on the
+render path has been through a tensor: a bound typed as 0.6 has to select the
+point the axis *labels* 0.6, and single precision puts that value fractionally
+above the double 0.6. The old code got this by accident and inconsistently - the
+first range on a grid resolved against the raw response and every later one
+against a float32 array, because the coordinate had been through a tensor by
+then. It is now the same rule for every range.
+
+### On the numbers
+
+`elements` goes from 50985 to 89100 and stays. That is the price of the row
+above it: a window no longer destroys what it was cut from, and restoring adds
+the full window as an entry of its own. All of it is one family, so deleting the
+grid frees the lot, and the `metadata panel` rows still show the sweep running
+(15 entries while that panel fetches, 13 afterwards).
+
+Two rows are not comparable with stage 9's table: `metadata panel, revisit` went
+from 6/40 to 7/48 redraws/renders, because the canvas it revisits has now been
+through four range operations rather than arriving straight from the axis swap.
+The counts it actually guards - no `plot_data` on a revisit - are unchanged. The
+four guards all still hold: idle 0/0, a UI toggle 0 requests and 0 redraws on
+the untouched heatmap, a slider step 0 requests, a metadata revisit 0
+`plot_data`.
+
+The fixture canvas is small, so the `ms` column cannot show the saving either:
+what it removes is four HTTP round trips and four `JSON.parse`s of a matrix, on
+a 3x1x120x70 payload where that is milliseconds. On the ITER entry with 720
+slices it is the difference between a multi-megabyte refetch per trace and a
+`Map` lookup. That real-data pass was not re-run for this stage; the one worth
+doing is after stage 11.
+
+### Still open
+
+`keepValueIndex` survives, as an explicit `keepCursor` argument to `applyRange`.
+The plan expected it to go with the rest, but the cursor is still an index into
+the window rather than into the payload, so it still has to be reset when the
+window moves and left alone when the same window is merely re-applied. It dies
+in stage 11, when the cursor stops indexing a stored array at all.
