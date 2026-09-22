@@ -10,9 +10,9 @@ import { pruneUiState } from './uiSlice';
 import {
   clampCursors,
   getLastIndexedField,
+  isSameAxisPayload,
   updateIndexFieldName,
 } from '../utils';
-import { baseOf } from './payloadRegistry';
 
 // Typed against the whole store, not just its own slice: `pruneUiState` below
 // reads and writes the ui fields, because the invariant it enforces spans both.
@@ -101,17 +101,25 @@ export const configurationSlice: StateCreator<
         return state;
       }
 
-      // A synchronized grid follows only where it is showing the same data.
-      // That used to be decided by walking both coordinates element by element
-      // on every tick; the payload's key answers it with a string compare, and
-      // it answers it correctly - two grids can hold equal numbers from
-      // different nodes.
+      // A synchronized grid follows only where it is showing the same data -
+      // the same values, not the same payload. Two grids plotting different
+      // nodes of one IDS each fetched the shared time coordinate inside their
+      // own response, so their payload keys differ while every value matches;
+      // deciding on the keys alone unlinks exactly the grids a user links.
+      // `isSameAxisPayload` keeps the old element-wise answer and uses the keys
+      // only to remember it, so the walk runs once per pair rather than once
+      // per tick.
       const sameData = (other: DataGridPlot) => {
         const theirs = other.coordinates?.find(
           (coord) => coord.name === coordinateName,
         );
-        if (!theirs?.dataRef || !coordinate.dataRef) return false;
-        return baseOf(theirs.dataRef) === baseOf(coordinate.dataRef);
+        if (!theirs) return false;
+        return isSameAxisPayload(
+          coordinate.data,
+          coordinate.dataRef,
+          theirs.data,
+          theirs.dataRef,
+        );
       };
 
       const follows = (item: DataGridPlot) =>

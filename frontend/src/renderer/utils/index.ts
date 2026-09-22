@@ -1,4 +1,5 @@
 export * from './cloneGrid';
+export * from './equality';
 export * from './fetchData';
 export * from './grid';
 export * from './matrix';

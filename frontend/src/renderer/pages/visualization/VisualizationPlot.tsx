@@ -154,6 +154,9 @@ export const VisualizationPlot = ({
               radius="xs"
               withBorder
               key={plotData.i}
+              // Named so a spec can ask a question about one panel: several
+              // grids on a canvas carry the same inner test ids.
+              data-testid={`grid-${plotData.i}`}
               data-grid={{
                 x: plotData.x,
                 y: plotData.y,
