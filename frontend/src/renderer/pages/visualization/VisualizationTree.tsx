@@ -51,7 +51,26 @@ export const VisualizationTree = ({
   extended,
   handleExtended,
 }: VisualizationTreeProps) => {
-  const { active, updatedConfiguration } = useIbexStore();
+  const { active } = useIbexStore();
+
+  /**
+   * Writes a node tree onto the active configuration as it is *now*.
+   *
+   * Every tree update awaits the backend, and what happens meanwhile - a node
+   * checked and plotted, a panel edited - is newer than the configuration the
+   * update started from. Writing `{ ...thatConfiguration, customDataTree }`
+   * back undid it: the plot vanished and the node was unchecked, so the next
+   * click on it plotted it again instead of removing it. Only the tree is
+   * this update's to write.
+   */
+  const writeCustomDataTree = (
+    from: Configuration,
+    customDataTree: CustomTreeData[],
+  ) => {
+    const { active: latest, updatedConfiguration } = useIbexStore.getState();
+    if (!latest || latest.name !== from.name) return;
+    updatedConfiguration({ ...latest, customDataTree });
+  };
 
   const [uriSelected, setUriSelected] = useState<URIData | null>();
   const [showErrorBars, setShowErrorBars] = useState<boolean>(false);
@@ -71,9 +90,9 @@ export const VisualizationTree = ({
       //If form.values.node is empty, reset active.customDataTree onchange input
 
       if (values.node === '') {
-        const updatedActive: Configuration = {
-          ...active,
-          customDataTree: active.customDataTree.map((item) => {
+        writeCustomDataTree(
+          active,
+          active.customDataTree.map((item) => {
             if (item.uri === uriSelected.uri) {
               return {
                 ...item,
@@ -87,8 +106,7 @@ export const VisualizationTree = ({
             }
             return item;
           }),
-        };
-        updatedConfiguration(updatedActive);
+        );
       }
     },
     validate: (values) => {
@@ -110,7 +128,7 @@ export const VisualizationTree = ({
     if (!nodeUri) return;
     if (searchNode) return;
 
-    const { active, updatedConfiguration } = useIbexStore.getState();
+    const { active } = useIbexStore.getState();
 
     try {
       /**
@@ -197,12 +215,7 @@ export const VisualizationTree = ({
         }),
       );
 
-      const updatedActive: Configuration = {
-        ...active,
-        customDataTree: updatedCustomDataTree,
-      };
-
-      updatedConfiguration(updatedActive);
+      writeCustomDataTree(active, updatedCustomDataTree);
     } catch (error) {
       console.error(error);
     }
@@ -232,9 +245,14 @@ export const VisualizationTree = ({
           }
         }
 
-        const updatedActive: Configuration = {
-          ...active,
-          customDataTree: active.customDataTree.map((item) => {
+        // The tree of the configuration as it is now, not as it was when
+        // this render closed over it: another data entry's tree may have
+        // loaded while this one was being listed.
+        const { active: latest } = useIbexStore.getState();
+        if (!latest) return;
+        writeCustomDataTree(
+          latest,
+          latest.customDataTree.map((item) => {
             if (item.uri === dataUri.uri) {
               return {
                 ...item,
@@ -243,9 +261,7 @@ export const VisualizationTree = ({
             }
             return item;
           }),
-        };
-
-        updatedConfiguration(updatedActive);
+        );
       } catch (error) {
         console.error(error);
       }
@@ -277,9 +293,9 @@ export const VisualizationTree = ({
 
       const dataTree = buildTree(customDataTreeUri, dataUri, searchResults);
 
-      const updatedActive: Configuration = {
-        ...active,
-        customDataTree: active.customDataTree.map((item) => {
+      writeCustomDataTree(
+        active,
+        active.customDataTree.map((item) => {
           if (item.uri === dataUri.uri) {
             return {
               ...item,
@@ -289,8 +305,7 @@ export const VisualizationTree = ({
           }
           return item;
         }),
-      };
-      updatedConfiguration(updatedActive);
+      );
     } catch (error) {
       console.error(error);
     }
@@ -444,10 +459,7 @@ export const VisualizationTree = ({
       } else {
         // Update customDataTree with see errors param
         await updateTreeNode(updatedCustomDataTree, value);
-        updatedConfiguration({
-          ...active,
-          customDataTree: updatedCustomDataTree,
-        });
+        writeCustomDataTree(active, updatedCustomDataTree);
       }
     },
     [active, uriSelected, nodeSelected],
@@ -484,71 +496,105 @@ export const VisualizationTree = ({
     [active, formSearchNode.values.node],
   );
 
+  /** The check operations still running, so the next one waits its turn. */
+  const pendingChecks = useRef<Promise<void>>(Promise.resolve());
+
   /**
-   * Get nodes checked
-   * @param uri
-   * @param nodes
+   * Plots or removes the nodes the tree just checked or unchecked.
+   *
+   * Plotting awaits the backend, and a user - or a spec - can click the next
+   * node before it answers. Each click used to send the whole checked list as
+   * the tree saw it, and each operation wrote back the configuration it had
+   * started from. So unchecking one node while another was still loading
+   * computed the list without the node still loading, removed its grid, and
+   * then the load finished and wrote its grid back over the removal.
+   *
+   * A click is therefore reduced to what it changed, against the list the tree
+   * was showing when it happened, and the changes are applied one at a time,
+   * each onto the configuration as the previous one left it.
    */
-  const getNodesChecked = useCallback(
-    async (nodes: URITreeNodeData[]) => {
-      let updatedActive: Configuration = {
-        ...active,
-        checkedNodeURI: [...nodes],
-      };
+  const getNodesChecked = useCallback((nodes: URITreeNodeData[]) => {
+    const seen = useIbexStore.getState().active?.checkedNodeURI ?? [];
+    const sameNode = (a: URITreeNodeData, b: URITreeNodeData) =>
+      a.uri === b.uri && a.name === b.name;
+    const added = nodes.filter((node) => !seen.some((s) => sameNode(s, node)));
+    const removed = seen.filter(
+      (node) => !nodes.some((n) => sameNode(n, node)),
+    );
 
-      const { editingGridId, setEditingGrid } = useIbexStore.getState();
+    pendingChecks.current = pendingChecks.current
+      .then(() =>
+        applyCheckedNodes((current) => [
+          ...current.filter((node) => !removed.some((r) => sameNode(r, node))),
+          ...added.filter((node) => !current.some((c) => sameNode(c, node))),
+        ]),
+      )
+      // A failed operation must not stall every click after it.
+      .catch((error) => console.error('Error while checking nodes: ', error));
+  }, []);
 
-      try {
-        let findEditablePlot = updatedActive.dataPlot.find(
-          (plot) => plot.i === editingGridId,
-        );
+  const applyCheckedNodes = async (
+    nextChecked: (current: URITreeNodeData[]) => URITreeNodeData[],
+  ) => {
+    const { active, editingGridId, setEditingGrid, updatedConfiguration } =
+      useIbexStore.getState();
+    if (!active) return;
+    const nodes = nextChecked(active.checkedNodeURI);
 
-        if (!findEditablePlot) {
-          updatedActive = await handleNewPlot(nodes, updatedActive);
-          // `handleNewPlot` appends the grid it built, and that grid is the one
-          // the user is now editing.
-          findEditablePlot =
-            updatedActive.dataPlot[updatedActive.dataPlot.length - 1];
-          setEditingGrid(findEditablePlot?.i ?? null);
+    let updatedActive: Configuration = {
+      ...active,
+      checkedNodeURI: [...nodes],
+    };
+
+    try {
+      let findEditablePlot = updatedActive.dataPlot.find(
+        (plot) => plot.i === editingGridId,
+      );
+
+      if (!findEditablePlot) {
+        updatedActive = await handleNewPlot(nodes, updatedActive);
+        // `handleNewPlot` appends the grid it built, and that grid is the one
+        // the user is now editing.
+        findEditablePlot =
+          updatedActive.dataPlot[updatedActive.dataPlot.length - 1];
+        setEditingGrid(findEditablePlot?.i ?? null);
+      } else {
+        if (nodes.length === 0) {
+          // Unchecking the last node removes the grid, so nothing is edited.
+          updatedActive.dataPlot = active.dataPlot.filter(
+            (plot) => plot.i !== editingGridId,
+          );
+          setEditingGrid(null);
         } else {
-          if (nodes.length === 0) {
-            // Unchecking the last node removes the grid, so nothing is edited.
-            updatedActive.dataPlot = active.dataPlot.filter(
-              (plot) => plot.i !== editingGridId,
-            );
-            setEditingGrid(null);
-          } else {
-            updatedActive = await handleExistingPlot(
-              nodes,
-              findEditablePlot,
-              updatedActive,
-            );
-          }
+          updatedActive = await handleExistingPlot(
+            nodes,
+            findEditablePlot,
+            updatedActive,
+          );
         }
-      } catch (error) {
-        console.error('Error while plotting a new graph: ', error);
-        showNotification({
-          title: 'Error',
-          message: 'Unable to plot a new graph.',
-          color: 'red',
-        });
-        // Uncheck when error occurs
-        const wantedCheckedNodeURI = [...nodes];
-        wantedCheckedNodeURI.pop();
-        updatedActive.checkedNodeURI = wantedCheckedNodeURI;
-      } finally {
-        if (
-          JSON.stringify(updatedActive.checkedNodeURI) ===
-          JSON.stringify([...nodes])
-        ) {
-          // Set savable if successfully checked
-          updatedActive.saved = false;
-        }
-        updatedConfiguration(updatedActive);
       }
-    },
-    [active, updatedConfiguration],
-  );
+    } catch (error) {
+      console.error('Error while plotting a new graph: ', error);
+      showNotification({
+        title: 'Error',
+        message: 'Unable to plot a new graph.',
+        color: 'red',
+      });
+      // Uncheck when error occurs
+      const wantedCheckedNodeURI = [...nodes];
+      wantedCheckedNodeURI.pop();
+      updatedActive.checkedNodeURI = wantedCheckedNodeURI;
+    } finally {
+      if (
+        JSON.stringify(updatedActive.checkedNodeURI) ===
+        JSON.stringify([...nodes])
+      ) {
+        // Set savable if successfully checked
+        updatedActive.saved = false;
+      }
+      updatedConfiguration(updatedActive);
+    }
+  };
 
   return (
     <Container fluid p={0}>
