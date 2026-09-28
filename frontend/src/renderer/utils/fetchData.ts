@@ -583,17 +583,21 @@ export const fetchDataPlot = async (
   // what no grid references while the cache keeps the response, so a later
   // hit may be the only thing that can bring the payload back. Registering an
   // array already held is a lookup.
+  //
+  // With the shape of the array sent, `downsampled_shape`: `shape` is the
+  // node's shape before downsampling, and a range restored against it asks
+  // for more points than the array has.
   const member = type === 'CPX' ? 'value:cpx' : 'value';
   response.data.valueRef = registerPayload(
     payloadKey(endpoint, member),
     response.data.value,
-    response.data.shape,
+    response.data.downsampled_shape,
   );
   for (const coord of response.data.coordinates) {
     coord.valueRef = registerPayload(
       payloadKey(endpoint, `coord:${coord.name}`),
       coord.value,
-      coord.shape,
+      coord.downsampled_shape,
     );
   }
 
