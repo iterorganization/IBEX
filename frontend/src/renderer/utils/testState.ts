@@ -235,10 +235,13 @@ export const mergeTestState = (
 
   // `active` and its entry in `configurations` must stay the same object, which
   // is the invariant `updatedConfiguration` maintains. A spec that edits only
-  // `active` would otherwise leave the two disagreeing.
-  if (merged.configurations && merged.active) {
+  // `active` would otherwise leave the two disagreeing - and the stale entry is
+  // not inert: writers that start from `configurations` put it back over
+  // `active`, silently undoing what the spec wrote.
+  const configurations = merged.configurations ?? current.configurations;
+  if (configurations && merged.active) {
     const active = merged.active;
-    merged.configurations = merged.configurations.map((configuration) =>
+    merged.configurations = configurations.map((configuration) =>
       configuration.name === active.name ? active : configuration,
     );
   }
