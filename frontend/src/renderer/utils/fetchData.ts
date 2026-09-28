@@ -27,7 +27,7 @@ import { getTensorizedMatrix } from './tensor';
 import { replaceNullsWithNaN } from './functions';
 import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';
-import { cachedRequest } from './requestCache';
+import { cachedRequest, requestCacheKey } from './requestCache';
 import { payloadKey, registerPayload } from '../stores/payloadRegistry';
 
 /**
@@ -126,13 +126,47 @@ async function fetchWithTimeout(
   }
 }
 
+/** How `fetchFromApi` finishes a response and hands it out. */
+interface FetchOptions<T> {
+  timeout?: number;
+  /**
+   * `false` for probes such as `/info/version`, which must stay live. Those
+   * are still de-duplicated while in flight.
+   */
+  cacheable?: boolean;
+  /**
+   * Post-processing run once per request, on the freshly parsed response,
+   * before it is retained. It may modify its argument freely: nothing else
+   * holds it yet.
+   */
+  finish?: (parsed: T) => T | Promise<T>;
+  /**
+   * Names a second way of finishing the same request, so the two are retained
+   * separately - complex data is finished differently from real data.
+   */
+  variant?: string;
+  /**
+   * Makes the caller's copy of the retained response. Every caller gets one,
+   * because callers assign on what they receive and the retained value is
+   * shared by all of them. Defaults to a deep copy, which is right for the
+   * small metadata responses; payload responses override it to share their
+   * arrays.
+   */
+  share?: (retained: T) => T;
+}
+
 /**
  * Generic GET request to the API.
  */
 const fetchFromApi = async <T>(
   endpoint: string,
-  timeout?: number,
-  cacheable = true,
+  {
+    timeout,
+    cacheable = true,
+    finish,
+    variant,
+    share = structuredClone,
+  }: FetchOptions<T> = {},
 ): Promise<T> => {
   let responseStatus: number;
   try {
@@ -156,10 +190,9 @@ const fetchFromApi = async <T>(
         });
       }
     };
-    // The cache stores the body text and each caller parses its own copy: the
-    // parsed graph is mutated in place downstream, so it must never be shared.
-    const body = await cachedRequest(
-      url,
+    const key = requestCacheKey(url) + (variant ? `#${variant}` : '');
+    const retained = await cachedRequest<T>(
+      key,
       async () => {
         const response = await fetchFn();
 
@@ -179,12 +212,17 @@ const fetchFromApi = async <T>(
           throw error;
         }
 
-        return response.text();
+        const body = await response.text();
+        const parsed = JSON.parse(body) as T;
+        return {
+          value: finish ? await finish(parsed) : parsed,
+          bytes: body.length,
+        };
       },
       cacheable,
     );
 
-    return JSON.parse(body) as T;
+    return share(retained);
   } catch (error) {
     if (error.name === 'AbortError') {
       console.error(`Timeout after ${timeout}ms: fetchFromApi(${endpoint}).`);
@@ -488,15 +526,27 @@ export const fetchDataPlot = async (
   // downsampling on a timeout, and the fallback returns different bytes.
   let endpoint: string;
 
+  const fetchPlotData = (timeout?: number) =>
+    fetchFromApi<PlotDataResponse>(endpoint, {
+      timeout,
+      finish: (parsed) =>
+        normalizeDataPlotResponse(parsed, type, {
+          downsampledMethod: firstDownsampledMethod || downsamplingMethod,
+          interpolationMethod,
+        }),
+      variant: type === 'CPX' ? 'cpx' : undefined,
+      share: shareDataPlotResponse,
+    });
+
   if (downsamplingMethod) {
     // Get downsampled data plot
     endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
-    response = await fetchFromApi<PlotDataResponse>(endpoint);
+    response = await fetchPlotData();
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
       endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
-      response = await fetchFromApi<PlotDataResponse>(endpoint, 5000);
+      response = await fetchPlotData(5000);
     } catch (error) {
       if (error.name === 'AbortError' || error.name === 'SyntaxError') {
         // "SyntaxError" can be triggered when too heavy (eof error)
@@ -519,7 +569,7 @@ export const fetchDataPlot = async (
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
         endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
-        response = await fetchFromApi<PlotDataResponse>(endpoint);
+        response = await fetchPlotData();
       } else {
         // Any other error (e.g. a 466 raised when a signal operation cannot be
         // applied) has already been notified by handleError: propagate it
@@ -529,6 +579,36 @@ export const fetchDataPlot = async (
     }
   }
 
+  // Registered on every hand-out, not once per request: the registry sweeps
+  // what no grid references while the cache keeps the response, so a later
+  // hit may be the only thing that can bring the payload back. Registering an
+  // array already held is a lookup.
+  const member = type === 'CPX' ? 'value:cpx' : 'value';
+  response.data.valueRef = registerPayload(
+    payloadKey(endpoint, member),
+    response.data.value,
+    response.data.shape,
+  );
+  for (const coord of response.data.coordinates) {
+    coord.valueRef = registerPayload(
+      payloadKey(endpoint, `coord:${coord.name}`),
+      coord.value,
+      coord.shape,
+    );
+  }
+
+  return response;
+};
+
+/**
+ * Finishes a parsed `plot_data` response. Runs once per request, before the
+ * response is retained, so nothing here has to be idempotent.
+ */
+const normalizeDataPlotResponse = async (
+  response: PlotDataResponse,
+  type: NodeInfoTypeEnum | undefined,
+  methods: { downsampledMethod?: string; interpolationMethod?: string },
+): Promise<PlotDataResponse> => {
   // Rule to rename data when "value" or "data":
   if (response.data.name == 'data' || response.data.name == 'value') {
     const targetStringList = response.data.path.split('/');
@@ -546,17 +626,11 @@ export const fetchDataPlot = async (
   }
 
   // Return used methods
-  response.data.downsampled_method =
-    firstDownsampledMethod || downsamplingMethod;
-  response.data.interpolated_method = interpolationMethod;
+  response.data.downsampled_method = methods.downsampledMethod;
+  response.data.interpolated_method = methods.interpolationMethod;
 
   if (response.data.shape === 'irregular') {
-    // Alert when getting irregular shape
-    showNotification({
-      title: 'Warning',
-      message: 'Data are incomplete.',
-      color: 'yellow',
-    });
+    incompleteResponses.add(response.data);
 
     for (const coord of response.data.coordinates) {
       // Fill incomplete coordinates with NaN to be a matrix format
@@ -580,23 +654,48 @@ export const fetchDataPlot = async (
 
   response.data.value = replaceNullsWithNaN(response.data.value);
 
-  // Registered here rather than at the twenty-odd call sites that store the
-  // result, because this is where the request - the payload's identity - is
-  // known, and where the post-processing above has finished.
-  response.data.valueRef = registerPayload(
-    payloadKey(endpoint, 'value'),
-    response.data.value,
-    response.data.shape,
-  );
-  for (const coord of response.data.coordinates) {
-    coord.valueRef = registerPayload(
-      payloadKey(endpoint, `coord:${coord.name}`),
-      coord.value,
-      coord.shape,
-    );
-  }
-
   return response;
+};
+
+/**
+ * Responses the backend sent with an irregular shape. The shape is gone once
+ * they are tensorised, and the user is warned on every hand-out, not only on
+ * the request that fetched them.
+ */
+const incompleteResponses = new WeakSet<PlotDataResponse['data']>();
+
+const copyShape = <S extends number[] | 'irregular' | undefined>(shape: S) =>
+  (Array.isArray(shape) ? [...shape] : shape) as S;
+
+/**
+ * A caller's copy of a retained `plot_data` response: every object and shape
+ * is its own, the `value` arrays are the retained ones.
+ */
+const shareDataPlotResponse = (
+  retained: PlotDataResponse,
+): PlotDataResponse => {
+  if (incompleteResponses.has(retained.data)) {
+    // Alert when getting irregular shape
+    showNotification({
+      title: 'Warning',
+      message: 'Data are incomplete.',
+      color: 'yellow',
+    });
+  }
+  return {
+    ...retained,
+    data: {
+      ...retained.data,
+      shape: copyShape(retained.data.shape),
+      downsampled_shape: copyShape(retained.data.downsampled_shape),
+      coordinates: retained.data.coordinates.map((coord) => ({
+        ...coord,
+        shape: copyShape(coord.shape),
+        downsampled_shape: copyShape(coord.downsampled_shape),
+        coordinates: coord.coordinates && [...coord.coordinates],
+      })),
+    },
+  };
 };
 
 /**
@@ -612,16 +711,21 @@ export const fetchFieldValue = async (
   const endpoint = downsamplingMethod
     ? `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`
     : `/data/field_value?uri=${encodeURIComponent(uri)}`;
-  const response = await fetchFromApi<FieldValueResponse>(endpoint);
+  const response = await fetchFromApi<FieldValueResponse>(endpoint, {
+    finish: (parsed) => {
+      if (type === 'CPX') {
+        // Transform complex data
+        parsed.value = transformComplexData(parsed.value) as AxisData;
+      }
+      parsed.value = replaceNullsWithNaN(parsed.value);
+      return parsed;
+    },
+    variant: type === 'CPX' ? 'cpx' : undefined,
+    share: (retained) => ({ ...retained }),
+  });
 
-  if (type === 'CPX') {
-    // Transform complex data
-    const updatedData = transformComplexData(response.value) as AxisData;
-    response.value = updatedData;
-  }
-  response.value = replaceNullsWithNaN(response.value);
   response.valueRef = registerPayload(
-    payloadKey(endpoint, 'value'),
+    payloadKey(endpoint, type === 'CPX' ? 'value:cpx' : 'value'),
     response.value,
   );
   return response;
@@ -694,5 +798,7 @@ export const fetchGeometryNodes = async (uri: string, labelUri: string) => {
 export const fetchInfoVersion = async () => {
   // Never cached: the header polls this to show whether the backend is alive,
   // and a cached answer would freeze that indicator on its first value.
-  return fetchFromApi<InfoVersionResponse>(`/info/version`, undefined, false);
+  return fetchFromApi<InfoVersionResponse>(`/info/version`, {
+    cacheable: false,
+  });
 };

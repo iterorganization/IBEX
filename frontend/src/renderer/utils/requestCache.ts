@@ -5,36 +5,40 @@
  * the whole session and identical requests can be served without another round
  * trip.
  *
- * ## Why the raw body text is cached rather than the parsed object
+ * What is retained is the response *as the fetch layer finished it*: parsed,
+ * and for `plot_data` also renamed, tensorised and cleaned of nulls. That work
+ * therefore runs once per request rather than once per caller, and a hit costs
+ * a copy of the small objects around the arrays - never a `JSON.parse` of a
+ * multi-megabyte body.
  *
- * `fetchDataPlot` post-processes the parsed response *in place* (it renames
- * `data.name`, rewrites every `coord.target`, tensorizes irregular data, runs
- * the non-idempotent `transformComplexData`, then `replaceNullsWithNaN`), and
- * five call sites then alias the result straight into the store with
- * `plot.yData = response.data.value`. Those arrays are afterwards mutated in
- * place by `transposeAxis` and `applyRange`.
+ * Handing the same arrays to every caller is sound because nothing writes into
+ * a payload: transforms assign a new array under a new registry key. Callers
+ * still get their own copy of everything that is not a payload array (see
+ * `fetchFromApi`'s `share`), since those objects are assigned on freely.
  *
- * Handing out a shared parsed object would therefore (a) re-apply the
- * non-idempotent transforms on a hit and (b) alias one grid's data to another
- * grid's, corrupting both and the cache entry with them. Caching the text and
- * parsing per hit yields a fresh object graph every time, leaves the whole
- * post-processing pipeline untouched, and makes byte accounting exact.
- * Parsing costs a few ms per MB — always far less than the request it replaces.
+ * Sizes are the length of the body the entry was parsed from, which keeps the
+ * byte budgets below meaningful without walking the parsed graph.
  */
 
-/** Total budget for retained bodies. */
+/** Total budget for retained entries, in body bytes. */
 const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 
 /**
- * Bodies above this are never retained. They are still de-duplicated while in
+ * Entries above this are never retained. They are still de-duplicated while in
  * flight, they just do not get to evict everything else: a single 2-D payload
  * can be larger than the sum of every 1-D payload in the session.
  */
 const MAX_ENTRY_BYTES = 64 * 1024 * 1024;
 
+/** A retained response and the length of the body it was parsed from. */
+export interface CachedResponse<T = unknown> {
+  value: T;
+  bytes: number;
+}
+
 /** Insertion-ordered, which is what makes plain `Map` usable as an LRU. */
-const bodies = new Map<string, string>();
-const inFlight = new Map<string, Promise<string>>();
+const entries = new Map<string, CachedResponse>();
+const inFlight = new Map<string, Promise<CachedResponse>>();
 let totalBytes = 0;
 
 const stats = {
@@ -82,91 +86,94 @@ export const requestCacheKey = (url: string): string => {
   }
 };
 
-/** Returns a retained body, refreshing its recency. */
-const takeCached = (key: string): string | undefined => {
-  const body = bodies.get(key);
-  if (body === undefined) return undefined;
-  bodies.delete(key);
-  bodies.set(key, body);
-  return body;
+/** Returns a retained entry, refreshing its recency. */
+const takeCached = (key: string): CachedResponse | undefined => {
+  const entry = entries.get(key);
+  if (entry === undefined) return undefined;
+  entries.delete(key);
+  entries.set(key, entry);
+  return entry;
 };
 
-/** Retains a body, evicting least-recently-used entries to stay in budget. */
-const retain = (key: string, body: string): void => {
-  if (body.length > MAX_ENTRY_BYTES) {
+/** Retains an entry, evicting least-recently-used ones to stay in budget. */
+const retain = (key: string, entry: CachedResponse): void => {
+  if (entry.bytes > MAX_ENTRY_BYTES) {
     stats.skipped += 1;
     return;
   }
-  const existing = bodies.get(key);
+  const existing = entries.get(key);
   if (existing !== undefined) {
-    totalBytes -= existing.length;
-    bodies.delete(key);
+    totalBytes -= existing.bytes;
+    entries.delete(key);
   }
-  while (bodies.size > 0 && totalBytes + body.length > MAX_TOTAL_BYTES) {
-    const oldest = bodies.keys().next().value as string;
-    totalBytes -= bodies.get(oldest).length;
-    bodies.delete(oldest);
+  while (entries.size > 0 && totalBytes + entry.bytes > MAX_TOTAL_BYTES) {
+    const oldest = entries.keys().next().value as string;
+    totalBytes -= entries.get(oldest).bytes;
+    entries.delete(oldest);
     stats.evictions += 1;
   }
-  bodies.set(key, body);
-  totalBytes += body.length;
+  entries.set(key, entry);
+  totalBytes += entry.bytes;
 };
 
 /**
  * Runs `request` unless an identical one is cached or already in flight.
  *
- * @param url Absolute request URL, used to derive the cache key.
- * @param request Performs the request and resolves to the response body text.
+ * The value resolved is the retained one, shared with every other caller of
+ * the same request: callers that modify what they get must copy it first.
+ *
+ * @param key Cache key, from `requestCacheKey` - plus a suffix when the same
+ *   request is finished in more than one way.
+ * @param request Performs the request and resolves to the finished response
+ *   and the length of the body it came from.
  * @param cacheable `false` for probes such as `/info/version`, which must stay
  *   live. Those are still de-duplicated while in flight.
  */
-export const cachedRequest = async (
-  url: string,
-  request: () => Promise<string>,
+export const cachedRequest = async <T>(
+  key: string,
+  request: () => Promise<CachedResponse<T>>,
   cacheable = true,
-): Promise<string> => {
-  const key = requestCacheKey(url);
-
+): Promise<T> => {
   if (cacheable) {
     const cached = takeCached(key);
     if (cached !== undefined) {
       stats.hits += 1;
-      return cached;
+      return cached.value as T;
     }
   }
 
   const pending = inFlight.get(key);
   if (pending) {
     stats.dedup += 1;
-    return pending;
+    return (await pending).value as T;
   }
 
   stats.misses += 1;
   const promise = request()
-    .then((body) => {
-      if (cacheable) retain(key, body);
-      return body;
+    .then((entry) => {
+      if (cacheable) retain(key, entry);
+      return entry;
     })
     .finally(() => {
       inFlight.delete(key);
     });
 
   inFlight.set(key, promise);
-  return promise;
+  return (await promise).value;
 };
 
 /**
- * Drops every retained body. Called when the selected data entries change, and
- * by the tests so one spec cannot warm the cache for the next.
+ * Drops every retained entry. Called when the selected data entries change,
+ * and by the tests so one spec cannot warm the cache for the next.
  */
 export const clearRequestCache = (): void => {
-  bodies.clear();
+  entries.clear();
   totalBytes = 0;
 };
 
 /** Counters for the reactivity benchmark. */
 export const getRequestCacheStats = () => ({
   ...stats,
-  entries: bodies.size,
+  entries: entries.size,
   bytes: totalBytes,
 });

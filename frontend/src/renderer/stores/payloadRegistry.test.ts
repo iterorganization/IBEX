@@ -11,6 +11,7 @@ import {
   registerPayload,
   rangedKey,
   rangesOf,
+  setFreezePayloads,
   stepsOf,
   sweep,
   transposeOf,
@@ -342,5 +343,33 @@ describe('payloadRegistry', () => {
 
       expect(payloadStats().derivations).to.equal(before + 1);
     });
+  });
+});
+
+describe('freezing on registration', () => {
+  beforeEach(() => clearPayloads());
+  afterEach(() => setFreezePayloads(false));
+
+  it('turns a write into a registered array into an error', () => {
+    setFreezePayloads(true);
+    const rows = [
+      [1, 2],
+      [3, 4],
+    ];
+    registerPayload(payloadKey('/d?uri=x', 'value'), rows);
+
+    expect(() => {
+      rows[1][0] = 9;
+    }).to.throw(TypeError);
+    expect(() => rows.push([5, 6])).to.throw(TypeError);
+    expect(rows[1][0]).to.equal(3);
+  });
+
+  it('leaves arrays writable when it is off', () => {
+    const rows = [[1, 2]];
+    registerPayload(payloadKey('/d?uri=x', 'value'), rows);
+
+    rows[0][0] = 9;
+    expect(rows[0][0]).to.equal(9);
   });
 });

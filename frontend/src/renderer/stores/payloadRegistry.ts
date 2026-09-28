@@ -37,10 +37,12 @@ import { requestCacheKey } from '../utils/requestCache';
  * - Derivations compose against the **base**. Applying a range of [40,120] and
  *   then one of [50,60] yields `|range:1:50-60` derived from the base payload,
  *   never from the already-trimmed array. This is what lets a range be undone.
- * - A registered array is not written to. That is not yet enforced: the
- *   transforms that still rewrite payloads in place are converted in the stages
- *   that follow, and only then is it safe to freeze on registration and to hand
- *   the same array to two grids.
+ * - A registered array is not written to. The request cache hands the same
+ *   arrays to every caller and every grid, so a write into one would reach all
+ *   of them and the cache entry too. Under E2E_TEST registration deep-freezes
+ *   the array, which turns such a write into a TypeError the suites report;
+ *   in a normal run it is a convention, because freezing a 2-D payload walks
+ *   every row of it.
  */
 
 /** A registry key. Opaque: build it with `payloadKey` or `derivedKey`. */
@@ -66,6 +68,27 @@ const stats = {
   swept: 0,
   /** Whether registered arrays are frozen. See the invariants above. */
   frozen: false,
+};
+
+/** Freezes an array and every array or object nested in it. */
+const deepFreeze = (value: unknown): void => {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return;
+  }
+  Object.freeze(value);
+  if (Array.isArray(value)) {
+    // Indexed rather than `Object.values`, which would copy every row.
+    for (let index = 0; index < value.length; index += 1) {
+      deepFreeze(value[index]);
+    }
+  } else {
+    for (const item of Object.values(value)) deepFreeze(item);
+  }
+};
+
+/** Turns freezing on registration on or off. See the invariants above. */
+export const setFreezePayloads = (enabled: boolean): void => {
+  stats.frozen = enabled;
 };
 
 /** Product of a shape, or 0 when the backend reported an irregular one. */
@@ -208,6 +231,7 @@ export const registerPayload = (
     stats.hits += 1;
     return key;
   }
+  if (stats.frozen) deepFreeze(value);
   payloads.set(key, {
     value,
     shape: Array.isArray(shape) ? shape : undefined,

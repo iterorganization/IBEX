@@ -424,19 +424,19 @@ stage 11, when the slider row finally moves.
 Branch `perf/split_configuration_store_object`, on the same canvas, with the
 range scenario inserted between the axis swap and the metadata panel.
 
-| Scenario | req | redraws | renders | payloads | elements | derived | ms |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| toggle edit mode (UI flag) | 0 | 1 | 4 | 8 | 25785 | 0 | 952 |
-| coordinate slider, 2 steps | 0 | 6 | 28 | 8 | 25785 | 0 | 1561 |
-| swap two axes | 0 | 3 | 10 | 9 | 50985 | 1 | 993 |
-| swap the same axes back | 0 | 3 | 10 | 9 | 50985 | 1 | 939 |
-| apply a data range | 0 | 9 | 58 | 11 | 63690 | 3 | 1965 |
-| **restore the data range** | **0** | 9 | 58 | 13 | 89100 | 5 | 1748 |
-| apply the same range again | 0 | 9 | 58 | 13 | 89100 | **5** | 1799 |
-| restore the data range again | 0 | 9 | 58 | 13 | 89100 | **5** | 1650 |
-| metadata panel, first open | 2 | 2 | 4 | 15 | 89106 | 5 | 786 |
-| metadata panel, revisit | 0 | 7 | 48 | 13 | 89100 | 5 | 1197 |
-| idle (no interaction) | 0 | 0 | 0 | 13 | 89100 | 5 | 2133 |
+| Scenario                     | req   | redraws | renders | payloads | elements | derived | ms   |
+| ---------------------------- | ----- | ------- | ------- | -------- | -------- | ------- | ---- |
+| toggle edit mode (UI flag)   | 0     | 1       | 4       | 8        | 25785    | 0       | 952  |
+| coordinate slider, 2 steps   | 0     | 6       | 28      | 8        | 25785    | 0       | 1561 |
+| swap two axes                | 0     | 3       | 10      | 9        | 50985    | 1       | 993  |
+| swap the same axes back      | 0     | 3       | 10      | 9        | 50985    | 1       | 939  |
+| apply a data range           | 0     | 9       | 58      | 11       | 63690    | 3       | 1965 |
+| **restore the data range**   | **0** | 9       | 58      | 13       | 89100    | 5       | 1748 |
+| apply the same range again   | 0     | 9       | 58      | 13       | 89100    | **5**   | 1799 |
+| restore the data range again | 0     | 9       | 58      | 13       | 89100    | **5**   | 1650 |
+| metadata panel, first open   | 2     | 2       | 4       | 15       | 89106    | 5       | 786  |
+| metadata panel, revisit      | 0     | 7       | 48      | 13       | 89100    | 5       | 1197 |
+| idle (no interaction)        | 0     | 0       | 0       | 13       | 89100    | 5       | 2133 |
 
 The row this stage is about is `restore the data range`. It used to issue one
 `plot_data` per trace of the grid, plus one `fetchErrorBands` per trace that had
@@ -461,7 +461,7 @@ to ask the back end again. Widening a range, or adding a trace to a grid that
 already had one, therefore had to be special-cased - `oldRange` threaded through
 five async functions to convert an absolute range into an offset into the array
 that had already been cut, and `rangeAlreadyAppliedInPlot`, flipped by
-membership of a `newPlotsUri` list, to guess whether a *particular* trace had
+membership of a `newPlotsUri` list, to guess whether a _particular_ trace had
 been narrowed yet. None of that had a test.
 
 A range is now a **window on the payload**, expressed as absolute bounds against
@@ -490,7 +490,7 @@ looking at a single trailing step, and the two can be applied in either order.
 
 ### Why restoring is not free the first time
 
-Restoring lands on the *full window* of the payload, not on the payload itself,
+Restoring lands on the _full window_ of the payload, not on the payload itself,
 and that costs one slice the first time. It has to: the base is the response as
 it was parsed, in double precision, while every window is a tfjs slice of it and
 therefore single precision. Landing on the base would move every value slightly
@@ -501,7 +501,7 @@ restore is a lookup, which is the `restore the data range again` row.
 The same precision argument decides where a typed bound is resolved. Bounds are
 matched against `Math.fround` of the coordinate, because everything on the
 render path has been through a tensor: a bound typed as 0.6 has to select the
-point the axis *labels* 0.6, and single precision puts that value fractionally
+point the axis _labels_ 0.6, and single precision puts that value fractionally
 above the double 0.6. The old code got this by accident and inconsistently - the
 first range on a grid resolved against the raw response and every later one
 against a float32 array, because the coordinate had been through a tensor by
@@ -542,19 +542,19 @@ in stage 11, when the cursor stops indexing a stored array at all.
 
 Branch `perf/split_configuration_store_object`, same canvas and same scenarios.
 
-| Scenario | req | redraws | renders | payloads | elements | derived | ms |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| toggle edit mode (UI flag) | 0 | 1 | 4 | 8 | 25785 | 9 | 975 |
-| **coordinate slider, 2 steps** | 0 | **2** | **16** | 8 | 25785 | 9 | 1391 |
-| swap two axes | 0 | **1** | **4** | 9 | 50985 | 10 | 960 |
-| swap the same axes back | 0 | **1** | **4** | 9 | 50985 | 10 | 884 |
-| apply a data range | 0 | 12 | 54 | 11 | 63690 | 12 | 1869 |
-| restore the data range | 0 | 12 | 54 | 13 | 89100 | 14 | 1701 |
-| apply the same range again | 0 | 12 | 54 | 13 | 89100 | 14 | 1691 |
-| restore the data range again | 0 | 12 | 54 | 13 | 89100 | 14 | 1661 |
-| metadata panel, first open | 2 | 2 | 4 | 15 | 89106 | 14 | 775 |
-| metadata panel, revisit | 0 | 10 | 44 | 13 | 89100 | 14 | 1212 |
-| idle (no interaction) | 0 | 0 | 0 | 13 | 89100 | 14 | 2134 |
+| Scenario                       | req | redraws | renders | payloads | elements | derived | ms   |
+| ------------------------------ | --- | ------- | ------- | -------- | -------- | ------- | ---- |
+| toggle edit mode (UI flag)     | 0   | 1       | 4       | 8        | 25785    | 9       | 975  |
+| **coordinate slider, 2 steps** | 0   | **2**   | **16**  | 8        | 25785    | 9       | 1391 |
+| swap two axes                  | 0   | **1**   | **4**   | 9        | 50985    | 10      | 960  |
+| swap the same axes back        | 0   | **1**   | **4**   | 9        | 50985    | 10      | 884  |
+| apply a data range             | 0   | 12      | 54      | 11       | 63690    | 12      | 1869 |
+| restore the data range         | 0   | 12      | 54      | 13       | 89100    | 14      | 1701 |
+| apply the same range again     | 0   | 12      | 54      | 13       | 89100    | 14      | 1691 |
+| restore the data range again   | 0   | 12      | 54      | 13       | 89100    | 14      | 1661 |
+| metadata panel, first open     | 2   | 2       | 4       | 15       | 89106    | 14      | 775  |
+| metadata panel, revisit        | 0   | 10      | 44      | 13       | 89100    | 14      | 1212 |
+| idle (no interaction)          | 0   | 0       | 0       | 13       | 89100    | 14      | 2134 |
 
 The slider row has not moved since stage 2. It moves here: **6 redraws to 2**,
 one per step, and 28 renders to 16. Swapping two axes goes from 3 redraws and
@@ -615,7 +615,7 @@ hold.
 `plot.x`, `plot.y`, `plot.customdata` and `error_bands[].array` are not written
 anywhere any more - not by `plotData`, not by `swapAxis`, not by
 `applyRangesToGrid`, not by the four `Customize*` panels that each rebuilt them
-after a fetch. `getErrorsAreaToPlot` became `buildTraces`, which *creates* the
+after a fetch. `getErrorsAreaToPlot` became `buildTraces`, which _creates_ the
 objects Plotly is handed instead of copying the store's and writing back onto
 the copy. They stay on the `DataPlotly` type as optional, because the render
 path and the e2e projection both build traces that carry them; a grid in the
@@ -632,10 +632,88 @@ copy that a writer might have forgotten to refresh.
 Deferred from stage 9 to be looked at here, and the answer is that it still does
 not belong here. Deriving a row is now a handful of pointer chases into the
 nested arrays, memoised - there is no copy left on the read path for strides to
-remove. What does still materialise a whole matrix is the *transform* path:
+remove. What does still materialise a whole matrix is the _transform_ path:
 `derive/ranges.ts` tensorises a payload and calls `.array()` to get nested
 arrays back, ~670 ms for the 871x1x129x65 psi. Fixing that means changing what a
-payload *is* - a flat `Float64Array` with a shape and strides, materialised only
+payload _is_ - a flat `Float64Array` with a shape and strides, materialised only
 at the boundary - which is the item the plan already parks until after stage 12,
 and it wants the request cache merged first so there is one ingest path to
 change rather than twenty.
+
+## After caching finished responses and stopping stale writes (stage 12, first half)
+
+Branch `perf/split_configuration_store_object`, same canvas and same scenarios.
+Measured with the backend installed from PyPI (`imas-python` 2.3.0,
+`imas-idstools` 2.5.0) into a fresh Python 3.13 venv.
+
+| Scenario                     | req | redraws | renders | payloads | elements | derived | ms   |
+| ---------------------------- | --- | ------- | ------- | -------- | -------- | ------- | ---- |
+| toggle edit mode (UI flag)   | 0   | 1       | 4       | 8        | 25785    | 9       | 1264 |
+| coordinate slider, 2 steps   | 0   | 2       | 16      | 8        | 25785    | 9       | 1423 |
+| swap two axes                | 0   | 1       | 4       | 9        | 50985    | 10      | 977  |
+| swap the same axes back      | 0   | 1       | 4       | 9        | 50985    | 10      | 906  |
+| **apply a data range**       | 0   | **6**   | **22**  | 11       | 63690    | 12      | 1572 |
+| **restore the data range**   | 0   | **6**   | **22**  | 13       | 89100    | 14      | 1450 |
+| apply the same range again   | 0   | 6       | 22      | 13       | 89100    | 14      | 1553 |
+| restore the data range again | 0   | 6       | 22      | 13       | 89100    | 14      | 1438 |
+| metadata panel, first open   | 2   | 2       | 4       | 15       | 89106    | 14      | 787  |
+| **metadata panel, revisit**  | 0   | **4**   | **12**  | 13       | 89100    | 14      | 988  |
+| idle (no interaction)        | 0   | 0       | 0       | 13       | 89100    | 14      | 2123 |
+
+### The request cache holds what the fetch layer finished
+
+It used to hold response _text_ and parse it for every caller, because
+`fetchDataPlot` then post-processed the parsed graph in place and callers
+aliased its arrays into the store, where transforms mutated them. Neither is
+true any more - stages 9 to 11 made every transform assign a new array under a
+new key - so the cache now keeps the response after `normalizeDataPlotResponse`
+has renamed, tensorised and cleaned it, once per request. A hit costs a copy of
+the objects around the arrays, never a `JSON.parse` of a multi-megabyte body.
+The byte budgets still count the body the entry was parsed from.
+
+The arrays a hit hands out are the ones the registry holds, so the two layers
+now share one copy of each payload rather than a parsed one and a text one. What
+keeps that sound is the invariant the registry states: nothing writes into a
+payload. Under `E2E_TEST` registration deep-freezes every array, so a write that
+breaks the invariant fails the suites with a TypeError instead of corrupting
+every grid sharing the array. Both suites ran green with freezing on.
+
+Complex nodes are finished differently from real ones, so a CPX request is
+retained - and registered - under its own `#cpx` / `value:cpx` name.
+
+### The rows that moved, and why
+
+None of this stage's cache work changes a count on this canvas: the benchmark
+never re-parses a large body. The rows in bold moved because of a fix the e2e
+suite forced. `HoverButtons`' error-band effect deep-copied the configuration
+its render had closed over, awaited the fetches, and wrote the whole copy back -
+on every mount and every toggle, whether or not a band had arrived. It now
+fetches into a structural copy of the store as it is, merges only the bands and
+band nodes onto the store as it is _after_ the await, and writes nothing when
+nothing changed. The range and metadata rows mount panels, so each of those
+mounts used to cost a configuration write and the redraws that followed it.
+
+### Stale writes the old one had been hiding
+
+That write was not only wasteful. Anything that happened during its await - a
+slider moved, a panel linked - was undone when it landed, which is why the
+synchronized-grids spec failed here on the unmodified branch. Fixing it
+uncovered two more writers of the same shape, previously masked because the
+error-band write happened to restore what they destroyed:
+
+- `VisualizationTree`'s tree updates wrote `{ ...configurationBeforeAwait,
+customDataTree }`, dropping a plot made while node infos loaded. They now
+  write the tree onto the latest configuration.
+- `getNodesChecked` sent the whole checked list as the tree saw it, and each
+  plot operation wrote back the configuration it started from. Unchecking one
+  node while another was still loading removed the loading node's grid, and the
+  load then wrote it back. A click is now reduced to what it added and removed,
+  and the operations run one at a time, each onto the configuration the previous
+  one left.
+
+The e2e bridge had the same flaw: `mergeTestState` re-linked `active` to its
+`configurations` entry only when the spec also sent `configurations`, so a spec
+writing `active` alone left a stale entry for those writers to restore.
+
+Still open from the plan: the deep clones in `DataplotCustomization` and
+`updateInterpolatedPlots`, and the real-data measurement on the 720-slice entry.
