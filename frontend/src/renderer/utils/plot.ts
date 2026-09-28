@@ -259,7 +259,9 @@ const updateInterpolatedPlots = async (
   mainUri: string,
   nodeType?: NodeInfoTypeEnum,
 ) => {
-  let interpolatedDataPlot = structuredClone(findDataPlot);
+  // A structural copy: every field below is reassigned, never written into,
+  // so the payloads can stay shared.
+  let interpolatedDataPlot = cloneGridStructure(findDataPlot);
   const isInDeleteCase = !nodeType;
   let formattedCoordinates: Coordinates[];
   const urisToInterpolate = getUrisToInterpolate(
@@ -351,7 +353,8 @@ const updateCoordsAfterInterpolation = (
   oldCoords: Coordinates[],
   newCoords: Coordinates[],
 ) => {
-  const interpolatedCoords = structuredClone(newCoords);
+  // Only `valueIndex` and `axeIndex` change: copy the coordinates, not their data.
+  const interpolatedCoords = newCoords.map((coord) => ({ ...coord }));
   for (const [index, newCoord] of interpolatedCoords.entries()) {
     const oldCoord = oldCoords[index];
     const wantedValue = getArrayValueFromDependance(
@@ -437,7 +440,7 @@ export const handleExistingPlot = async (
       formattedCoordinates,
     );
     const partiallyInterpolatedDataPlot: DataGridPlot = {
-      ...structuredClone(findDataPlot),
+      ...cloneGridStructure(findDataPlot),
       coordinates: interpolatedCoordinates,
     };
 
@@ -516,7 +519,7 @@ export const handleExistingPlot = async (
 
     const coordinatesExistAndMatch =
       interpolatedDataPlot.coordinates.length === coordsResponse.length &&
-      structuredClone(interpolatedDataPlot.coordinates)
+      [...interpolatedDataPlot.coordinates]
         .sort(compareByAxeIndex)
         .every((coord: Coordinates, index: number) => {
           const responseCoord = coordsResponse[index];
@@ -1663,7 +1666,7 @@ export const initPlotColors = async (
   });
 
   const updatedPlotColors = setterForCustomization
-    ? (structuredClone(customizedDataGrid) as DataGridPlot)
+    ? cloneGridStructure(customizedDataGrid)
     : customizedDataGrid;
 
   if (
@@ -1688,11 +1691,9 @@ export const initPlotColors = async (
       );
       const colorFromDOM = line?.style?.stroke || point?.style?.fill;
 
-      if (!plot?.line) {
-        plot.line = { color: colorFromDOM } as PlotLine;
-      } else {
-        plot.line.color = colorFromDOM;
-      }
+      // A new object rather than a write into `plot.line`, which the copy
+      // above shares with the grid it came from.
+      plot.line = { ...plot.line, color: colorFromDOM } as PlotLine;
       plotIndex++;
     }
     if (!shouldUpdateColors) {
@@ -1917,12 +1918,12 @@ export async function plotNodeUriLoaded(
               index,
               responseCoordinates,
             ] of response.data.coordinates.entries()) {
-              const matchingCoord: Coordinates = structuredClone(
-                dataGrid.coordinates,
-              ).find(
+              const found = dataGrid.coordinates.find(
                 (c: Coordinates) =>
                   normalizeIndices(c.path) === responseCoordinates.path,
               );
+              // Every field of it is reassigned below; the payload is replaced.
+              const matchingCoord: Coordinates = found && { ...found };
               const lastField = getLastIndexedField(responseCoordinates.target);
               if (!lastField) continue;
 
@@ -2026,10 +2027,8 @@ export async function plotNodeUriLoaded(
           ) !==
           JSON.stringify(dataGrid.coordinates.map((coord, index) => index))
         ) {
-          const customizedDataGrid = structuredClone(dataGrid) as DataGridPlot;
-          const updatedDataPlot = structuredClone(
-            dataGridUpdated,
-          ) as DataGridPlot;
+          const customizedDataGrid = dataGrid;
+          const updatedDataPlot = cloneGridStructure(dataGridUpdated);
           for (const [index, coord] of updatedDataPlot.coordinates.entries()) {
             // Set to original axe indexes in order apply the transposition
             coord.axeIndex = index;
