@@ -3,6 +3,7 @@ export * from './equality';
 export * from './fetchData';
 export * from './grid';
 export * from './matrix';
+export * from './mergeErrorBands';
 export * from './plot';
 export * from './tensor';
 export * from './tree';

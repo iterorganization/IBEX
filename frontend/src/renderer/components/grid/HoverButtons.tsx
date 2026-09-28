@@ -26,7 +26,12 @@ import {
   DataGridPlot,
   PlotType,
 } from '../../types';
-import { applyRangesToGrid, fetchErrorBandsInConfig } from '../../utils';
+import {
+  applyRangesToGrid,
+  cloneGridStructure,
+  fetchErrorBandsInConfig,
+  mergeErrorBands,
+} from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
@@ -137,8 +142,16 @@ export const HoverButtons = React.memo(
         // has always operated on whichever grid is open for editing, and
         // returned early when none is - which is what keeps this effect from
         // fetching error bands for every panel as it mounts.
-        const { editingGridId } = useIbexStore.getState();
-        const updatedActive = structuredClone(active) as Configuration;
+        const { editingGridId, active: start } = useIbexStore.getState();
+        if (!start) return;
+        // The fetches below write into what they are given, so they get a
+        // structural copy - the payload arrays stay shared - of the store as
+        // it is now, not of the `active` this render closed over.
+        const working: Configuration = {
+          ...start,
+          checkedNodeURI: [...start.checkedNodeURI],
+          dataPlot: start.dataPlot.map(cloneGridStructure),
+        };
         if (data.displayErrorBand) {
           if (
             (previousValueDisplayErrorBands.current === false ||
@@ -146,35 +159,45 @@ export const HoverButtons = React.memo(
             data.displayErrorBand === true
           ) {
             // Get all error bands from selected dataPlot when user active error bands
-            const selectedDataPlot = updatedActive.dataPlot.find(
+            const selectedDataPlot = working.dataPlot.find(
               (dataPlot) => dataPlot.i === data.i,
             );
-            for (const plot of selectedDataPlot.plot) {
+            for (const plot of selectedDataPlot?.plot ?? []) {
               await fetchErrorBandsInConfig(
-                updatedActive,
+                working,
                 plot.nodeUri,
                 editingGridId,
               );
             }
 
-            if (previousValueDisplayErrorBands.current === false) {
+            if (
+              selectedDataPlot &&
+              previousValueDisplayErrorBands.current === false
+            ) {
               // Cut the bands that just arrived to the windows the grid has.
               // The sliders stay where they are: nothing about the grid changed,
               // only what is drawn on it.
-              const index = updatedActive.dataPlot.indexOf(selectedDataPlot);
-              updatedActive.dataPlot[index] =
+              const index = working.dataPlot.indexOf(selectedDataPlot);
+              working.dataPlot[index] =
                 await applyRangesToGrid(selectedDataPlot);
             }
           }
         } else {
           // Removes all error bands from selected dataPlot
-          removeErrorBands(updatedActive);
+          removeErrorBands(working);
         }
         // Update previous value (used to determine the condition: previous === false && new === true)
         previousValueDisplayErrorBands.current = data.displayErrorBand;
 
-        // Update config
-        updatedConfiguration(updatedActive);
+        // Only the bands move across, onto the store as it is after the
+        // awaits: writing `working` back would undo whatever happened
+        // meanwhile, a slider moved or a panel linked.
+        const merged = mergeErrorBands(
+          useIbexStore.getState().active,
+          start,
+          working,
+        );
+        if (merged) updatedConfiguration(merged);
       };
 
       // Triggerred when update "Error bands" switch
