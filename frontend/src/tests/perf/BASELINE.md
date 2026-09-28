@@ -717,3 +717,47 @@ writing `active` alone left a stale entry for those writers to restore.
 
 Still open from the plan: the deep clones in `DataplotCustomization` and
 `updateInterpolatedPlots`, and the real-data measurement on the 720-slice entry.
+
+## After making the customization panels copy structure, not data (stage 12, second half)
+
+The two menus - visual customization and data manipulation - edit a detached
+copy of the grid. That copy was a `structuredClone`, and so were most of the
+edits made in it: a colour pick, a colourscale, a line shape, each smoothing or
+operation parameter, and the grid each data panel rebuilds after a fetch. On a
+2-D node every one of them duplicated every matrix the grid holds. The panel
+also deep-copied every trace on every render for a variable nothing used.
+
+They are all structural copies now (`cloneGridStructure`), and the handlers
+that wrote into nested objects - `line`, `customPreferences`, the geometry
+list - build new ones instead, so the store's objects are never written
+through. The same change goes through the six deep clones left in `plot.ts`,
+`updateInterpolatedPlots` among them.
+
+The fixture canvas cannot show this: its heatmap is 25 785 elements and a copy
+of it is free, so the two new benchmark rows guard only that opening a panel
+fetches nothing. The numbers that matter were measured on the real entry,
+`imas:hdf5?path=/work/imas/shared/imasdb/ITER/3/134173/106`, with a saved state
+holding the `profiles_2d/psi` heatmap and four 1-D panels (8 357 245 elements
+resident), opening each menu and closing it again:
+
+| Scenario (real data)                  | before    | after    |
+| ------------------------------------- | --------- | -------- |
+| psi heatmap, visual customization     | 13 553 ms | 1 489 ms |
+| psi heatmap, open the Heatmap section | 15 310 ms | 1 573 ms |
+| psi heatmap, data manipulation        | 13 446 ms | 1 429 ms |
+| 1-D panel, visual customization       | 1 620 ms  | 1 371 ms |
+
+"After" is now the same for a 2-D and a 1-D grid; most of what is left is the
+harness waiting for the UI to settle. Request, redraw and render counts are
+identical before and after - the cost was never the number of renders, it was
+what each copy weighed.
+
+### A correctness fix that came with it
+
+The panel's copy is invisible to the store, and nothing pinned it, although the
+registry had `pin` for exactly this. A payload fetched inside the panel - a
+downsampled or smoothed trace - was therefore freed by the next sweep, and the
+next range applied in the panel found no base to cut from and cut the already
+windowed array with absolute bounds. The panel now pins every key its copy
+references, and a pin keeps its whole family alive rather than the one key, as
+a reachable key already did.

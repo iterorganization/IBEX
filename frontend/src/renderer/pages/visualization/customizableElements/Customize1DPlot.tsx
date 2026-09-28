@@ -24,56 +24,56 @@ export const Customize1DPlot = ({
 }: Customize1DPlotProps) => {
   const [colorPlot, setColorPlot] = useState(selectedPlot?.line?.color || '');
 
+  /**
+   * The grid's traces with the selected one replaced by `update(it)`. Only the
+   * edited trace is a new object; the others, and every payload, are shared -
+   * a colour change used to deep-copy every matrix in the grid.
+   */
+  const updateSelectedPlot = (update: (plot: DataPlotly) => DataPlotly) =>
+    customizedDataGrid.plot.map((plot) =>
+      plot.name === selectedPlot.name ? update(plot) : plot,
+    );
+
   const updatePlotColor = (newColor: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    const updatedLine = selectedPlot?.line || {};
-    updatedLine.color = newColor;
-    updatedDataPlot.plot.find((plot) => plot.name === selectedPlot.name).line =
-      updatedLine;
-
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: updateSelectedPlot(
+        (plot) =>
+          ({ ...plot, line: { ...plot.line, color: newColor } }) as DataPlotly,
+      ),
     });
     setColorPlot(newColor);
   };
 
   const resetPlotColors = () => {
-    const updatedPlots = structuredClone(customizedDataGrid.plot);
-    for (const plot of updatedPlots) {
-      if (plot?.line?.color) {
-        delete plot.line.color;
-      }
-    }
+    // An undefined colour is what "no colour" has always meant here: it lets
+    // Plotly pick the default, and `initPlotColors` reads it back from the DOM.
+    const updatedPlots = customizedDataGrid.plot.map((plot) =>
+      plot?.line?.color
+        ? ({ ...plot, line: { ...plot.line, color: undefined } } as DataPlotly)
+        : plot,
+    );
 
     setColorPlot('');
     setCustomizedDataGrid({ ...customizedDataGrid, plot: updatedPlots });
   };
 
   const updatePlotMode = (newMode: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    updatedDataPlot.plot.find((plot) => plot.name === selectedPlot.name).mode =
-      newMode;
-
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: updateSelectedPlot(
+        (plot) => ({ ...plot, mode: newMode }) as DataPlotly,
+      ),
     });
   };
 
   const updatePlotShape = (newShape: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    const plotToUpdate = updatedDataPlot.plot.find(
-      (plot) => plot.name === selectedPlot.name,
-    );
-    plotToUpdate.line = { ...plotToUpdate?.line, shape: newShape };
-
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: updateSelectedPlot(
+        (plot) =>
+          ({ ...plot, line: { ...plot.line, shape: newShape } }) as DataPlotly,
+      ),
     });
   };
 

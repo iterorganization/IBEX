@@ -21,6 +21,7 @@ import {
   isSignalOperation,
   normalizeIndices,
   reapplyAxisOrder,
+  cloneGridStructure,
   resolveYAxisForUnit,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
@@ -104,7 +105,7 @@ export const CustomizeDataOperations = ({
    */
   const updateOperations = (next: DataOperation[]) => {
     if (!selectedPlot) return;
-    const updated = structuredClone(customizedDataGrid) as DataGridPlot;
+    const updated = cloneGridStructure(customizedDataGrid);
     const plot = updated.plot.find((p) => p.nodeUri === selectedPlot.nodeUri);
     if (plot) {
       plot.operations = next;
@@ -204,9 +205,7 @@ export const CustomizeDataOperations = ({
     if (!selectedPlot) return;
     try {
       setLoadingAction(action);
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       const plot = updatedDataPlot.plot.find(
         (p) => p.nodeUri === selectedPlot.nodeUri,

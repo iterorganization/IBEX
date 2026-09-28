@@ -8,6 +8,7 @@ import {
   getInterpolationMethods,
   getUrisToInterpolate,
   reapplyAxisOrder,
+  cloneGridStructure,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Group, Loader, Select, Stack } from '@mantine/core';
@@ -42,9 +43,7 @@ export const CustomizeInterpolation = ({
     currentRequest.current = requestId;
     try {
       open();
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {

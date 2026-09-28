@@ -19,6 +19,7 @@ import {
   MIN_GAUSSIAN_SMOOTHING_SIGMA,
   normalizeIndices,
   reapplyAxisOrder,
+  cloneGridStructure,
   SAVGOL_FILTER,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
@@ -63,7 +64,7 @@ export const CustomizeSmoothing = ({
    */
   const updateSmoothing = (next: SmoothingParams | undefined) => {
     if (!selectedPlot) return;
-    const updated = structuredClone(customizedDataGrid) as DataGridPlot;
+    const updated = cloneGridStructure(customizedDataGrid);
     const plot = updated.plot.find((p) => p.name === selectedPlot.name);
     if (plot) {
       plot.smoothing = next;
@@ -96,9 +97,7 @@ export const CustomizeSmoothing = ({
     if (!selectedPlot) return;
     try {
       setLoadingAction(action);
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       const plot = updatedDataPlot.plot.find(
         (p) => p.name === selectedPlot.name,

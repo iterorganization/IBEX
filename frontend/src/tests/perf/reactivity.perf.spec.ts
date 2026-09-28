@@ -423,6 +423,44 @@ describe('Reactivity benchmark', function () {
     ).to.equal(afterRestore);
   });
 
+  it('opening a customization panel copies no payload and fetches nothing', async () => {
+    // Both menus edit a detached copy of the grid. It used to be a deep copy,
+    // so on a 2-D node every matrix was duplicated before the panel could draw
+    // - which a count cannot see on this small fixture, but a fetch can.
+    const openAndClose =
+      (type: 'visual' | 'data', section: string) => async () => {
+        await setTestState({ customizing: { id: heatmapGridId, type } });
+        await ensureCssElementIsDisplayed(`customization-${section}-accordion`);
+        await setTestState({ customizing: null });
+        await waitForValue(
+          'customization panel closed',
+          async () => (await getTestState()).customizing ?? null,
+          null,
+          undefined,
+          SLOW.retries,
+          SLOW.delay,
+        );
+      };
+
+    const visual = await measure(
+      'visual customization, open and close',
+      openAndClose('visual', 'Global'),
+    );
+    expect(
+      dataRequests(visual),
+      'opening a panel is a view change, not a fetch',
+    ).to.have.length(0);
+
+    const data = await measure(
+      'data manipulation, open and close',
+      openAndClose('data', 'Downsampling'),
+    );
+    expect(
+      dataRequests(data),
+      'opening a panel is a view change, not a fetch',
+    ).to.have.length(0);
+  });
+
   it('revisiting a metadata tab does not re-download the payload', async () => {
     await measure('metadata panel, first open', async () => {
       await setMetadataPanel(lineGridId);

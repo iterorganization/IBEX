@@ -325,11 +325,14 @@ export const sweep = (
   // is what makes undoing one free; keeping the derivations of a reachable base
   // is what makes redoing one free. Both are bounded by what the user actually
   // asked for, and a deleted grid takes the whole family with it.
+  // A pin is a root like any other, so it keeps its family too: a detached
+  // grid that narrows a payload must still find the base to widen it again.
   const liveBases = new Set<PayloadKey>();
   for (const key of reachable) liveBases.add(baseOf(key));
+  for (const key of pins.keys()) liveBases.add(baseOf(key));
 
   for (const [key, entry] of payloads) {
-    if (liveBases.has(baseOf(key)) || pins.has(key)) continue;
+    if (liveBases.has(baseOf(key))) continue;
     freed += 1;
     elements += entry.elements;
     if (!audit) payloads.delete(key);

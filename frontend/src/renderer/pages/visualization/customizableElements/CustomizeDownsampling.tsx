@@ -8,6 +8,7 @@ import {
   getUrisToInterpolate,
   normalizeIndices,
   reapplyAxisOrder,
+  cloneGridStructure,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
@@ -38,9 +39,7 @@ export const CustomizeDownsampling = ({
   const getDownSampledData = async () => {
     try {
       open();
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {

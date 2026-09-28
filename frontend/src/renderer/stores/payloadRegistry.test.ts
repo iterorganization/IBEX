@@ -294,6 +294,18 @@ describe('payloadRegistry', () => {
       expect(readPayload('pinned')).to.equal(undefined);
     });
 
+    it('keeps the family of a pinned view, not only the view', () => {
+      // The customization panel pins the window its grid shows. Applying the
+      // next range there slices the base, so the base must survive too.
+      const base = registerPayload(payloadKey('/d?uri=p', 'value'), [1, 2, 3]);
+      const view = registerPayload(rangedKey(base, { 0: [1, 2] }), [2, 3]);
+      pin(view);
+      sweep(new Set());
+      expect(readPayload(base)).to.deep.equal([1, 2, 3]);
+      expect(readPayload(view)).to.deep.equal([2, 3]);
+      unpin(view);
+    });
+
     it('keeps a payload pinned twice alive until both pins are released', () => {
       registerPayload('pinned', [3]);
       pin('pinned');
