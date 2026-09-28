@@ -21,7 +21,7 @@ import {
   URITreeNodeData,
   GeometryInfos,
 } from '../types';
-import { ScatterData } from 'plotly.js';
+import { Layout, LayoutAxis, ScatterData } from 'plotly.js';
 import {
   buildSmoothingRequest,
   fetchDataPlot,
@@ -120,6 +120,55 @@ export const plotData = (
     forceXyRatio: dataPlot?.forceXyRatio ?? false,
   };
 };
+
+/**
+ * @description Deep equality for coordinate or axis data, with an early exit on the first
+ * difference. Replaces `JSON.stringify(a) === JSON.stringify(b)`, which allocated a full
+ * serialization of both arrays - megabytes, on every slider tick, for every grid - before
+ * comparing them.
+ *
+ * Matches the semantics of the comparison it replaces: NaN equals NaN, and null equals
+ * undefined, because JSON.stringify writes both as `null` inside an array.
+ * @param a First value.
+ * @param b Second value.
+ * @returns Whether the two hold the same values.
+ */
+export function isSameAxisData(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a == null && b == null;
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let index = 0; index < a.length; index++) {
+      if (!isSameAxisData(a[index], b[index])) return false;
+    }
+    return true;
+  }
+
+  if (typeof a === 'number' && typeof b === 'number') {
+    // JSON.stringify writes NaN as null, so the old comparison saw two NaNs as equal.
+    return Number.isNaN(a) && Number.isNaN(b);
+  }
+
+  if (typeof a === 'object' && typeof b === 'object') {
+    // Complex values, stored as { r, i } pairs.
+    const keysOfA = Object.keys(a);
+    const keysOfB = Object.keys(b);
+    return (
+      keysOfA.length === keysOfB.length &&
+      keysOfA.every((key) =>
+        isSameAxisData(
+          (a as Record<string, unknown>)[key],
+          (b as Record<string, unknown>)[key],
+        ),
+      )
+    );
+  }
+
+  return false;
+}
 
 /**
  * @description Computes the default axis-ratio rule for a newly created grid, based on the 2D
@@ -900,8 +949,14 @@ const fetchGeometryOutline = async (
   const rPath = path + 'r';
   const zPath = path + 'z';
 
+  // r and z are independent nodes: fetch them together rather than one after
+  // the other, which doubled the wait for every geometry overlay.
+  const [rResponse, zResponse] = await Promise.all([
+    fetchDataPlot(normalizeIndices(uri + rPath)),
+    fetchDataPlot(normalizeIndices(uri + zPath)),
+  ]);
+
   // Get r
-  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
   rResponse.data.value = closeContourGeometrie(rResponse.data.value);
   const rFormattedCoordinates = formatCoordinates(
     rResponse.data.coordinates,
@@ -910,7 +965,6 @@ const fetchGeometryOutline = async (
   const rVector = getVectorData(rFormattedCoordinates, rResponse.data.value);
 
   // Get z
-  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
   zResponse.data.value = closeContourGeometrie(zResponse.data.value);
   const zFormattedCoordinates = formatCoordinates(
     zResponse.data.coordinates,
@@ -959,22 +1013,17 @@ const fetchGeometryRectangle = async (
   const widthPath = path + 'width';
   const heightPath = path + 'height';
 
-  // Get r
-  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  // The four nodes are independent: one round trip instead of four in a row.
+  const [rResponse, zResponse, widthResponse, heightResponse] =
+    await Promise.all([
+      fetchDataPlot(normalizeIndices(uri + rPath)),
+      fetchDataPlot(normalizeIndices(uri + zPath)),
+      fetchDataPlot(normalizeIndices(uri + widthPath)),
+      fetchDataPlot(normalizeIndices(uri + heightPath)),
+    ]);
   const rVector = rResponse.data.value as number[][];
-
-  // Get z
-  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
   const zVector = zResponse.data.value as number[][];
-
-  // Get width
-  const widthResponse = await fetchDataPlot(normalizeIndices(uri + widthPath));
   const widthVector = widthResponse.data.value as number[][];
-
-  // Get height
-  const heightResponse = await fetchDataPlot(
-    normalizeIndices(uri + heightPath),
-  );
   const heightVector = heightResponse.data.value as number[][];
 
   const rectangleGeometry: Geometry[] = [];
@@ -1051,32 +1100,27 @@ const fetchGeometryOblique = async (
   const alphaPath = path + 'alpha';
   const betaPath = path + 'beta';
 
-  // Get r
-  const rResponse = await fetchDataPlot(normalizeIndices(uri + rPath));
+  // The six nodes are independent: one round trip instead of six in a row.
+  const [
+    rResponse,
+    zResponse,
+    lengthAlphaResponse,
+    lengthBetaResponse,
+    alphaResponse,
+    betaResponse,
+  ] = await Promise.all([
+    fetchDataPlot(normalizeIndices(uri + rPath)),
+    fetchDataPlot(normalizeIndices(uri + zPath)),
+    fetchDataPlot(normalizeIndices(uri + lengthAlphaPath)),
+    fetchDataPlot(normalizeIndices(uri + lengthBetaPath)),
+    fetchDataPlot(normalizeIndices(uri + alphaPath)),
+    fetchDataPlot(normalizeIndices(uri + betaPath)),
+  ]);
   const rVector = rResponse.data.value as number[][];
-
-  // Get z
-  const zResponse = await fetchDataPlot(normalizeIndices(uri + zPath));
   const zVector = zResponse.data.value as number[][];
-
-  // Get length alpha
-  const lengthAlphaResponse = await fetchDataPlot(
-    normalizeIndices(uri + lengthAlphaPath),
-  );
   const lengthAlphaVector = lengthAlphaResponse.data.value as number[][];
-
-  // Get length beta
-  const lengthBetaResponse = await fetchDataPlot(
-    normalizeIndices(uri + lengthBetaPath),
-  );
   const lengthBetaVector = lengthBetaResponse.data.value as number[][];
-
-  // Get alpha
-  const alphaResponse = await fetchDataPlot(normalizeIndices(uri + alphaPath));
   const alphaVector = alphaResponse.data.value as number[][];
-
-  // Get beta
-  const betaResponse = await fetchDataPlot(normalizeIndices(uri + betaPath));
   const betaVector = betaResponse.data.value as number[][];
   const obliqueGeometry: Geometry[] = [];
   const lastCoord =
@@ -1290,6 +1334,21 @@ export const fetchGeometries = async (
 };
 
 /**
+ * Tells a node that carries no error bands from a genuine failure.
+ *
+ * Both are expected while plotting: the backend answers 464 "No data for ..."
+ * for an error node that exists but is empty, and 404 "... has no attribute
+ * ..." for one the IDS does not define at all.
+ */
+const isMissingErrorNode = (error: unknown): boolean => {
+  const message = String(error);
+  return (
+    (message.includes('No data for') || message.includes('has no attribute')) &&
+    (message.includes('_error_upper') || message.includes('_error_lower'))
+  );
+};
+
+/**
  * Get & return error bands of provided uri & dataPlot id
  * @param dataPlot Datagrid containing the targeted uri
  * @param uri Uri to get the data
@@ -1326,85 +1385,85 @@ export const fetchErrorBands = async (
     const interpolationMethod: string =
       forcedInterpolationMethod || dataPlot?.interpolated_method;
 
-    let upperResponse, lowerResponse: FieldValueResponse;
+    /**
+     * Fetches one of the two band nodes, or resolves to `undefined` when that
+     * node simply is not there.
+     *
+     * The upper and lower bands are two independent nodes, and a quantity may
+     * carry only one of them: the IMAS convention is that a *symmetric* error
+     * is stored as `_error_upper` alone. Fetching them together used to mean
+     * that one missing node threw away the one that was present, leaving the
+     * trace with no band at all - `getErrorsAreaToPlot` has always known how to
+     * mirror a single band around the trace, it was never given one.
+     */
+    const fetchErrorBand = async (
+      suffix: '_error_upper' | '_error_lower',
+    ): Promise<FieldValueResponse | undefined> => {
+      const bandUri = normalizeIndices(plot.nodeUri) + suffix;
+      try {
+        if (urisToInterpolate.length) {
+          const interpolated = await fetchDataPlot(
+            bandUri,
+            downsamplingMethod,
+            downsamplingSize,
+            dataPlot?.dataType,
+            urisToInterpolate,
+            interpolationMethod,
+          );
+          return { value: interpolated.data.value } as FieldValueResponse;
+        }
+        return await fetchFieldValue(
+          bandUri,
+          downsamplingMethod,
+          downsamplingSize,
+          dataPlot?.dataType,
+        );
+      } catch (error) {
+        if (isMissingErrorNode(error)) {
+          return undefined;
+        }
+        throw error;
+      }
+    };
 
-    // Get error bands
-    if (urisToInterpolate.length) {
-      const interpolatedUpper = await fetchDataPlot(
-        normalizeIndices(plot.nodeUri) + '_error_upper',
-        downsamplingMethod,
-        downsamplingSize,
-        dataPlot?.dataType,
-        urisToInterpolate,
-        interpolationMethod,
-      );
-      upperResponse = {
-        value: interpolatedUpper.data.value,
-      } as FieldValueResponse;
+    const [upperResponse, lowerResponse] = await Promise.all([
+      fetchErrorBand('_error_upper'),
+      fetchErrorBand('_error_lower'),
+    ]);
 
-      const interpolatedLower = await fetchDataPlot(
-        normalizeIndices(plot.nodeUri) + '_error_lower',
-        downsamplingMethod,
-        downsamplingSize,
-        dataPlot?.dataType,
-        urisToInterpolate,
-        interpolationMethod,
-      );
-      lowerResponse = {
-        value: interpolatedLower.data.value,
-      } as FieldValueResponse;
-    } else {
-      upperResponse = await fetchFieldValue(
-        normalizeIndices(plot.nodeUri) + '_error_upper',
-        downsamplingMethod,
-        downsamplingSize,
-        dataPlot?.dataType,
-      );
+    if (!upperResponse && !lowerResponse) {
+      // Neither node exists: the expected case for most quantities.
+      console.warn('No error bands for : ', plot.nodeUri);
+      return;
+    }
 
-      lowerResponse = await fetchFieldValue(
-        normalizeIndices(plot.nodeUri) + '_error_lower',
-        downsamplingMethod,
-        downsamplingSize,
-        dataPlot?.dataType,
+    // Push order is the contract `formatErrorBandLayout` reads: the upper band
+    // is index 0, the lower one index 1. With a single band, whichever it is,
+    // that band is used on both sides of the trace.
+    if (upperResponse) {
+      formatErrorBands(
+        plot,
+        getVectorData(dataPlot.coordinates, upperResponse.value),
+        upperResponse.value,
+        plot.nodeUri + '_error_upper',
       );
     }
 
-    const defaultUpperYValue = getVectorData(
-      dataPlot.coordinates,
-      upperResponse.value,
-    );
-    await formatErrorBands(
-      plot,
-      defaultUpperYValue,
-      upperResponse.value,
-      plot.nodeUri + '_error_upper',
-    );
-
-    const defaultLowerYValue = getVectorData(
-      dataPlot.coordinates,
-      lowerResponse.value,
-    );
-    await formatErrorBands(
-      plot,
-      defaultLowerYValue,
-      lowerResponse.value,
-      plot.nodeUri + '_error_lower',
-    );
+    if (lowerResponse) {
+      formatErrorBands(
+        plot,
+        getVectorData(dataPlot.coordinates, lowerResponse.value),
+        lowerResponse.value,
+        plot.nodeUri + '_error_lower',
+      );
+    }
 
     // Return dataPlot list with the plot which includes error bands
     return dataPlot;
   } catch (error) {
-    if (
-      !(
-        error.toString().includes('No data for') &&
-        (error.toString().includes('_error_upper') ||
-          error.toString().includes('_error_lower'))
-      )
-    ) {
-      console.warn('No error bands for : ', plot.nodeUri);
-    } else {
-      console.error('Error handling error bands: ', error);
-    }
+    // Only unexpected failures reach here: a missing band node is handled by
+    // `fetchErrorBand` above.
+    console.error('Error handling error bands: ', error);
   }
 };
 
@@ -1476,6 +1535,10 @@ const formatErrorBandLayout = (
     mode: 'lines',
     line: { width: 0, shape: lineShape },
     hoverinfo: 'skip',
+    // A band belongs on its trace's axis. Without this it lands on y1 - Plotly's
+    // default - and a band around a y2 trace drags y1's autorange onto y2's
+    // scale, flattening everything actually plotted on y1.
+    yaxis: mainPlot.yaxis,
   };
   if (error_band_type === 'lower') {
     errBandPartPlot.showlegend = false;
@@ -1529,6 +1592,7 @@ export function getErrorsAreaToPlot(
         plotIndex,
         true,
       );
+      lowerPlot.connectgaps = true;
       entirePlotList.push(lowerPlot);
       const upperPlot = formatErrorBandLayout(
         'upper',
@@ -1537,6 +1601,7 @@ export function getErrorsAreaToPlot(
         plotIndex,
         true,
       );
+      upperPlot.connectgaps = true;
       entirePlotList.push(upperPlot);
     }
 
@@ -1564,6 +1629,72 @@ export function getErrorsAreaToPlot(
   }
   return entirePlotList;
 }
+
+/**
+ * The part of a Plotly layout that only the user can produce: what they did
+ * with the mode bar (zoom, pan, autoscale, drag mode).
+ */
+export interface UserRelayout {
+  /** Per axis id (`xaxis`, `yaxis`, `yaxis2`), merged into the derived axis. */
+  axes: Record<string, Partial<LayoutAxis>>;
+  /** Everything else Plotly reported, merged at the top level of the layout. */
+  layout: Partial<Layout>;
+}
+
+/** Nothing changed yet. A shared constant so a reset is a no-op re-render. */
+export const emptyUserRelayout: UserRelayout = { axes: {}, layout: {} };
+
+const AXIS_RELAYOUT_KEY = /^([xyz]axis\d*)\.(range(?:\[([01])\])?|autorange)$/;
+
+/**
+ * Folds one `plotly_relayout` payload into the view state kept across layout
+ * rebuilds.
+ *
+ * Plotly reports what the user did as dotted keys (`yaxis.range[0]`,
+ * `yaxis.autorange`). Merging those blindly - which is what the layout memos
+ * used to do - kept every key forever: the ranges of an old zoom outlived the
+ * autoscale that was supposed to clear them. They are parsed per axis here
+ * instead, so that `range` and `autorange`, which contradict each other,
+ * replace one another.
+ */
+export const mergeAxisRelayout = (
+  previous: UserRelayout,
+  payload: Partial<Layout>,
+): UserRelayout => {
+  const axes: UserRelayout['axes'] = { ...previous.axes };
+  const layout = { ...previous.layout } as Record<string, unknown>;
+
+  for (const [key, value] of Object.entries(payload ?? {})) {
+    const match = AXIS_RELAYOUT_KEY.exec(key);
+    if (!match) {
+      layout[key] = value;
+      continue;
+    }
+
+    const [, axisName, attribute, bound] = match;
+    const axis: Partial<LayoutAxis> = { ...axes[axisName] };
+
+    if (attribute === 'autorange') {
+      axis.autorange = value as LayoutAxis['autorange'];
+      // Autoscaling drops the zoom it replaces; `autorange: false` only ever
+      // accompanies a range, so it must not.
+      if (value) delete axis.range;
+    } else {
+      delete axis.autorange;
+      if (bound === undefined) {
+        axis.range = value as LayoutAxis['range'];
+      } else {
+        const range = [...(axis.range ?? [])];
+        range[Number(bound)] = value;
+        axis.range = range;
+      }
+    }
+
+    axes[axisName] = axis;
+  }
+
+  return { axes, layout: layout as Partial<Layout> };
+};
 
 /**
  * Init plots color by adding color in plot.line for each plot
@@ -2155,12 +2286,20 @@ export const reapplyAxisOrder = async (
 export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
   const coordinatesLength: number = coordinates.length;
 
-  // Extract only matrix indexes
-  const matrixIndexes = structuredClone(coordinates)
+  // Extract only matrix indexes.
+  // Only `axeIndex` and `valueIndex` are read, so project onto those two
+  // numbers before sorting: cloning the coordinates would deep-copy every
+  // coordinate's full `data` array, and this runs on every slider tick and on
+  // the render path of every plot.
+  const matrixIndexes = coordinates
+    .map((coord: Coordinates) => ({
+      axeIndex: coord.axeIndex,
+      valueIndex: coord.valueIndex,
+    }))
     .sort(compareByAxeIndex)
     .reverse()
-    .filter((coord: Coordinates) => coord.axeIndex !== 0)
-    .map((coord: Coordinates) => coord.valueIndex);
+    .filter((coord) => coord.axeIndex !== 0)
+    .map((coord) => coord.valueIndex);
 
   // Retrieve vector to plot
   /* eslint-disable  @typescript-eslint/no-explicit-any */
@@ -2203,7 +2342,10 @@ export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
  * @param b The second Coordinates object.
  * @returns A negative number if a's axeIndex is less than b's, a positive number if greater, or 0 if equal.
  */
-export function compareByAxeIndex(a: Coordinates, b: Coordinates) {
+export function compareByAxeIndex(
+  a: { axeIndex: number },
+  b: { axeIndex: number },
+) {
   if (a.axeIndex < b.axeIndex) {
     return -1;
   } else if (a.axeIndex > b.axeIndex) {
@@ -2256,17 +2398,56 @@ export function hasAtLeastOneValidValue(arr: AxisData): boolean {
 export function isMatrixPlottable(value: AxisData): boolean {
   if (value === undefined) return false;
 
-  try {
-    const tensor = tf.tensor(value);
-    const shape = tensor.shape;
-    const lastDim = shape[shape.length - 1];
+  const lastDim = getLastDimLength(value);
 
-    // Check if matrix is not empty & get at least one valide value
-    return lastDim !== 0 && hasAtLeastOneValidValue(value);
-  } catch {
-    // If tensor fails (irregular shape, etc.)
-    return false;
+  // Check if matrix is not empty & get at least one valide value
+  return lastDim !== null && lastDim !== 0 && hasAtLeastOneValidValue(value);
+}
+
+/**
+ * @description Length of the innermost dimension of a rectangular nested array,
+ * or `null` when the input is ragged, mixed-depth or holds non-plottable
+ * leaves (complex `{r, i}` pairs, objects).
+ *
+ * This replaces a `tf.tensor(value)` whose only outputs were "does it build"
+ * and "what is the last dimension". Building a tensor copied the whole array
+ * into a typed array on every call — and it was called from the render body of
+ * both plot components, several times per render, without ever being disposed.
+ * A plain scan allocates nothing and keeps exactly the same semantics,
+ * including returning `null` where `tf.tensor` used to throw.
+ */
+function getLastDimLength(value: AxisData): number | null {
+  if (!Array.isArray(value)) return null;
+  if (value.length === 0) return 0;
+
+  const first = value[0];
+  if (!Array.isArray(first)) {
+    // Innermost level. tf.tensor accepted only numbers or only strings, and
+    // threw on anything else (including complex {r, i} pairs) or on a mix of
+    // the two, so reproduce both rules.
+    let leafType: 'number' | 'string' | null = null;
+    for (const leaf of value as unknown[]) {
+      if (Array.isArray(leaf)) return null; // mixed depth
+      if (leaf === null || leaf === undefined) continue; // filled in later
+      const type = typeof leaf;
+      if (type !== 'number' && type !== 'string') return null;
+      if (leafType === null) leafType = type;
+      else if (leafType !== type) return null; // mixed scalar types
+    }
+    return value.length;
   }
+
+  // Nested level: every child must be an array of the same, consistent shape.
+  let lastDim: number | null = null;
+  for (const child of value as AxisData[]) {
+    if (!Array.isArray(child)) return null; // mixed depth
+    if (child.length !== (first as unknown[]).length) return null; // ragged
+    const childLastDim = getLastDimLength(child);
+    if (childLastDim === null) return null;
+    if (lastDim === null) lastDim = childLastDim;
+    else if (lastDim !== childLastDim) return null;
+  }
+  return lastDim;
 }
 
 /**

@@ -26,16 +26,23 @@ import { getTensorizedMatrix, transformComplexData } from './plot';
 import { replaceNullsWithNaN } from './functions';
 import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';
+import { cachedRequest } from './requestCache';
 
 /**
  * Retrieves the API configuration.
  */
+let configPromise: ReturnType<typeof window.api.getConfig> | null = null;
+
 const getConfig = async () => {
   try {
-    const config = await window.api.getConfig();
+    // The config is fixed for the lifetime of the session, so resolve it once
+    // instead of crossing the Electron IPC boundary on every request.
+    configPromise ??= window.api.getConfig();
+    const config = await configPromise;
     if (!config) throw new Error('Failed to load configuration');
     return config;
   } catch (error) {
+    configPromise = null; // allow a retry
     console.error('Error fetching config:', error);
     throw error;
   }
@@ -50,6 +57,9 @@ type NotifiedError = Error & { notified?: boolean };
  * Tells whether the user has already been notified of this error, so that
  * callers can skip their own generic notification.
  */
+/** An `Error` carrying the HTTP status of the response that produced it. */
+type HttpError = Error & { status?: number };
+
 export const isNotifiedError = (error: unknown): boolean =>
   Boolean((error as NotifiedError)?.notified);
 
@@ -75,15 +85,22 @@ const handleError = (error: unknown, context: string, code?: number) => {
     }
 
     // Notify the user in case of an error including an error message if it is not a 500 error.
-    showNotification({
-      title: !code ? 'Unable to contact the server' : `Error ${code}`,
-      message:
-        !code || (code >= 400 && code < 500) ? error.message : 'Internal error',
-      color: 'red',
-    });
-    // Flag the error so that callers do not stack a second, generic notification
-    // on top of the detailed message coming from the server.
-    (error as NotifiedError).notified = true;
+    // Only once per error object: concurrent callers that share one in-flight
+    // request also share its rejection, and the user must not be told twice
+    // about a single failure.
+    if (!isNotifiedError(error)) {
+      showNotification({
+        title: !code ? 'Unable to contact the server' : `Error ${code}`,
+        message:
+          !code || (code >= 400 && code < 500)
+            ? error.message
+            : 'Internal error',
+        color: 'red',
+      });
+      // Flag the error so that callers do not stack a second, generic
+      // notification on top of the detailed message coming from the server.
+      (error as NotifiedError).notified = true;
+    }
   }
   console.error(`Error in ${context}:`, error);
   throw error;
@@ -113,6 +130,7 @@ async function fetchWithTimeout(
 const fetchFromApi = async <T>(
   endpoint: string,
   timeout?: number,
+  cacheable = true,
 ): Promise<T> => {
   let responseStatus: number;
   try {
@@ -136,25 +154,45 @@ const fetchFromApi = async <T>(
         });
       }
     };
-    const response = await fetchFn();
+    // The cache stores the body text and each caller parses its own copy: the
+    // parsed graph is mutated in place downstream, so it must never be shared.
+    const body = await cachedRequest(
+      url,
+      async () => {
+        const response = await fetchFn();
 
-    if (!response.ok) {
-      if (response?.status) {
-        responseStatus = response.status;
-      }
-      const errorData = await response.json();
-      throw new Error(
-        errorData.message || errorData.detail || 'Failed to fetch data',
-      );
-    }
+        if (!response.ok) {
+          if (response?.status) {
+            responseStatus = response.status;
+          }
+          const errorData = await response.json();
+          const error: HttpError = new Error(
+            errorData.message || errorData.detail || 'Failed to fetch data',
+          );
+          // Carry the status on the error itself. A caller that joined an
+          // in-flight request never runs this function, so a status kept only
+          // in the closure above would reach it as undefined - and the rules
+          // that suppress expected 404/464 error-band failures would not fire.
+          error.status = response.status;
+          throw error;
+        }
 
-    return response.json();
+        return response.text();
+      },
+      cacheable,
+    );
+
+    return JSON.parse(body) as T;
   } catch (error) {
     if (error.name === 'AbortError') {
       console.error(`Timeout after ${timeout}ms: fetchFromApi(${endpoint}).`);
       throw error;
     } else {
-      handleError(error, `fetchFromApi(${endpoint})`, responseStatus);
+      handleError(
+        error,
+        `fetchFromApi(${endpoint})`,
+        (error as HttpError)?.status ?? responseStatus,
+      );
     }
   }
 };
@@ -636,5 +674,7 @@ export const fetchGeometryNodes = async (uri: string, labelUri: string) => {
  * Return backend version.
  */
 export const fetchInfoVersion = async () => {
-  return fetchFromApi<InfoVersionResponse>(`/info/version`);
+  // Never cached: the header polls this to show whether the backend is alive,
+  // and a cached answer would freeze that indicator on its first value.
+  return fetchFromApi<InfoVersionResponse>(`/info/version`, undefined, false);
 };

@@ -59,6 +59,17 @@ export interface GridHandle {
  * failing test would also intercept every following click.
  */
 export async function resetAppState() {
+  // The request cache lives for the lifetime of the app, which the specs share.
+  // Clearing it keeps each spec independent: otherwise an earlier spec warms
+  // the cache and a later one silently exercises a different code path.
+  await getDriver().executeScript(() => {
+    (
+      window as Window & {
+        __ibexPerf?: { clearRequestCache: () => void };
+      }
+    ).__ibexPerf?.clearRequestCache();
+  });
+
   const closeButtons = await getDriver().findElements(
     By.css('button.mantine-Modal-close'),
   );
@@ -69,6 +80,22 @@ export async function resetAppState() {
       // The modal closed on its own in the meantime
     }
   }
+
+  // Dismiss notifications left by the previous test. They expire on their own
+  // after a few seconds, so the suite used to rely on being slow enough for
+  // that to happen between tests - which stops being true as the app gets
+  // faster, and makes a test that counts notifications see the previous one's.
+  await getDriver().executeScript(() => {
+    document
+      .querySelectorAll<HTMLElement>('.mantine-Notification-closeButton')
+      .forEach((button) => button.click());
+  });
+  await getDriver().wait(async () => {
+    const remaining = await getDriver().executeScript(
+      () => document.querySelectorAll('.mantine-Notification-root').length,
+    );
+    return remaining === 0;
+  }, 10000);
 
   const isEmpty = async () => {
     const state = await getTestState();
