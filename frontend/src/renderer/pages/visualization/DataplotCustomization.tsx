@@ -33,7 +33,8 @@ import {
   CustomizeGeometry,
 } from './customizableElements';
 import { IconGeometry, IconLink } from '@tabler/icons-react';
-import { initPlotColors } from '../../utils';
+import { cloneGridStructure, initPlotColors } from '../../utils';
+import { keysOf, pin, unpin } from '../../stores/payloadRegistry';
 
 export const DataplotCustomization = () => {
   const customContainerRef = useRef<HTMLDivElement>(null);
@@ -41,6 +42,7 @@ export const DataplotCustomization = () => {
   const WIDTH_PLOT = Math.floor(containerWidth * (6 / 12));
   const HEIGHT_PLOT = 390;
   const { active, updatedConfiguration } = useIbexStore();
+  const customizing = useIbexStore((state) => state.customizing);
   const [tabsValue, setTabsValue] = useState<string | null>();
   const [customizedDataGrid, setCustomizedDataGrid] =
     useState<DataGridPlot | null>(null);
@@ -77,12 +79,14 @@ export const DataplotCustomization = () => {
    * Handle find grid layout corresponding to the selected tab
    */
   useEffect(() => {
-    if (active?.customizedGridLayout) {
-      const data = structuredClone(
-        active.dataPlot.find(
-          (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
-        ),
+    if (customizing) {
+      // The panel edits a copy of the grid, but only of its structure: every
+      // edit assigns fields, and a deep copy here cost a copy of every matrix
+      // the grid holds before the panel could even draw.
+      const grid = active.dataPlot.find(
+        (item: DataGridPlot) => item.i === customizing.id,
       );
+      const data = grid && cloneGridStructure(grid);
       if (data) {
         setDataGridLayout(data);
         setCustomizedDataGrid(data);
@@ -90,6 +94,19 @@ export const DataplotCustomization = () => {
       }
     }
   }, []);
+
+  // The copy is invisible to the store, so the sweep cannot tell its payloads
+  // are in use: a payload fetched here (downsampled, smoothed...) would be
+  // freed with the next store write, and the next range applied in the panel
+  // would have no base to cut from. Pinned while the panel holds them.
+  useEffect(() => {
+    if (!customizedDataGrid) return;
+    const keys = keysOf({
+      dataPlot: [customizedDataGrid],
+    } as Configuration);
+    keys.forEach(pin);
+    return () => keys.forEach(unpin);
+  }, [customizedDataGrid]);
 
   useEffect(() => {
     initPlotColors(
@@ -119,39 +136,34 @@ export const DataplotCustomization = () => {
    * Handle close of customization
    */
   const closeWithoutSaving = useCallback(() => {
-    // Closing the panel changes one field; there is nothing to deep-copy.
-    const updatedActive: Configuration = {
-      ...active,
-      customizedGridLayout: null,
-    };
-    updatedConfiguration(updatedActive);
-  }, [active]);
+    // Closing the panel is UI state; the configuration is untouched.
+    useIbexStore.getState().setCustomizing(null);
+  }, []);
 
   /**
    * Handle save & close of customization
    */
   const saveAndClose = useCallback(() => {
+    useIbexStore.getState().setCustomizing(null);
+    // The grids whose links change are replaced, never written into: they
+    // are the store's own objects.
+    const dataPlot = [...active.dataPlot];
+    const setSynchronizedGrids = (index: number, list: synchronizedList) => {
+      dataPlot[index] = { ...dataPlot[index], synchronizedGrids: list };
+    };
     const updatedActive: Configuration = {
       ...active,
-      customizedGridLayout: null,
       saved: false,
+      dataPlot,
     };
     const oldDataGrid = updatedActive.dataPlot.find(
-      (dp) => dp.i === active.customizedGridLayout.id,
+      (dp) => dp.i === customizing.id,
     );
-    const updatedDataPlot: DataGridPlot[] = [
-      ...updatedActive.dataPlot.filter(
-        (dp) => dp.i !== active.customizedGridLayout.id,
-      ),
-      customizedDataGrid,
-    ];
 
     // Update synchronized grids dependencies
     if (
-      structuredClone(oldDataGrid.synchronizedGrids.list).sort().toString() !==
-      structuredClone(customizedDataGrid.synchronizedGrids.list)
-        .sort()
-        .toString()
+      [...oldDataGrid.synchronizedGrids.list].sort().toString() !==
+      [...customizedDataGrid.synchronizedGrids.list].sort().toString()
     ) {
       for (const [
         index,
@@ -188,15 +200,15 @@ export const DataplotCustomization = () => {
                   updatedActive.dataPlot[indexDPProbablyDesync].i,
                 )
               ) {
-                updatedActive.dataPlot[
-                  indexDPProbablyDesync
-                ].synchronizedGrids = { color: '', list: [] };
+                setSynchronizedGrids(indexDPProbablyDesync, {
+                  color: '',
+                  list: [],
+                });
               }
             }
 
             // Add in other grid the synchronized list and include the customized grid
-            updatedActive.dataPlot[index].synchronizedGrids =
-              newSynchronizedList;
+            setSynchronizedGrids(index, newSynchronizedList);
           } else if (
             oldDataGrid.synchronizedGrids.list.includes(dataPlotDependency.i) &&
             !customizedDataGrid.synchronizedGrids.list.includes(
@@ -204,17 +216,17 @@ export const DataplotCustomization = () => {
             )
           ) {
             // Remove synchronization for deleted dependencies
-            updatedActive.dataPlot[index].synchronizedGrids = {
+            setSynchronizedGrids(index, {
               color: '',
               list: [],
-            };
+            });
           } else if (
             customizedDataGrid.synchronizedGrids.list.includes(
               dataPlotDependency.i,
             )
           ) {
             // Update relations of unchanged dataGrids
-            updatedActive.dataPlot[index].synchronizedGrids = {
+            setSynchronizedGrids(index, {
               color: customizedDataGrid.synchronizedGrids.color,
               list: [
                 customizedDataGrid.i,
@@ -222,12 +234,16 @@ export const DataplotCustomization = () => {
                   (i) => i !== dataPlotDependency.i,
                 ),
               ],
-            };
+            });
           }
         }
       }
     }
 
+    const updatedDataPlot: DataGridPlot[] = [
+      ...dataPlot.filter((dp) => dp.i !== customizing.id),
+      customizedDataGrid,
+    ];
     updatedConfiguration({ ...updatedActive, dataPlot: updatedDataPlot });
   }, [active, customizedDataGrid]);
 
@@ -266,12 +282,6 @@ export const DataplotCustomization = () => {
 
         {dataGridLayout &&
           dataGridLayout.plot.map((item: DataPlotly, index) => {
-            // force to have only one axis in metadata plot
-            const itemWithoutY2axis = structuredClone(item);
-            if (item.yaxis != '') {
-              delete itemWithoutY2axis.yaxis;
-            }
-
             return (
               item?.name && (
                 <Tabs.Panel key={index} value={item.name}>
@@ -306,7 +316,7 @@ export const DataplotCustomization = () => {
                       <Grid.Col span={6}>
                         <Customization
                           customizedDataGrid={customizedDataGrid}
-                          customizedType={active.customizedGridLayout.type}
+                          customizedType={customizing.type}
                           selectedAccordion={selectedAccordion}
                           selectedPlot={selectedPlot}
                           applyToAllHeatmap={applyToAllHeatmap}

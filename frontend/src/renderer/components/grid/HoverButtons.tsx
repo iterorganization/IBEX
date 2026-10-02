@@ -26,11 +26,18 @@ import {
   DataGridPlot,
   PlotType,
 } from '../../types';
-import { applyRange, fetchErrorBandsInConfig } from '../../utils';
+import {
+  applyRangesToGrid,
+  cloneGridStructure,
+  fetchErrorBandsInConfig,
+  mergeErrorBands,
+} from '../../utils';
 import { useIbexStore } from '../../stores';
 
 interface HoverButtonsProps {
   data: DataGridPlot;
+  /** Whether this grid is the one being edited (UI slice, not the grid). */
+  isEditing: boolean;
   shouldDisplayMetadata: boolean;
   handleEditGrid: (id: string) => void;
   handleInspectMetadata: (id: string) => void;
@@ -44,6 +51,7 @@ interface HoverButtonsProps {
 export const HoverButtons = React.memo(
   ({
     data,
+    isEditing,
     shouldDisplayMetadata,
     handleEditGrid,
     handleInspectMetadata,
@@ -130,7 +138,20 @@ export const HoverButtons = React.memo(
 
     useEffect(() => {
       const updateErrorBands = async () => {
-        const updatedActive = structuredClone(active) as Configuration;
+        // The grid being edited, not this panel's grid: `fetchErrorBandsInConfig`
+        // has always operated on whichever grid is open for editing, and
+        // returned early when none is - which is what keeps this effect from
+        // fetching error bands for every panel as it mounts.
+        const { editingGridId, active: start } = useIbexStore.getState();
+        if (!start) return;
+        // The fetches below write into what they are given, so they get a
+        // structural copy - the payload arrays stay shared - of the store as
+        // it is now, not of the `active` this render closed over.
+        const working: Configuration = {
+          ...start,
+          checkedNodeURI: [...start.checkedNodeURI],
+          dataPlot: start.dataPlot.map(cloneGridStructure),
+        };
         if (data.displayErrorBand) {
           if (
             (previousValueDisplayErrorBands.current === false ||
@@ -138,45 +159,45 @@ export const HoverButtons = React.memo(
             data.displayErrorBand === true
           ) {
             // Get all error bands from selected dataPlot when user active error bands
-            const selectedDataPlot = updatedActive.dataPlot.find(
+            const selectedDataPlot = working.dataPlot.find(
               (dataPlot) => dataPlot.i === data.i,
             );
-            for (const plot of selectedDataPlot.plot) {
-              await fetchErrorBandsInConfig(updatedActive, plot.nodeUri);
+            for (const plot of selectedDataPlot?.plot ?? []) {
+              await fetchErrorBandsInConfig(
+                working,
+                plot.nodeUri,
+                editingGridId,
+              );
             }
 
-            if (previousValueDisplayErrorBands.current === false) {
-              // Apply ranges to the new error bands added with switch "display error bands" and if not already applied at load
-              for (const coordinate of selectedDataPlot.coordinates) {
-                if (coordinate?.range) {
-                  const keepValueIndex = true;
-                  await applyRange(
-                    coordinate,
-                    coordinate.rangeValues,
-                    selectedDataPlot,
-                    [
-                      ...selectedDataPlot.plot.map(
-                        (plot) => plot.nodeUri + '_error_upper',
-                      ),
-                      ...selectedDataPlot.plot.map(
-                        (plot) => plot.nodeUri + '_error_lower',
-                      ),
-                    ],
-                    keepValueIndex,
-                  );
-                }
-              }
+            if (
+              selectedDataPlot &&
+              previousValueDisplayErrorBands.current === false
+            ) {
+              // Cut the bands that just arrived to the windows the grid has.
+              // The sliders stay where they are: nothing about the grid changed,
+              // only what is drawn on it.
+              const index = working.dataPlot.indexOf(selectedDataPlot);
+              working.dataPlot[index] =
+                await applyRangesToGrid(selectedDataPlot);
             }
           }
         } else {
           // Removes all error bands from selected dataPlot
-          removeErrorBands(updatedActive);
+          removeErrorBands(working);
         }
         // Update previous value (used to determine the condition: previous === false && new === true)
         previousValueDisplayErrorBands.current = data.displayErrorBand;
 
-        // Update config
-        updatedConfiguration(updatedActive);
+        // Only the bands move across, onto the store as it is after the
+        // awaits: writing `working` back would undo whatever happened
+        // meanwhile, a slider moved or a panel linked.
+        const merged = mergeErrorBands(
+          useIbexStore.getState().active,
+          start,
+          working,
+        );
+        if (merged) updatedConfiguration(merged);
       };
 
       // Triggerred when update "Error bands" switch
@@ -242,11 +263,11 @@ export const HoverButtons = React.memo(
           )}
 
           {hovered ||
-          data.isEditing ||
+          isEditing ||
           plotTypeMenuOpened ||
           forcePlotTypeMenuOpened ? (
             <Group pos="absolute" right={'1rem'} top={5}>
-              {!is3DView && data.isEditing && !shouldDisplayMetadata && (
+              {!is3DView && isEditing && !shouldDisplayMetadata && (
                 <Switch
                   label="Error bands"
                   checked={data.displayErrorBand}
@@ -354,18 +375,16 @@ export const HoverButtons = React.memo(
                 </Tooltip>
               )}
 
-              <Tooltip
-                label={data.isEditing ? 'Save the edition' : 'Edit the grid'}
-              >
+              <Tooltip label={isEditing ? 'Save the edition' : 'Edit the grid'}>
                 <ActionIcon
                   variant="filled"
                   aria-label="Editing"
                   data-testid={`grid-edit-toggle-${data.i}`}
                   onClick={() => handleEditGrid(data.i)}
                   className={classes.actionButton}
-                  color={data.isEditing ? 'yellow' : 'green'}
+                  color={isEditing ? 'yellow' : 'green'}
                 >
-                  {data.isEditing ? (
+                  {isEditing ? (
                     <IconCheck
                       style={{ width: '70%', height: '70%' }}
                       stroke={1.5}

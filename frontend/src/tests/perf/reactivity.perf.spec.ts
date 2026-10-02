@@ -12,8 +12,10 @@ import {
   addUriAndAwaitSelection,
   ensureCssElementIsDisplayed,
   findCssElementAndClickIt,
+  getCssElementFromDataTestId,
   getDatasetPath,
   resetAppState,
+  selectMantineOption,
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
@@ -182,8 +184,8 @@ describe('Reactivity benchmark', function () {
     await findCssElementAndClickIt(`grid-edit-toggle-${gridId}`, 200, 100);
     await waitForValue(
       `grid ${index} left edit mode`,
-      async () => (await getTestState()).active.dataPlot[index].isEditing,
-      false,
+      async () => (await getTestState()).editingGridId,
+      null,
       undefined,
       SLOW.retries,
       SLOW.delay,
@@ -196,11 +198,8 @@ describe('Reactivity benchmark', function () {
       await findCssElementAndClickIt(`grid-edit-toggle-${lineGridId}`);
       await waitForValue(
         'grid entered edit mode',
-        async () =>
-          (await getTestState()).active.dataPlot.find(
-            (grid) => grid.i === lineGridId,
-          )?.isEditing,
-        true,
+        async () => (await getTestState()).editingGridId,
+        lineGridId,
         undefined,
         SLOW.retries,
         SLOW.delay,
@@ -224,7 +223,7 @@ describe('Reactivity benchmark', function () {
 
   it('stepping a coordinate slider queries nothing and spares other panels', async () => {
     // Coordinate sliders are only operable while their grid is being edited
-    // (Heatmap2D.tsx passes `disabled={!itemDataGrid.isEditing}`), so enter
+    // (Heatmap2D.tsx passes `disabled={!isEditing}`), so enter
     // edit mode first — outside the measured block, so its cost is not counted.
     await setGridEditing(heatmapGridId, true);
     const slider = await findEnabledSlider();
@@ -251,12 +250,223 @@ describe('Reactivity benchmark', function () {
     await setGridEditing(heatmapGridId, false);
   });
 
+  it('swapping two axes back reuses the payload it started from', async () => {
+    // A transposed matrix is a payload of its own, named by composing the
+    // permutation onto the source key. Swapping back composes to the identity
+    // and so names the *untransposed* base, which the registry still holds -
+    // undoing a transposition must therefore move no bytes and fetch nothing.
+    await setGridEditing(heatmapGridId, true);
+
+    const axisNameAt = async (axeIndex: number) =>
+      (await getTestState()).active.dataPlot[0].coordinates.find(
+        (coordinate) => coordinate.axeIndex === axeIndex,
+      ).name;
+    const xName = await axisNameAt(0);
+    const yName = await axisNameAt(1);
+
+    /** Puts `name` on the x axis and waits for the store to report it there. */
+    const putOnXAxis = async (name: string) => {
+      await selectMantineOption(`heatmap-axis-x-${heatmapGridId}`, name);
+      await waitForValue(
+        `x axis is ${name}`,
+        async () => axisNameAt(0),
+        name,
+        undefined,
+        SLOW.retries,
+        SLOW.delay,
+      );
+    };
+
+    const swapped = await measure('swap two axes', async () => {
+      await putOnXAxis(yName);
+    });
+    expect(
+      dataRequests(swapped),
+      'transposing is a view change, not a fetch',
+    ).to.have.length(0);
+    const derivations = swapped.payloads?.derivations ?? 0;
+    expect(
+      derivations,
+      'the transposed matrix must be registered as a derived payload',
+    ).to.be.greaterThan(0);
+
+    const restored = await measure('swap the same axes back', async () => {
+      await putOnXAxis(xName);
+    });
+    expect(
+      dataRequests(restored),
+      'undoing a transposition must not fetch',
+    ).to.have.length(0);
+    expect(
+      restored.payloads?.derivations ?? 0,
+      'undoing a transposition must reuse the untransposed payload',
+    ).to.equal(derivations);
+
+    await setGridEditing(heatmapGridId, false);
+  });
+
+  it('applying and restoring a data range never goes back to the backend', async () => {
+    // A range is a window on the fetched array, not a smaller array: the
+    // payload it was cut from stays resident, so restoring the range - and
+    // re-applying one that was used before - is a lookup. Restoring used to
+    // refetch once per trace, plus once per error band, purely to recover the
+    // values the trim had thrown away.
+    const heatmapGrid = async () =>
+      (await getTestState()).active.dataPlot.find(
+        (grid) => grid.i === heatmapGridId,
+      );
+    const xValues = (await heatmapGrid()).plot[0].x as number[];
+    const low = xValues[Math.floor(xValues.length * 0.25)];
+    const high = xValues[Math.floor(xValues.length * 0.75)];
+    const fullWidth = xValues.length;
+
+    /** Opens the panel's range section without going through the grid button,
+     * which is not addressable per grid. */
+    const openRangeSection = async () => {
+      await setTestState({
+        customizing: { id: heatmapGridId, type: 'visual' },
+      });
+      await findCssElementAndClickIt('customization-Axis range-accordion');
+      await ensureCssElementIsDisplayed('data-range-apply-input');
+    };
+
+    /** Waits for a panel button to stop reporting itself as loading. */
+    const settle = async (testId: string) =>
+      waitForValue(
+        `${testId} finished`,
+        async () =>
+          (await getCssElementFromDataTestId(testId)).getAttribute(
+            'data-loading',
+          ),
+        null,
+        (actual, expected) => actual === expected,
+        SLOW.retries,
+        SLOW.delay,
+      );
+
+    const save = async () => {
+      await findCssElementAndClickIt('customization-save-button');
+      await setTestState({ customizing: null });
+    };
+
+    const applyRange = async () => {
+      await openRangeSection();
+      await writeTextInCssElement('data-range-min-input', String(low), true);
+      await writeTextInCssElement('data-range-max-input', String(high), true);
+      await findCssElementAndClickIt('data-range-apply-input');
+      await settle('data-range-apply-input');
+      await save();
+      await waitForValue(
+        'the heatmap is windowed',
+        async () => (await heatmapGrid()).plot[0].x.length < fullWidth,
+        true,
+        (actual, expected) => actual === expected,
+        SLOW.retries,
+        SLOW.delay,
+      );
+    };
+
+    const restoreRange = async () => {
+      await openRangeSection();
+      await findCssElementAndClickIt('data-range-restore-input');
+      await settle('data-range-restore-input');
+      await save();
+      await waitForValue(
+        'the heatmap is back to its full width',
+        async () => (await heatmapGrid()).plot[0].x.length,
+        fullWidth,
+        undefined,
+        SLOW.retries,
+        SLOW.delay,
+      );
+    };
+
+    const applied = await measure('apply a data range', applyRange);
+    expect(
+      dataRequests(applied),
+      'windowing a payload is a view change, not a fetch',
+    ).to.have.length(0);
+    const afterApply = applied.payloads?.derivations ?? 0;
+    expect(
+      afterApply,
+      'the windowed array must be registered as a derived payload',
+    ).to.be.greaterThan(0);
+
+    const restored = await measure('restore the data range', restoreRange);
+    expect(
+      dataRequests(restored),
+      'restoring a range must not fetch: the full payload never left',
+    ).to.have.length(0);
+
+    const reapplied = await measure('apply the same range again', applyRange);
+    expect(
+      dataRequests(reapplied),
+      're-applying a range must not fetch',
+    ).to.have.length(0);
+    const afterRestore = restored.payloads?.derivations ?? 0;
+    expect(
+      reapplied.payloads?.derivations ?? 0,
+      'a range applied before must be reused, not recomputed',
+    ).to.equal(afterRestore);
+
+    const restoredAgain = await measure(
+      'restore the data range again',
+      restoreRange,
+    );
+    expect(
+      dataRequests(restoredAgain),
+      'restoring a range again must not fetch',
+    ).to.have.length(0);
+    expect(
+      restoredAgain.payloads?.derivations ?? 0,
+      'restoring a range twice must reuse the full window it made the first time',
+    ).to.equal(afterRestore);
+  });
+
+  it('opening a customization panel copies no payload and fetches nothing', async () => {
+    // Both menus edit a detached copy of the grid. It used to be a deep copy,
+    // so on a 2-D node every matrix was duplicated before the panel could draw
+    // - which a count cannot see on this small fixture, but a fetch can.
+    const openAndClose =
+      (type: 'visual' | 'data', section: string) => async () => {
+        await setTestState({ customizing: { id: heatmapGridId, type } });
+        await ensureCssElementIsDisplayed(`customization-${section}-accordion`);
+        await setTestState({ customizing: null });
+        await waitForValue(
+          'customization panel closed',
+          async () => (await getTestState()).customizing ?? null,
+          null,
+          undefined,
+          SLOW.retries,
+          SLOW.delay,
+        );
+      };
+
+    const visual = await measure(
+      'visual customization, open and close',
+      openAndClose('visual', 'Global'),
+    );
+    expect(
+      dataRequests(visual),
+      'opening a panel is a view change, not a fetch',
+    ).to.have.length(0);
+
+    const data = await measure(
+      'data manipulation, open and close',
+      openAndClose('data', 'Downsampling'),
+    );
+    expect(
+      dataRequests(data),
+      'opening a panel is a view change, not a fetch',
+    ).to.have.length(0);
+  });
+
   it('revisiting a metadata tab does not re-download the payload', async () => {
     await measure('metadata panel, first open', async () => {
       await setMetadataPanel(lineGridId);
       await waitForValue(
         'metadata panel open',
-        async () => Boolean((await getTestState()).active.metadataGridLayout),
+        async () => Boolean((await getTestState()).metadataGridId),
         true,
         undefined,
         SLOW.retries,
@@ -268,7 +478,7 @@ describe('Reactivity benchmark', function () {
       await setMetadataPanel(null);
       await waitForValue(
         'metadata panel closed',
-        async () => Boolean((await getTestState()).active.metadataGridLayout),
+        async () => Boolean((await getTestState()).metadataGridId),
         false,
         undefined,
         SLOW.retries,
@@ -277,7 +487,7 @@ describe('Reactivity benchmark', function () {
       await setMetadataPanel(lineGridId);
       await waitForValue(
         'metadata panel reopened',
-        async () => Boolean((await getTestState()).active.metadataGridLayout),
+        async () => Boolean((await getTestState()).metadataGridId),
         true,
         undefined,
         SLOW.retries,
@@ -329,26 +539,19 @@ async function findEnabledSlider() {
   );
 }
 
-/** Puts one grid in or out of edit mode through the e2e state bridge. */
+/**
+ * Puts one grid in or out of edit mode through the e2e state bridge.
+ *
+ * Edit mode is a single id in the UI slice, so this no longer has to rewrite
+ * every grid to clear a flag - which is the whole point of the change it
+ * follows.
+ */
 async function setGridEditing(gridId: string, editing: boolean) {
-  const state = await getTestState();
-  await setTestState({
-    configurations: state.configurations,
-    active: {
-      ...state.active,
-      dataPlot: state.active.dataPlot.map((grid) =>
-        grid.i === gridId
-          ? { ...grid, isEditing: editing, static: editing }
-          : { ...grid, isEditing: false, static: false },
-      ),
-    },
-  });
+  await setTestState({ editingGridId: editing ? gridId : null });
   await waitForValue(
     `grid ${gridId} editing=${editing}`,
-    async () =>
-      (await getTestState()).active.dataPlot.find((g) => g.i === gridId)
-        ?.isEditing ?? false,
-    editing,
+    async () => (await getTestState()).editingGridId,
+    editing ? gridId : null,
     undefined,
     SLOW.retries,
     SLOW.delay,
@@ -360,9 +563,5 @@ async function setGridEditing(gridId: string, editing: boolean) {
  * measured is the panel's data fetching, not the button that opens it.
  */
 async function setMetadataPanel(gridId: string | null) {
-  const state = await getTestState();
-  await setTestState({
-    configurations: state.configurations,
-    active: { ...state.active, metadataGridLayout: gridId },
-  });
+  await setTestState({ metadataGridId: gridId });
 }

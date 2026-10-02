@@ -10,7 +10,7 @@ import {
 import { CustomTreeData, URITreeNodeData } from 'src/renderer/types';
 import { TreeLibrary } from '../../components';
 import { useIbexStore } from '../../stores';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface VisualizationTreeProps {
   customDataTree: CustomTreeData[];
@@ -65,28 +65,19 @@ export const TreeLibrariesAccordion = ({
   getCurrentSelectedURI,
 }: VisualizationTreeProps) => {
   const { active } = useIbexStore();
+  const editingGridId = useIbexStore((state) => state.editingGridId);
   const [editedDataPlot, setEditedDataPlot] = useState(
-    active?.dataPlot?.find((p) => p.isEditing),
+    active?.dataPlot?.find((p) => p.i === editingGridId),
   );
-  const metadataGridLayout = useIbexStore(
-    (state) => state.active?.metadataGridLayout,
-  );
-  const customizedGridLayout = useIbexStore(
-    (state) => state.active?.customizedGridLayout,
-  );
-  const stableMetadataGridLayout = useMemo(
-    () => metadataGridLayout,
-    [JSON.stringify(metadataGridLayout)],
-  );
-  const stableCustomizedGridLayout = useMemo(
-    () => customizedGridLayout,
-    [JSON.stringify(customizedGridLayout)],
-  );
+  // Both are plain ids in the ui slice, so the selectors are already stable and
+  // the JSON.stringify memos they used to need are gone.
+  const metadataGridId = useIbexStore((state) => state.metadataGridId);
+  const customizingGridId = useIbexStore((state) => state.customizing?.id);
   const previousEditedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setEditedDataPlot(active?.dataPlot?.find((p) => p.isEditing));
-  }, [active.dataPlot]);
+    setEditedDataPlot(active?.dataPlot?.find((p) => p.i === editingGridId));
+  }, [active.dataPlot, editingGridId]);
 
   useEffect(() => {
     const openAccordionToAccessNodes = async () => {
@@ -123,8 +114,8 @@ export const TreeLibrariesAccordion = ({
             treeData={item.data}
             editedDataPlot={editedDataPlot}
             checkedNodes={checkedNodes}
-            metadataGridLayout={stableMetadataGridLayout}
-            customizedGridLayout={stableCustomizedGridLayout?.id}
+            metadataGridLayout={metadataGridId}
+            customizedGridLayout={customizingGridId}
             previousEditedIdRef={previousEditedIdRef}
             handleSelectChildren={handleSelectChildren}
             getCheckedNodes={getNodesChecked}

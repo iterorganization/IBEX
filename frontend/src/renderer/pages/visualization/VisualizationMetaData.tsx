@@ -15,9 +15,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SimplePlotly, TabsListCustom } from '../../components';
 import {
   ArraySummaryResponse,
-  Configuration,
   DataGridPlot,
   DataPlotly,
+  Coordinates,
   PlotCoordinatesResponse,
   Axis,
   PlotDataResponse,
@@ -27,10 +27,13 @@ import {
   fetchDataPlot,
   getUrisToInterpolate,
 } from '../../utils';
+import { lineVector } from '../../derive/vectors';
 
 interface MetaDataInfosProps {
   gridLayoutKey: string;
   data: DataPlotly;
+  /** The grid's coordinates, so the drawn row can be derived; see `derive/vectors.ts`. */
+  gridCoordinates?: Coordinates[];
   yAxis: Axis;
   tabsSelected: string | null;
   height?: string;
@@ -152,10 +155,14 @@ const RenderMetaDataCoordinates = ({
 export const MetaDataInfos = ({
   gridLayoutKey,
   data,
+  gridCoordinates,
   yAxis,
   height,
   tabsSelected,
 }: MetaDataInfosProps) => {
+  // The drawn row, derived: the store holds the payload and the cursor, not the
+  // vector taken with it.
+  const drawn = lineVector(data.yData, gridCoordinates ?? []);
   const { active } = useIbexStore();
   const [coordinates, setCoordinates] = useState<PlotCoordinatesResponse[]>([]);
   const [summary, setSummary] = useState<ArraySummaryResponse>(null);
@@ -225,8 +232,8 @@ export const MetaDataInfos = ({
             {renderField('dimension', data?.dimensions.toString())}
             {renderSpoiler(
               'value',
-              data.y.length
-                ? data.y
+              drawn?.length
+                ? drawn
                 : (data.yData as string | number | (string | number)[]),
             )}
             {renderField('min', summary?.min)}
@@ -248,7 +255,8 @@ export const VisualizationMetaData = () => {
   const [containerWidth, setContainerWidth] = useState(0);
   const WIDTH_PLOT = Math.floor(containerWidth * (5 / 12));
   const HEIGHT_PLOT = 390;
-  const { active, updatedConfiguration } = useIbexStore();
+  const { active } = useIbexStore();
+  const metadataGridId = useIbexStore((state) => state.metadataGridId);
   const [tabsValue, setTabsValue] = useState<string | null>();
   const [itemDataGrid, setItemDataGrid] = useState<DataGridPlot | null>(null);
   const [dataGridLayout, setDataGridLayout] = useState<DataGridPlot | null>(
@@ -259,9 +267,9 @@ export const VisualizationMetaData = () => {
    * Handle find grid layout corresponding to the selected tab
    */
   useEffect(() => {
-    if (active?.metadataGridLayout) {
+    if (metadataGridId) {
       const data = active.dataPlot.find(
-        (item: DataGridPlot) => item.i === active.metadataGridLayout,
+        (item: DataGridPlot) => item.i === metadataGridId,
       );
       if (data) {
         setDataGridLayout(data);
@@ -300,12 +308,9 @@ export const VisualizationMetaData = () => {
    * Handle the switch grid event
    */
   const closeWithoutSaving = useCallback(() => {
-    const updatedActive: Configuration = {
-      ...active,
-      metadataGridLayout: null,
-    };
-    updatedConfiguration(updatedActive);
-  }, [active]);
+    // Closing the panel is UI state; the configuration is untouched.
+    useIbexStore.getState().setMetadataGrid(null);
+  }, []);
 
   /**
    * Handle selected tab change
@@ -369,6 +374,7 @@ export const VisualizationMetaData = () => {
                         <MetaDataInfos
                           gridLayoutKey={dataGridLayout.i}
                           data={item}
+                          gridCoordinates={dataGridLayout.coordinates}
                           yAxis={
                             item.yaxis !== ''
                               ? dataGridLayout.y2AxisData

@@ -1,6 +1,6 @@
-import { ConfigurationState } from 'src/renderer/types';
+import { TestState } from 'src/renderer/types';
 
-export const mockConfigurationState: Partial<ConfigurationState> = {
+export const mockConfigurationState: Partial<TestState> = {
   configurations: [
     {
       name: 'Test Configuration 1',
@@ -27,7 +27,7 @@ export const mockConfigurationState: Partial<ConfigurationState> = {
   },
 };
 
-export const mockemptyConfigurationsState: Partial<ConfigurationState> = {
+export const mockemptyConfigurationsState: Partial<TestState> = {
   configurations: [],
   active: null,
 };

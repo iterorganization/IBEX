@@ -10,7 +10,7 @@ import {
   DataGridPlot,
   DataOperation,
   DataPlotly,
-  ErrorBandData,
+  Datum,
   Geometry,
   FieldValueResponse,
   NodeInfoTypeEnum,
@@ -38,11 +38,30 @@ import {
   updateIndexFieldName,
 } from './uri';
 import {
+  compareByAxeIndex,
   getArrayValueFromDependance,
   getFirstArrayValueFromShape,
+  getVectorData,
 } from './matrix';
-import * as tf from '@tensorflow/tfjs';
 import { containsFloat, removeSuffix, rgbToRgba } from './functions';
+import { cloneGridStructure } from './cloneGrid';
+import { getMaxShape, getTensorizedMatrix } from './tensor';
+import {
+  Ranges,
+  baseOf,
+  payloadShape,
+  readPayload,
+  registerPayload,
+  transposeOf,
+  transposedKey,
+} from '../stores/payloadRegistry';
+import { baseRank, sliceFromBase } from '../derive/ranges';
+import {
+  axisVector,
+  bandVectors,
+  customdataOf,
+  lineVector,
+} from '../derive/vectors';
 
 const defaultColorsRGB = [
   'rgb(31, 119, 180)',
@@ -64,7 +83,7 @@ const defaultColorsRGB = [
 export const plotData = (
   dataPlot: DataGridPlot,
   name: string,
-  xValue: number[],
+  /** Only its emptiness is read, to warn that a node holds nothing to draw. */
   yValue: number[],
   yData: AxisData,
   nodeUri: string,
@@ -77,11 +96,11 @@ export const plotData = (
   interpolated_method: string,
   description?: string,
   y2Axis?: boolean,
+  yDataRef?: string,
 ): DataGridPlot => {
   const trace: DataPlotly = {
-    x: xValue,
-    y: yValue,
     yData: yData,
+    yDataRef: yDataRef,
     name: name ? `${name}_${labelUri}` : '',
     line: {},
     mode: 'lines',
@@ -120,55 +139,6 @@ export const plotData = (
     forceXyRatio: dataPlot?.forceXyRatio ?? false,
   };
 };
-
-/**
- * @description Deep equality for coordinate or axis data, with an early exit on the first
- * difference. Replaces `JSON.stringify(a) === JSON.stringify(b)`, which allocated a full
- * serialization of both arrays - megabytes, on every slider tick, for every grid - before
- * comparing them.
- *
- * Matches the semantics of the comparison it replaces: NaN equals NaN, and null equals
- * undefined, because JSON.stringify writes both as `null` inside an array.
- * @param a First value.
- * @param b Second value.
- * @returns Whether the two hold the same values.
- */
-export function isSameAxisData(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a == null || b == null) return a == null && b == null;
-
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-      return false;
-    }
-    for (let index = 0; index < a.length; index++) {
-      if (!isSameAxisData(a[index], b[index])) return false;
-    }
-    return true;
-  }
-
-  if (typeof a === 'number' && typeof b === 'number') {
-    // JSON.stringify writes NaN as null, so the old comparison saw two NaNs as equal.
-    return Number.isNaN(a) && Number.isNaN(b);
-  }
-
-  if (typeof a === 'object' && typeof b === 'object') {
-    // Complex values, stored as { r, i } pairs.
-    const keysOfA = Object.keys(a);
-    const keysOfB = Object.keys(b);
-    return (
-      keysOfA.length === keysOfB.length &&
-      keysOfA.every((key) =>
-        isSameAxisData(
-          (a as Record<string, unknown>)[key],
-          (b as Record<string, unknown>)[key],
-        ),
-      )
-    );
-  }
-
-  return false;
-}
 
 /**
  * @description Computes the default axis-ratio rule for a newly created grid, based on the 2D
@@ -237,14 +207,6 @@ export const handleNewPlot = async (
     nodes[0],
   );
 
-  let defaultXValue: number[] = [];
-  if (response.data.coordinates.length > 0) {
-    defaultXValue = getFirstArrayValueFromShape(
-      response.data.coordinates[0].value,
-      response.data.coordinates[0].shape as number[],
-    );
-  }
-
   const defaultYValue = getFirstArrayValueFromShape(
     response.data.value,
     response.data.shape as number[],
@@ -253,7 +215,6 @@ export const handleNewPlot = async (
   const updatedPlot: DataGridPlot = plotData(
     newGrid,
     yAxis.name,
-    defaultXValue,
     defaultYValue,
     response.data.value,
     defaultUri,
@@ -265,6 +226,8 @@ export const handleNewPlot = async (
     response.data.downsampled_method,
     response.data.interpolated_method,
     response.data.description,
+    undefined,
+    response.data.valueRef,
   );
   updatedPlot.dataType = nodes[0].type;
   updatedPlot.is_geometry_node = nodes[0].is_geometry_node;
@@ -296,7 +259,9 @@ const updateInterpolatedPlots = async (
   mainUri: string,
   nodeType?: NodeInfoTypeEnum,
 ) => {
-  let interpolatedDataPlot = structuredClone(findDataPlot);
+  // A structural copy: every field below is reassigned, never written into,
+  // so the payloads can stay shared.
+  let interpolatedDataPlot = cloneGridStructure(findDataPlot);
   const isInDeleteCase = !nodeType;
   let formattedCoordinates: Coordinates[];
   const urisToInterpolate = getUrisToInterpolate(
@@ -345,34 +310,17 @@ const updateInterpolatedPlots = async (
       interpolatedDataPlot.coordinates = formattedCoordinates;
     }
 
-    const wantedX = getArrayValueFromDependance(
-      interpolatedDataPlot.coordinates,
-      0,
-    );
-    const wantedY = getVectorData(
-      interpolatedDataPlot.coordinates,
-      plotInterpolated.data.value,
-    );
-
-    // Update x, y & yData
-    plot.x = wantedX;
-    plot.y = wantedY;
     plot.yData = plotInterpolated.data.value;
+    plot.yDataRef = plotInterpolated.data.valueRef;
     plot.shape = plotInterpolated.data.downsampled_shape;
+  }
 
-    if (isInDeleteCase) {
-      // Apply range in delete case
-      for (const coordinate of interpolatedDataPlot.coordinates) {
-        if (coordinate?.rangeValues) {
-          interpolatedDataPlot = await applyRange(
-            coordinate,
-            coordinate.rangeValues,
-            interpolatedDataPlot,
-            [plot.nodeUri],
-          );
-        }
-      }
-    }
+  if (isInDeleteCase) {
+    // Fit the refetched traces to the windows the grid already has. The ranges
+    // are absolute, so this does not need to know which traces were narrowed.
+    // Once, after the loop: `applyRangesToGrid` returns a copy, so calling it
+    // inside would leave the loop writing into traces no longer in the grid.
+    interpolatedDataPlot = await applyRangesToGrid(interpolatedDataPlot);
   }
   return interpolatedDataPlot;
 };
@@ -407,7 +355,8 @@ const updateCoordsAfterInterpolation = (
   oldCoords: Coordinates[],
   newCoords: Coordinates[],
 ) => {
-  const interpolatedCoords = structuredClone(newCoords);
+  // Only `valueIndex` and `axeIndex` change: copy the coordinates, not their data.
+  const interpolatedCoords = newCoords.map((coord) => ({ ...coord }));
   for (const [index, newCoord] of interpolatedCoords.entries()) {
     const oldCoord = oldCoords[index];
     const wantedValue = getArrayValueFromDependance(
@@ -493,7 +442,7 @@ export const handleExistingPlot = async (
       formattedCoordinates,
     );
     const partiallyInterpolatedDataPlot: DataGridPlot = {
-      ...structuredClone(findDataPlot),
+      ...cloneGridStructure(findDataPlot),
       coordinates: interpolatedCoordinates,
     };
 
@@ -572,7 +521,7 @@ export const handleExistingPlot = async (
 
     const coordinatesExistAndMatch =
       interpolatedDataPlot.coordinates.length === coordsResponse.length &&
-      structuredClone(interpolatedDataPlot.coordinates)
+      [...interpolatedDataPlot.coordinates]
         .sort(compareByAxeIndex)
         .every((coord: Coordinates, index: number) => {
           const responseCoord = coordsResponse[index];
@@ -636,14 +585,6 @@ export const handleExistingPlot = async (
       unit: unit,
     };
 
-    let defaultXValue: number[] = [];
-    if (response.data.coordinates.length > 0) {
-      defaultXValue = getFirstArrayValueFromShape(
-        response.data.coordinates[0].value,
-        response.data.coordinates[0].downsampled_shape as number[],
-      );
-    }
-
     const defaultYValue = getVectorData(
       findDataPlot.coordinates,
       response.data.value,
@@ -654,7 +595,6 @@ export const handleExistingPlot = async (
       updatedPlot = await plotData(
         findDataPlot,
         yAxis.name,
-        defaultXValue,
         defaultYValue,
         response.data.value,
         defaultUri,
@@ -666,6 +606,8 @@ export const handleExistingPlot = async (
         response.data.downsampled_method,
         response.data.interpolated_method,
         response.data.description,
+        undefined,
+        response.data.valueRef,
       );
     } else if (!findDataPlot.y2AxisData) {
       findDataPlot.y2AxisData = {
@@ -676,7 +618,6 @@ export const handleExistingPlot = async (
       updatedPlot = await plotData(
         findDataPlot,
         yAxis.name,
-        defaultXValue,
         defaultYValue,
         response.data.value,
         defaultUri,
@@ -689,6 +630,7 @@ export const handleExistingPlot = async (
         response.data.interpolated_method,
         response.data.description,
         true,
+        response.data.valueRef,
       );
     } else {
       showNotification({
@@ -716,19 +658,16 @@ export const handleExistingPlot = async (
       }
     } else {
       // Only get error bands of added plot when we don't have combined coordinates
-      await fetchErrorBandsInConfig(updatedActive, defaultUri);
+      await fetchErrorBandsInConfig(updatedActive, defaultUri, findDataPlot.i);
     }
 
-    // Apply range to new error bands when adding another plot
-    for (const coordinate of updatedPlot.coordinates) {
-      if (coordinate?.rangeValues) {
-        updatedPlot = await applyRange(
-          coordinate,
-          coordinate.rangeValues,
-          updatedPlot,
-          [defaultUri],
-        );
-      }
+    // Fit the trace and its error bands to the windows the grid already has.
+    // `applyRangesToGrid` returns a copy: put that copy in the configuration.
+    if (updatedPlot) {
+      const windowed = await applyRangesToGrid(updatedPlot);
+      updatedActive.dataPlot = updatedActive.dataPlot.map((dataPlot) =>
+        dataPlot.i === windowed.i ? windowed : dataPlot,
+      );
     }
   }
 
@@ -866,12 +805,15 @@ const deleteExistingPlot = async (
  * Get error bands of the provided uri and update configuration
  * @param active
  * @param uri
+ * @param editingGridId The grid being edited, from the UI slice. It used to be
+ *   found by scanning `dataPlot` for the grid whose `isEditing` was set.
  */
 export const fetchErrorBandsInConfig = async (
   active: Configuration,
   uri: string,
+  editingGridId: string | null,
 ) => {
-  const selectedDataPlot = active.dataPlot.find((d) => d.isEditing);
+  const selectedDataPlot = active.dataPlot.find((d) => d.i === editingGridId);
   if (!selectedDataPlot) {
     // Don't get error bands when no editing dataPlot
     return;
@@ -897,7 +839,7 @@ export const fetchErrorBandsInConfig = async (
 
     if (errBandsResponse) {
       const updatedCheckedNodeURI = active.checkedNodeURI;
-      if (selectedDataPlot.isEditing && updatedPlot?.error_bands) {
+      if (updatedPlot?.error_bands) {
         // Check error bands in tree
         for (const error_band of updatedPlot.error_bands) {
           const newCheckedNode = {
@@ -1299,7 +1241,7 @@ export const fetchGeometries = async (
       }
     }
 
-    if (dataPlot.isEditing && dataPlot?.geometries && updatedCheckedNodeURI) {
+    if (dataPlot?.geometries && updatedCheckedNodeURI) {
       // Check geometries in tree
       for (const geometry of dataPlot.geometries) {
         for (const uriOfGeo of geometry.nodeUris) {
@@ -1410,7 +1352,10 @@ export const fetchErrorBands = async (
             urisToInterpolate,
             interpolationMethod,
           );
-          return { value: interpolated.data.value } as FieldValueResponse;
+          return {
+            value: interpolated.data.value,
+            valueRef: interpolated.data.valueRef,
+          } as FieldValueResponse;
         }
         return await fetchFieldValue(
           bandUri,
@@ -1446,6 +1391,7 @@ export const fetchErrorBands = async (
         getVectorData(dataPlot.coordinates, upperResponse.value),
         upperResponse.value,
         plot.nodeUri + '_error_upper',
+        upperResponse.valueRef,
       );
     }
 
@@ -1455,6 +1401,7 @@ export const fetchErrorBands = async (
         getVectorData(dataPlot.coordinates, lowerResponse.value),
         lowerResponse.value,
         plot.nodeUri + '_error_lower',
+        lowerResponse.valueRef,
       );
     }
 
@@ -1479,6 +1426,7 @@ const formatErrorBands = (
   yValue: number[],
   yData: AxisData,
   nodeUri: string,
+  yDataRef?: string,
 ) => {
   if (!(nodeUri.endsWith('_error_lower') || nodeUri.endsWith('_error_upper'))) {
     return;
@@ -1496,18 +1444,19 @@ const formatErrorBands = (
   foundedPlot.error_bands.push({
     path: normalizeIndices(nodeUri),
     yData: yData,
-    array: yValue,
+    yDataRef: yDataRef,
   });
 };
 
 const formatErrorBandLayout = (
   error_band_type: 'upper' | 'lower',
   mainPlot: DataPlotly,
-  coordinates: Coordinates[],
+  x: (string | number)[],
+  mainY: number[],
+  bands: Datum[][],
   plotIndex: number,
   symmetricalCase?: boolean,
 ) => {
-  const mainY = mainPlot.y as number[];
   const lineShape = (mainPlot.line?.shape ?? 'linear') as 'linear' | 'hv';
 
   const errBandTypePosition = symmetricalCase
@@ -1515,11 +1464,8 @@ const formatErrorBandLayout = (
     : error_band_type === 'lower'
       ? 1
       : 0;
-  const yDiff = getVectorData(
-    coordinates,
-    mainPlot.error_bands[errBandTypePosition].yData,
-  );
-  const length = Math.min(mainPlot.y.length, yDiff.length);
+  const yDiff = (bands[errBandTypePosition] ?? []) as number[];
+  const length = Math.min(mainY.length, yDiff.length);
   const yErrBandPart = new Array<number>(length);
   for (let i = 0; i < length; i++) {
     if (error_band_type === 'lower') {
@@ -1529,7 +1475,7 @@ const formatErrorBandLayout = (
     }
   }
   const errBandPartPlot: Partial<ScatterData> = {
-    x: [...mainPlot.x],
+    x: [...x],
     y: [...yErrBandPart],
     type: 'scatter',
     mode: 'lines',
@@ -1552,25 +1498,44 @@ const formatErrorBandLayout = (
   return errBandPartPlot;
 };
 
-export function getErrorsAreaToPlot(
-  mainPlots: DataPlotly[],
+/**
+ * Everything Plotly is handed for one grid, built from the payloads and the
+ * cursor.
+ *
+ * The traces are new objects every time, and the store's are never among them:
+ * Plotly keeps and mutates what it is given. That used to be arranged by
+ * copying each stored trace here and letting this function write back onto the
+ * copy; the vectors are now derived rather than copied, so there is nothing to
+ * copy from.
+ */
+export function buildTraces(
+  plots: DataPlotly[],
   coordinates: Coordinates[],
-) {
+): (Partial<ScatterData> | DataPlotly)[] {
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
+  const x = axisVector(coordinates, 0) ?? [];
 
-  for (const [plotIndex, mainPlot] of mainPlots.entries()) {
-    // Each plot should have connectgaps equals to true to prevent gap in combined data cases
-    mainPlot.connectgaps = true;
+  for (const [plotIndex, storedPlot] of plots.entries()) {
+    const y = (lineVector(storedPlot.yData, coordinates) ?? []) as number[];
+    const bands = bandVectors(storedPlot, coordinates);
 
-    // Add main plot
+    const mainPlot = {
+      ...storedPlot,
+      x: [...x],
+      y: [...y],
+      // Each plot should have connectgaps equals to true to prevent gap in combined data cases
+      connectgaps: true,
+    } as DataPlotly;
     entirePlotList.push(mainPlot);
 
-    if (mainPlot?.error_bands && mainPlot?.error_bands.length === 2) {
+    if (storedPlot?.error_bands && storedPlot.error_bands.length === 2) {
       // Add lower and upper
       const lowerPlot = formatErrorBandLayout(
         'lower',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
       );
       lowerPlot.connectgaps = true;
@@ -1578,17 +1543,21 @@ export function getErrorsAreaToPlot(
       const upperPlot = formatErrorBandLayout(
         'upper',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
       );
       upperPlot.connectgaps = true;
       entirePlotList.push(upperPlot);
-    } else if (mainPlot?.error_bands && mainPlot?.error_bands.length === 1) {
+    } else if (storedPlot?.error_bands && storedPlot.error_bands.length === 1) {
       // Symmetrical case: use upper for the interval
       const lowerPlot = formatErrorBandLayout(
         'lower',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
         true,
       );
@@ -1597,7 +1566,9 @@ export function getErrorsAreaToPlot(
       const upperPlot = formatErrorBandLayout(
         'upper',
         mainPlot,
-        coordinates,
+        x,
+        y,
+        bands,
         plotIndex,
         true,
       );
@@ -1605,26 +1576,14 @@ export function getErrorsAreaToPlot(
       entirePlotList.push(upperPlot);
     }
 
-    if (mainPlot?.error_bands) {
-      // Add main plot
-      if (mainPlot.error_bands.length === 2) {
-        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
-          mainPlot.error_bands[0].array[i],
-          mainPlot.error_bands[1].array[i],
-        ]);
-      } else {
-        mainPlot.customdata = mainPlot.error_bands[0].array.map((v, i) => [
-          mainPlot.error_bands[0].array[i],
-        ]);
-      }
-      mainPlot.hovertemplate = 'x: %{x}<br>' + 'y: %{y}<br>';
-      if (mainPlot?.error_bands?.length) {
-        mainPlot.hovertemplate +=
-          mainPlot.error_bands.length === 2
-            ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
-            : 'y error bands: ±%{customdata[0]}<br>';
-      }
-      mainPlot.hovertemplate += '<extra></extra>';
+    if (storedPlot?.error_bands?.length) {
+      mainPlot.customdata = customdataOf(bands);
+      mainPlot.hovertemplate =
+        'x: %{x}<br>y: %{y}<br>' +
+        (storedPlot.error_bands.length === 2
+          ? 'upper y: +%{customdata[0]}<br>lower y: -%{customdata[1]}<br>'
+          : 'y error bands: \u00b1%{customdata[0]}<br>') +
+        '<extra></extra>';
     }
   }
   return entirePlotList;
@@ -1715,7 +1674,7 @@ export const initPlotColors = async (
   });
 
   const updatedPlotColors = setterForCustomization
-    ? (structuredClone(customizedDataGrid) as DataGridPlot)
+    ? cloneGridStructure(customizedDataGrid)
     : customizedDataGrid;
 
   if (
@@ -1740,11 +1699,9 @@ export const initPlotColors = async (
       );
       const colorFromDOM = line?.style?.stroke || point?.style?.fill;
 
-      if (!plot?.line) {
-        plot.line = { color: colorFromDOM } as PlotLine;
-      } else {
-        plot.line.color = colorFromDOM;
-      }
+      // A new object rather than a write into `plot.line`, which the copy
+      // above shares with the grid it came from.
+      plot.line = { ...plot.line, color: colorFromDOM } as PlotLine;
       plotIndex++;
     }
     if (!shouldUpdateColors) {
@@ -1827,9 +1784,7 @@ export function formatConfigBeforeLoadingURIs(
   const newListDataGridPlot: DataGridPlot[] = activeConfiguration.dataPlot.map(
     (data): DataGridPlot => ({
       ...data,
-      isEditing: false,
       dataType: data.dataType,
-      static: false,
       coordinates:
         data.coordinates && data.coordinates.length > 0
           ? data.coordinates.map((coord: BaseCoordinates): Coordinates => {
@@ -1859,8 +1814,6 @@ export function formatConfigBeforeLoadingURIs(
             activeConfiguration.dataURI,
           ),
           yData: [],
-          x: [],
-          y: [],
           unit: '',
         } as DataPlotly;
       }),
@@ -1893,6 +1846,7 @@ function formatCoordinates(
         downsampled_shape: coordinate.downsampled_shape,
         coord_dependencies: coordinate.coordinates,
         data: coordinate.value,
+        dataRef: coordinate.valueRef,
         valueIndex: valueIndex,
         path:
           valueIndex === 0
@@ -1972,18 +1926,19 @@ export async function plotNodeUriLoaded(
               index,
               responseCoordinates,
             ] of response.data.coordinates.entries()) {
-              const matchingCoord: Coordinates = structuredClone(
-                dataGrid.coordinates,
-              ).find(
+              const found = dataGrid.coordinates.find(
                 (c: Coordinates) =>
                   normalizeIndices(c.path) === responseCoordinates.path,
               );
+              // Every field of it is reassigned below; the payload is replaced.
+              const matchingCoord: Coordinates = found && { ...found };
               const lastField = getLastIndexedField(responseCoordinates.target);
               if (!lastField) continue;
 
               // If coordinates exist, update it with response from BE
               matchingCoord.axeIndex = index;
               matchingCoord.data = responseCoordinates.value;
+              matchingCoord.dataRef = responseCoordinates.valueRef;
               matchingCoord.name = responseCoordinates.name;
               matchingCoord.path = getDefaultUri(responseCoordinates.path);
               matchingCoord.unit = responseCoordinates.unit || '';
@@ -2047,6 +2002,7 @@ export async function plotNodeUriLoaded(
               path: yResponsePath,
               shape: response.data.downsampled_shape as number[],
               yData: response.data.value,
+              yDataRef: response.data.valueRef,
               x: defaultXValue,
               y: defaultYValue,
             } as DataPlotly;
@@ -2079,10 +2035,8 @@ export async function plotNodeUriLoaded(
           ) !==
           JSON.stringify(dataGrid.coordinates.map((coord, index) => index))
         ) {
-          const customizedDataGrid = structuredClone(dataGrid) as DataGridPlot;
-          const updatedDataPlot = structuredClone(
-            dataGridUpdated,
-          ) as DataGridPlot;
+          const customizedDataGrid = dataGrid;
+          const updatedDataPlot = cloneGridStructure(dataGridUpdated);
           for (const [index, coord] of updatedDataPlot.coordinates.entries()) {
             // Set to original axe indexes in order apply the transposition
             coord.axeIndex = index;
@@ -2144,19 +2098,11 @@ export async function plotNodeUriLoaded(
           }
         }
 
-        // Apply range to coordinates, dependencies & new error bands when loading a config
-        for (const coordinate of dataPlot.coordinates) {
-          if (coordinate?.range) {
-            const keepValueIndex = true;
-            await applyRange(
-              coordinate,
-              coordinate.rangeValues,
-              dataPlot,
-              [...dataPlot.plot.map((plot) => plot.nodeUri)],
-              keepValueIndex,
-              true, // apply range origin when loading a config (get coordinates for first time)
-            );
-          }
+        // Cut the freshly fetched arrays to the ranges the saved configuration
+        // carries. The sliders keep the positions the configuration saved.
+        if (dataPlot.coordinates?.some((coordinate) => coordinate.range)) {
+          const windowed = await applyRangesToGrid(dataPlot);
+          updatedDataGridPlot[updatedDataGridPlot.indexOf(dataPlot)] = windowed;
         }
       }
     }
@@ -2194,10 +2140,10 @@ export const transposeDataGrid = async (
   wantedAxeIndexOrder: number[],
   keepValueIndex?: boolean,
 ) => {
-  let actualAxeIndexOrder = (
-    structuredClone(updatedDataGrid.coordinates) as Coordinates[]
-  ).map((coord) => coord.axeIndex);
-  let transposedDataGrid = structuredClone(updatedDataGrid) as DataGridPlot;
+  let actualAxeIndexOrder = updatedDataGrid.coordinates.map(
+    (coord) => coord.axeIndex,
+  );
+  let transposedDataGrid = cloneGridStructure(updatedDataGrid);
   if (
     JSON.stringify(wantedAxeIndexOrder) !== JSON.stringify(actualAxeIndexOrder)
   ) {
@@ -2244,7 +2190,7 @@ export const reapplyAxisOrder = async (
 
   if (targetPlot) {
     // Transpose only the target plot through a temporary grid with default axeIndex
-    const tempGrid = structuredClone(updatedDataPlot) as DataGridPlot;
+    const tempGrid = cloneGridStructure(updatedDataPlot);
     tempGrid.plot = tempGrid.plot.filter((p) => p.name === targetPlot.name);
     tempGrid.coordinates.forEach((coord, index) => {
       coord.axeIndex = index;
@@ -2257,9 +2203,8 @@ export const reapplyAxisOrder = async (
     // Copy transposed data back on the real plot
     const transposedPlot = transposed.plot[0];
     targetPlot.yData = transposedPlot.yData;
+    targetPlot.yDataRef = transposedPlot.yDataRef;
     targetPlot.shape = transposedPlot.shape;
-    targetPlot.x = transposedPlot.x;
-    targetPlot.y = transposedPlot.y;
     return;
   }
 
@@ -2275,84 +2220,6 @@ export const reapplyAxisOrder = async (
   updatedDataPlot.coordinates = transposed.coordinates;
   updatedDataPlot.plot = transposed.plot;
 };
-
-/**
- * @description Retrieves vector data from a plot item based on the provided URI and coordinates.
- * @param uri The URI to retrieve the vector data from.
- * @param coordinates The coordinates to use for retrieving the vector data.
- * @param plotItem The plot item containing the yData to extract the vector from.
- * @returns The vector data as an array of numbers, or undefined if the indices are invalid
- */
-export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
-  const coordinatesLength: number = coordinates.length;
-
-  // Extract only matrix indexes.
-  // Only `axeIndex` and `valueIndex` are read, so project onto those two
-  // numbers before sorting: cloning the coordinates would deep-copy every
-  // coordinate's full `data` array, and this runs on every slider tick and on
-  // the render path of every plot.
-  const matrixIndexes = coordinates
-    .map((coord: Coordinates) => ({
-      axeIndex: coord.axeIndex,
-      valueIndex: coord.valueIndex,
-    }))
-    .sort(compareByAxeIndex)
-    .reverse()
-    .filter((coord) => coord.axeIndex !== 0)
-    .map((coord) => coord.valueIndex);
-
-  // Retrieve vector to plot
-  /* eslint-disable  @typescript-eslint/no-explicit-any */
-  let result: any = yData;
-  let shapeIndex = 0;
-  for (const index of matrixIndexes) {
-    if (shapeIndex < coordinatesLength && index < result.length) {
-      result = result[index];
-      shapeIndex++;
-    } else {
-      if (!(shapeIndex < coordinatesLength)) {
-        break;
-      } else {
-        console.warn('Impossible to plot: invalid index or incorrect length');
-        return undefined;
-      }
-    }
-  }
-  const vectorData: number[] = result;
-  return vectorData;
-}
-
-export function getErrorYVectors(plot: DataPlotly, coordinates: Coordinates[]) {
-  // Get error bands vectors switch coordinates indexes
-  const updated_error_bands: ErrorBandData[] = structuredClone(
-    plot.error_bands,
-  );
-  for (const updated_error_band of updated_error_bands) {
-    updated_error_band.array = getVectorData(
-      coordinates,
-      updated_error_band.yData,
-    );
-  }
-  return updated_error_bands;
-}
-
-/**
- * @description Compares two Coordinates objects by their axeIndex.
- * @param a The first Coordinates object.
- * @param b The second Coordinates object.
- * @returns A negative number if a's axeIndex is less than b's, a positive number if greater, or 0 if equal.
- */
-export function compareByAxeIndex(
-  a: { axeIndex: number },
-  b: { axeIndex: number },
-) {
-  if (a.axeIndex < b.axeIndex) {
-    return -1;
-  } else if (a.axeIndex > b.axeIndex) {
-    return 1;
-  }
-  return 0;
-}
 
 /**
  * @description
@@ -2451,18 +2318,6 @@ function getLastDimLength(value: AxisData): number | null {
 }
 
 /**
- * Return a tensorized matrix using tensorflow
- * @param matrix
- * @returns
- */
-export const getTensorizedMatrix = async (matrix: AxisData) => {
-  const shape = getMaxShape(matrix);
-  const reshapedMatrix = reshapeMatrix(matrix, shape);
-  const dataTensorized = tf.tensor(reshapedMatrix);
-  return dataTensorized;
-};
-
-/**
  * Transpose all plots from a dataGrid and update paths with related value indexes
  * @param itemDataGrid
  * @param axeIndexToSwap
@@ -2488,13 +2343,25 @@ export const swapAxis = async (
     (coordinate) => coordinate.axeIndex === axeIndexToSwap,
   );
 
-  const updatedDataPlotList: DataGridPlot[] =
-    active && updatedConfiguration ? structuredClone(active.dataPlot) : null;
-  const updatedDataPlot = updatedDataPlotList
-    ? updatedDataPlotList.find(
-        (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
+  // Structural copies, not deep ones. A transposition replaces payload arrays,
+  // it never writes into them, so the swapped grid can share them with the one
+  // it replaces - and the grids this swap does not touch keep their identity,
+  // so the panels showing them do not re-render.
+  const usesStore = Boolean(active && updatedConfiguration);
+  const updatedDataPlot = cloneGridStructure(
+    usesStore
+      ? active.dataPlot.find(
+          (dataPlotToUpdate) => dataPlotToUpdate.i === itemDataGrid.i,
+        )
+      : itemDataGrid,
+  );
+  const updatedDataPlotList: DataGridPlot[] = usesStore
+    ? active.dataPlot.map((dataPlotToUpdate) =>
+        dataPlotToUpdate.i === itemDataGrid.i
+          ? updatedDataPlot
+          : dataPlotToUpdate,
       )
-    : (structuredClone(itemDataGrid) as DataGridPlot);
+    : null;
 
   // Swap axis
   updatedDataPlot.coordinates[actualTargetAxisIndex].axeIndex = axeIndexToSwap;
@@ -2563,25 +2430,8 @@ export const swapAxis = async (
   // Transpose yData with resetted valueIndex
   await transposeAxis(updatedDataPlot, axeIndexToSwap, axeIndexOfTargetAxis);
 
-  // Update x & y with translated dataY
-  for (const plot of updatedDataPlot.plot) {
-    const vectorData = getVectorData(updatedDataPlot.coordinates, plot.yData);
-    plot.y = vectorData;
-    // Get x values switch x dependances
-    plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
-
-    if (plot?.error_bands?.length) {
-      // Update error_bands vectors after transpositions
-      const swapped_error_bands = getErrorYVectors(
-        plot,
-        updatedDataPlot.coordinates,
-      );
-      plot.error_bands = swapped_error_bands;
-    }
-  }
-
   // Limit coordinate sliders to the max of their new shape
-  limitSlidersToMaxLength(updatedDataPlot.coordinates);
+  clampCursors(updatedDataPlot.coordinates);
 
   if (updatedDataPlot.geometries) {
     // Swap geometries x & y in the case we swap x & y coordinates
@@ -2604,10 +2454,14 @@ export const swapAxis = async (
 };
 
 /**
- * Update coordinates to limit sliders to maximum length.
- * @param coordinates The coordinates to check and update if necessary.
+ * Pull every cursor back inside its axis.
+ *
+ * A cursor is an index, so narrowing a range or transposing can leave one
+ * pointing past the end of the axis it indexes. Nothing derives a row from an
+ * out-of-range cursor, so it has to be corrected on the document rather than
+ * worked around at the point of use.
  */
-export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
+export function clampCursors(coordinates: Coordinates[]) {
   for (const coord of coordinates) {
     const coordLength = getArrayValueFromDependance(
       coordinates,
@@ -2620,29 +2474,9 @@ export function limitSlidersToMaxLength(coordinates: Coordinates[]) {
 }
 
 /**
- * Find the maximum shape of a potentially irregular array.
- */
-function getMaxShape(arr: any[]): number[] {
-  const shape: number[] = [];
-
-  function goThrough(node: any, depth: number) {
-    if (!Array.isArray(node)) return;
-
-    // Update max shape to this length
-    shape[depth] = Math.max(shape[depth] ?? 0, node.length);
-
-    for (const item of node) {
-      goThrough(item, depth + 1);
-    }
-  }
-
-  goThrough(arr, 0);
-  return shape;
-}
-
-/**
  * Convert all last children of shape [number, number] into {r, i} objects.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export function transformComplexData(arr: any[]): any[] {
   const maxDepth = getMaxShape(arr).length;
 
@@ -2661,30 +2495,6 @@ export function transformComplexData(arr: any[]): any[] {
   return transform(arr, 0);
 }
 
-/**
- * Recursively fills an irregular array with NaN
- * to match a given shape.
- */
-function reshapeMatrix(arr: any[], shape: number[], depth = 0): any[] {
-  const size = shape[depth];
-  const result = [...arr];
-
-  for (let i = 0; i < size; i++) {
-    if (result[i] === undefined) {
-      // If an element is missing, either NaN or a subarray filled with NaN is inserted
-      if (shape.length > depth + 1) {
-        result[i] = reshapeMatrix([], shape, depth + 1);
-      } else {
-        result[i] = NaN;
-      }
-    } else if (Array.isArray(result[i])) {
-      result[i] = reshapeMatrix(result[i], shape, depth + 1);
-    }
-  }
-
-  return result;
-}
-
 async function transposeMatrix(yData: AxisData, newPositions: number[]) {
   // Transpose dataY
   const tensor = await getTensorizedMatrix(yData);
@@ -2692,34 +2502,101 @@ async function transposeMatrix(yData: AxisData, newPositions: number[]) {
   return dataTransposed;
 }
 
+/**
+ * The axis permutation that swapping two display axes applies to the payload.
+ *
+ * It depends only on the coordinates, and a transposition does not touch those,
+ * so it is computed once for the grid rather than once per trace.
+ */
+const transposePermutation = (
+  coordinates: Coordinates[],
+  axeIndexToSwap: number,
+  axeIndexOfTargetAxis: number,
+): number[] => {
+  // Initial position, reversed to get axeIndex order
+  const newPositions = coordinates
+    .map((coord) => coord.axeIndex)
+    .sort((a, b) => a - b)
+    .reverse();
+  // SWAP axeIndexOfTargetAxis with axeIndexToSwap
+  const tempSwap = newPositions[axeIndexOfTargetAxis];
+  newPositions[axeIndexOfTargetAxis] = newPositions[axeIndexToSwap];
+  newPositions[axeIndexToSwap] = tempSwap;
+  // Reverse for getting position => [0, 1, 3, 2]
+  newPositions.reverse();
+  return newPositions;
+};
+
+/** Permutes a shape the way `newPositions` permutes the data it describes. */
+const permuteShape = (shape: number[], newPositions: number[]): number[] =>
+  newPositions.map((axis) => shape[axis]);
+
+/**
+ * Transposes one payload, through the registry.
+ *
+ * The result is a payload in its own right, named by composing the permutation
+ * onto the source key, so an axis order reached twice is computed once. Swapping
+ * back composes to the identity and names the untransposed base, which is still
+ * resident because the sweep keeps a payload and its views together - so undoing
+ * a transposition moves no bytes at all.
+ *
+ * A trace whose payload has no key (one a transform already replaced) still
+ * transposes, it just cannot be memoised.
+ */
+const transposePayload = async (
+  payload: {
+    value: AxisData;
+    ref?: string;
+    shape?: number[];
+    /** Whether the caller stores a shape and therefore needs one back. */
+    needsShape: boolean;
+  },
+  newPositions: number[],
+): Promise<{ value: AxisData; ref?: string; shape?: number[] }> => {
+  const key = payload.ref
+    ? transposedKey(payload.ref, newPositions)
+    : undefined;
+  const known = readPayload(key);
+  // A shape the caller needs but the registry has never recorded is one only
+  // the tensor can produce.
+  const knownShape =
+    payloadShape(key) ??
+    (payload.shape && permuteShape(payload.shape, newPositions));
+  if (key && known && (knownShape || !payload.needsShape)) {
+    return { value: known, ref: key, shape: knownShape };
+  }
+
+  const tensor = await transposeMatrix(payload.value, newPositions);
+  const transposed = (await tensor.array()) as AxisData;
+  if (key) registerPayload(key, transposed, tensor.shape);
+  return { value: transposed, ref: key, shape: tensor.shape };
+};
+
 async function transposeAxis(
   updatedDataPlot: DataGridPlot,
   axeIndexToSwap: number,
   axeIndexOfTargetAxis: number,
 ) {
+  const newPositions = transposePermutation(
+    updatedDataPlot.coordinates,
+    axeIndexToSwap,
+    axeIndexOfTargetAxis,
+  );
+
   // Modify each plot in graph
   for (const plotToTranspose of updatedDataPlot.plot) {
-    // DETERMINE WHICH AXIS TO TRANSPOSE
-    // Initial position
-    const newPositions: number[] = structuredClone(updatedDataPlot.coordinates)
-      .map((coord: Coordinates) => coord.axeIndex)
-      .sort((a: number, b: number) => a - b)
-      .reverse(); // Reverse to get axeIndex order
-    // SWAP axeIndexOfTargetAxis with axeIndexToSwap
-    const tempSwap = newPositions[axeIndexOfTargetAxis];
-    newPositions[axeIndexOfTargetAxis] = newPositions[axeIndexToSwap];
-    newPositions[axeIndexToSwap] = tempSwap;
-    // Reverse for getting position => [0, 1, 3, 2]
-    newPositions.reverse();
-
-    // Transpose dataY matrix
-    const tensorizedDataY = await transposeMatrix(
-      plotToTranspose.yData,
+    const transposedY = await transposePayload(
+      {
+        value: plotToTranspose.yData,
+        ref: plotToTranspose.yDataRef,
+        shape: plotToTranspose.shape,
+        needsShape: true,
+      },
       newPositions,
     );
-    const transposedDataY = (await tensorizedDataY.array()) as AxisData;
-    plotToTranspose.yData = transposedDataY;
-    plotToTranspose.shape = tensorizedDataY.shape;
+    plotToTranspose.yData = transposedY.value;
+    plotToTranspose.yDataRef = transposedY.ref;
+    plotToTranspose.shape = transposedY.shape;
 
     if (plotToTranspose?.error_bands) {
       for (const error_band of plotToTranspose.error_bands) {
@@ -2727,182 +2604,194 @@ async function transposeAxis(
           // Control to prevent from transposing error y axis when unplottable data
           continue;
         }
-        // Transpose each error band matrix
-        const tensorizedErrorBand = await transposeMatrix(
-          error_band.yData,
+        const transposedBand = await transposePayload(
+          {
+            value: error_band.yData,
+            ref: error_band.yDataRef,
+            needsShape: false,
+          },
           newPositions,
         );
-        const transposedErrorBand =
-          (await tensorizedErrorBand.array()) as AxisData;
-        error_band.yData = transposedErrorBand;
+        error_band.yData = transposedBand.value;
+        error_band.yDataRef = transposedBand.ref;
       }
     }
   }
 }
 
 /**
- * Reduce size of a coordinate data by slicing to the range provided
- * @param coordinates
- * @param coordNameToUpdate
- * @param newRange
- * @param dependencyIndex optional: determined the shape index of the dependency
- * @param shouldApplyRangeOriginInCoord optional: determine if it's a new range to be applied to the data (begin to the range instead of 0)
- * @returns Return the sliced data
+ * The coordinates as the backend sent them: full payloads, with each cursor
+ * shifted back onto the full vector it indexes a window of.
+ *
+ * Resolving a typed range against these, rather than against what the grid is
+ * currently showing, is what makes a range absolute - and therefore what lets a
+ * wider range be typed over a narrower one without restoring first.
  */
-const trimCoordData = async (
+const baseCoordinates = (coordinates: Coordinates[]): Coordinates[] =>
+  coordinates.map((coord) => {
+    const key = coord.dataRef ? baseOf(coord.dataRef) : undefined;
+    const base = readPayload(key);
+    if (!base) return coord;
+    return {
+      ...coord,
+      data: base,
+      shape: payloadShape(key) ?? coord.shape,
+      valueIndex: coord.valueIndex + (coord.range?.[0] ?? 0),
+    };
+  });
+
+/** The untrimmed vector of one display axis. */
+const baseVector = (coordinates: Coordinates[], axeIndex: number) =>
+  getArrayValueFromDependance(baseCoordinates(coordinates), axeIndex);
+
+/**
+ * The windows that apply to one coordinate's own payload.
+ *
+ * A coordinate is windowed along its own axis by its own range, and along each
+ * axis it depends on by that dependency's range - the dependency ordering is
+ * reversed because dependencies are listed outermost-first and axes are not.
+ */
+const coordinateRanges = (
   coordinates: Coordinates[],
-  coordNameToUpdate: string,
-  newValueRange: [number, number] | [string, string],
-  newRange: [number, number],
-  oldRange: [number, number],
-  dependencyIndex?: number,
-  shouldApplyRangeOriginInCoord?: boolean,
-) => {
-  const updatedCoord = coordinates.find(
-    (coord) => coord.name === coordNameToUpdate,
-  );
-  const dataRangeMin = newRange[0];
-  const dataRangeMax = newRange[1];
+  coord: Coordinates,
+  rank: number,
+): Ranges => {
+  const ranges: Ranges = {};
+  const dependencies = [...(coord.coord_dependencies ?? [])].reverse();
+  dependencies.forEach((name, axis) => {
+    const dependency = coordinates.find((other) => other.name === name);
+    if (dependency?.range && axis < rank) ranges[axis] = dependency.range;
+  });
+  if (coord.range) ranges[rank - 1] = coord.range;
+  return ranges;
+};
 
-  const dataTensorized = await getTensorizedMatrix(updatedCoord.data);
+/**
+ * The windows that apply to a trace's payload, in the axes of the **base**.
+ *
+ * Coordinates are ordered by the axis they are displayed on, which after a
+ * transposition is no longer the axis they occupy in the fetched array, so each
+ * one is carried back through the permutation the payload's key records.
+ */
+const plotRanges = (
+  coordinates: Coordinates[],
+  permutation: number[] | null,
+  rank: number,
+): Ranges => {
+  const ranges: Ranges = {};
+  [...coordinates]
+    .sort(compareByAxeIndex)
+    .reverse()
+    .forEach((coord, displayedAxis) => {
+      if (!coord.range || displayedAxis >= rank) return;
+      const axis = permutation ? permutation[displayedAxis] : displayedAxis;
+      ranges[axis] = coord.range;
+    });
+  return ranges;
+};
 
-  // Get new shape to apply
-  const shapeIndex = dependencyIndex ?? dataTensorized.shape.length - 1;
-  const minRangeOrigin = oldRange ? oldRange[0] : 0;
-  const originShape = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex
-      ? shouldApplyRangeOriginInCoord
-        ? minRangeOrigin
-        : dataRangeMin - minRangeOrigin
-      : 0,
-  );
-  const shapeSize = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
-  );
+/**
+ * Re-cut every array of `grid` from its base at the ranges its coordinates
+ * carry, and rebuild the vectors that are drawn from the result.
+ *
+ * Idempotent, because the ranges are absolute. That is the whole reason there is
+ * one function here rather than an `applyRangeInCoord` and an
+ * `applyRangeInPlot` threading a previous range and a list of traces that have
+ * not been narrowed yet: running this after a trace arrives full, after one
+ * arrives already narrowed, or twice in a row, all give the same grid.
+ */
+export const applyRangesToGrid = async (
+  grid: DataGridPlot,
+): Promise<DataGridPlot> => {
+  const next = cloneGridStructure(grid);
+  const coordinates = next.coordinates ?? [];
 
-  const trimmed = tf.slice(dataTensorized, originShape, shapeSize);
+  for (const coord of coordinates) {
+    const rank = await baseRank(coord.dataRef, coord.data);
+    const derived = await sliceFromBase(
+      coord.dataRef,
+      coord.data,
+      coordinateRanges(coordinates, coord, rank),
+    );
+    coord.data = derived.value;
+    coord.dataRef = derived.ref;
+    if (derived.shape) coord.shape = derived.shape;
+  }
 
-  if (dependencyIndex === undefined) {
-    // Update the new range when updating the main coordinate
-    updatedCoord.range = newRange;
-    if (typeof newValueRange[0] === 'string') {
-      // Set first and last value from sliced data in rangeValues
-      const axisData = (await trimmed.array()) as AxisData;
-      const firstArrayValue = getFirstArrayValueFromShape(
-        axisData,
-        trimmed.shape,
-      ) as unknown as string[];
-      updatedCoord.rangeValues = [
-        firstArrayValue[0],
-        firstArrayValue[firstArrayValue.length - 1],
-      ];
-    } else {
-      // Set typed number in value range
-      updatedCoord.rangeValues = newValueRange;
+  for (const plot of next.plot ?? []) {
+    const rank = await baseRank(plot.yDataRef, plot.yData);
+    const derived = await sliceFromBase(
+      plot.yDataRef,
+      plot.yData,
+      plotRanges(coordinates, transposeOf(plot.yDataRef), rank),
+    );
+    plot.yData = derived.value;
+    plot.yDataRef = derived.ref;
+    if (derived.shape) plot.shape = derived.shape;
+
+    for (const error_band of plot.error_bands ?? []) {
+      if (
+        error_band.array?.length === 0 &&
+        (error_band.path.endsWith('_error_upper') ||
+          error_band.path.endsWith('_error_lower'))
+      ) {
+        // A band the backend has nothing for: there is no payload to window.
+        continue;
+      }
+      const bandRank = await baseRank(error_band.yDataRef, error_band.yData);
+      const derivedBand = await sliceFromBase(
+        error_band.yDataRef,
+        error_band.yData,
+        plotRanges(coordinates, transposeOf(error_band.yDataRef), bandRank),
+        false,
+      );
+      error_band.yData = derivedBand.value;
+      error_band.yDataRef = derivedBand.ref;
     }
   }
 
-  return trimmed;
+  clampCursors(coordinates);
+  return next;
 };
 
 /**
- * Trim a plot data
- * @param updatedPlot
- * @param coordinates
- * @param axeIndexToUpdate
- * @param newRange
- * @param oldRange
- * @returns
+ * Move the cursor of a coordinate, and of everything indexed by it, back to the
+ * start of the new window.
  */
-const trimPlotData = async (
-  updatedPlot: DataPlotly | ErrorBandData,
-  coordinates: Coordinates[],
-  axeIndexToUpdate: number,
-  newRange: [number, number],
-  oldRange?: [number, number],
-) => {
-  const dataRangeMin = newRange[0];
-  const dataRangeMax = newRange[1];
-
-  // Reshape matrix with NaN instead of null (to prevent from replacing them by 0)
-  const dataTensorized = await getTensorizedMatrix(updatedPlot.yData);
-
-  // Get new shape to apply
-  const reversedCoords = structuredClone(coordinates)
-    .sort(compareByAxeIndex)
-    .reverse() as Coordinates[];
-  const shapeIndex = reversedCoords.findIndex(
-    (coord) => coord.axeIndex === axeIndexToUpdate,
-  );
-  const minRangeOrigin = oldRange ? oldRange[0] : 0;
-  const originShape: number[] = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMin - minRangeOrigin : 0,
-  );
-  const shapeSize = dataTensorized.shape.map((el, index) =>
-    index === shapeIndex ? dataRangeMax + 1 - dataRangeMin : el,
-  );
-
-  return tf.slice(dataTensorized, originShape, shapeSize);
-};
-
-/**
- * Format trimmed coordinate by updating all concerned data (data, shape, downsampled_shape, valueIndex, target, path)
- * @param updatedCoord
- * @param trimmed
- * @param coordinateAffectingDependency
- * @param keepValueIndex
- */
-const formatTrimmedCoordinate = async (
-  updatedCoord: Coordinates,
-  trimmed: tf.Tensor<tf.Rank>,
-  coordinateAffectingDependency?: Coordinates,
-  keepValueIndex?: boolean,
-) => {
-  const depValues = (await trimmed.array()) as AxisData;
-  // Update data
-  updatedCoord.data = depValues;
-
-  // Update shapes
-  updatedCoord.shape = trimmed.shape;
-
-  if (!keepValueIndex) {
-    // Update valueIndex, target & path
-    updatedCoord.valueIndex = 0;
-    const lastTargetLastName = getLastIndexedField(
-      coordinateAffectingDependency?.target ?? updatedCoord.target,
-    );
-    const updatedPath = updateIndexFieldName(
-      updatedCoord.path,
-      lastTargetLastName,
-      0,
-    );
-    const updatedTarget = updateIndexFieldName(
-      updatedCoord.target,
-      lastTargetLastName,
-      0,
-    );
-    updatedCoord.path = updatedPath;
-    updatedCoord.target = updatedTarget;
+const resetCursor = (coordinates: Coordinates[], updatedCoord: Coordinates) => {
+  const lastTargetLastName = getLastIndexedField(updatedCoord.target);
+  for (const coord of coordinates) {
+    if (
+      coord.name !== updatedCoord.name &&
+      !(coord.coord_dependencies ?? []).includes(updatedCoord.name)
+    ) {
+      continue;
+    }
+    coord.valueIndex = 0;
+    coord.path = updateIndexFieldName(coord.path, lastTargetLastName, 0);
+    coord.target = updateIndexFieldName(coord.target, lastTargetLastName, 0);
   }
 };
 
-export const getRangeIndex = async (
+/**
+ * Turn a typed value range into indices of the untrimmed coordinate vector.
+ *
+ * The indices returned are absolute, so they mean the same thing whatever range
+ * is applied at the time - including none.
+ */
+export const getRangeIndex = (
   newValueRange: [number, number] | [string, string],
   updatedDataPlot: DataGridPlot,
   coordinate: Coordinates,
-  shouldApplyRangeOriginInCoord?: boolean,
-) => {
+): [number, number] => {
   const coordToUpdate = updatedDataPlot.coordinates.find(
     (coord) => coord.name === coordinate.name,
   );
-  const coordVector = getArrayValueFromDependance(
+  const coordVector = baseVector(
     updatedDataPlot.coordinates,
     coordToUpdate.axeIndex,
   );
-  let newRange: [number, number] = coordinate?.range || [
-    0,
-    coordVector.length - 1,
-  ];
+  let newRange: [number, number] = [0, coordVector.length - 1];
 
   const rangeMatched = [];
   if (typeof newValueRange[0] === 'number') {
@@ -2910,24 +2799,20 @@ export const getRangeIndex = async (
     const max = newValueRange[1] as number;
 
     for (let i = 0; i < coordVector.length; i++) {
+      // Matched against the value the plot draws, not the one the backend sent:
+      // everything on the render path has been through a tfjs tensor, which is
+      // single precision, and a bound typed as 0.6 has to pick the same point
+      // the axis labels 0.6.
+      const value = Math.fround(coordVector[i] as number);
+
       // Get min range
-      if (
-        rangeMatched.length === 0 &&
-        (coordVector[i] as number) >= min &&
-        (coordVector[i] as number) <= max
-      ) {
-        rangeMatched.push(shouldApplyRangeOriginInCoord ? i : newRange[0] + i);
+      if (rangeMatched.length === 0 && value >= min && value <= max) {
+        rangeMatched.push(i);
       }
 
       // Get max range
-      if (
-        rangeMatched.length === 1 &&
-        (coordVector[i] as number) > max &&
-        i !== 0
-      ) {
-        rangeMatched.push(
-          shouldApplyRangeOriginInCoord ? i - 1 : newRange[0] + i - 1,
-        );
+      if (rangeMatched.length === 1 && value > max && i !== 0) {
+        rangeMatched.push(i - 1);
         break;
       }
     }
@@ -2943,7 +2828,8 @@ export const getRangeIndex = async (
         newValueRange[0] !== '' && val.includes(newValueRange[0] as string),
     );
     // Get index of last occurence
-    let secondIndex = (structuredClone(coordVector) as string[])
+    let secondIndex = (coordVector as string[])
+      .map((value) => value)
       .reverse()
       .findIndex(
         (val) =>
@@ -2953,240 +2839,86 @@ export const getRangeIndex = async (
       secondIndex = coordVector.length - 1 - secondIndex;
     }
 
-    if (firstIndex !== -1) {
-      rangeMatched.push(
-        shouldApplyRangeOriginInCoord ? firstIndex : newRange[0] + firstIndex,
-      );
-    } else {
-      rangeMatched.push(shouldApplyRangeOriginInCoord ? 0 : newRange[0]);
-    }
-
-    if (secondIndex !== -1) {
-      rangeMatched.push(
-        shouldApplyRangeOriginInCoord ? secondIndex : newRange[0] + secondIndex,
-      );
-    } else {
-      rangeMatched.push(
-        shouldApplyRangeOriginInCoord
-          ? coordVector.length - 1
-          : newRange[0] + coordVector.length - 1,
-      );
-    }
-
-    if (rangeMatched.length === 2) {
-      newRange = rangeMatched as [number, number];
-    } else if (rangeMatched.length === 1) {
-      newRange[0] = rangeMatched[0];
-    }
+    rangeMatched.push(firstIndex !== -1 ? firstIndex : 0);
+    rangeMatched.push(
+      secondIndex !== -1 ? secondIndex : coordVector.length - 1,
+    );
+    newRange = rangeMatched as [number, number];
   }
   return newRange;
 };
 
+/** The typed range, rendered back as the values the panel shows. */
+const rangeValuesOf = (
+  coordinates: Coordinates[],
+  coord: Coordinates,
+  newRange: [number, number],
+  newValueRange: [number, number] | [string, string],
+): [number, number] | [string, string] => {
+  if (typeof newValueRange[0] !== 'string') {
+    return newValueRange as [number, number];
+  }
+  const vector = baseVector(coordinates, coord.axeIndex) as string[];
+  return [vector[newRange[0]], vector[newRange[1]]];
+};
+
+/**
+ * Window `coordinate` to the typed value range, and re-cut the grid to match.
+ *
+ * Pure: the grid handed in is not touched, and the one handed back shares every
+ * payload it did not have to change.
+ *
+ * @param keepCursor Leave the sliders where they are. Set when the range is not
+ *   new - loading a saved configuration, or fitting a trace that has just
+ *   arrived to the window the grid already has.
+ */
 export const applyRange = async (
   coordinate: Coordinates,
   newValueRange: [number, number] | [string, string],
   customizedDataGrid: DataGridPlot,
-  newPlotsUri?: string[],
-  keepValueIndex?: boolean,
-  shouldApplyRangeOriginInCoord?: boolean,
+  keepCursor?: boolean,
 ) => {
   try {
-    const updatedDataPlot = customizedDataGrid;
-    const coordinates = structuredClone(
-      updatedDataPlot.coordinates,
-    ) as Coordinates[];
-    const oldRange = coordinates.find(
-      (coord) => coord.axeIndex === coordinate.axeIndex,
-    )?.range;
-
-    // get newRange
-    const newRange = await getRangeIndex(
-      newValueRange,
-      updatedDataPlot,
-      coordinate,
-      shouldApplyRangeOriginInCoord,
+    const next = cloneGridStructure(customizedDataGrid);
+    const updatedCoord = next.coordinates.find(
+      (coord) => coord.name === coordinate.name,
     );
+    const newRange = getRangeIndex(newValueRange, next, coordinate);
 
-    // Trim coordinate
-    await applyRangeInCoord(
-      updatedDataPlot.coordinates,
-      coordinate.name,
-      newValueRange,
+    updatedCoord.range = newRange;
+    updatedCoord.rangeValues = rangeValuesOf(
+      next.coordinates,
+      updatedCoord,
       newRange,
-      oldRange,
-      keepValueIndex,
-      shouldApplyRangeOriginInCoord,
+      newValueRange,
     );
+    if (!keepCursor) resetCursor(next.coordinates, updatedCoord);
 
-    // Trim plots
-    await applyRangeInPlot(
-      updatedDataPlot.coordinates,
-      updatedDataPlot.plot,
-      coordinate.axeIndex,
-      newRange,
-      oldRange,
-      newPlotsUri,
-    );
-
-    return {
-      ...customizedDataGrid,
-      coordinates: [...updatedDataPlot.coordinates],
-      plot: [...updatedDataPlot.plot],
-    } as DataGridPlot;
+    return await applyRangesToGrid(next);
   } catch (error) {
     console.error('Error applying the range: ', error);
   }
 };
 
 /**
- * Update the coordinate to apply the range
- * @param updatedCoords
- * @param coordNameToUpdate
- * @param newValueRange
- * @param newRange
- * @param oldRange
- * @param keepValueIndex
- * @param shouldApplyRangeOriginInCoord
+ * Drop `coordinate`'s window and re-cut the grid to the full payload.
+ *
+ * Costs nothing: the full array is the base, and the sweep keeps a payload and
+ * its windows together, so it is still resident.
  */
-export async function applyRangeInCoord(
-  updatedCoords: Coordinates[],
-  coordNameToUpdate: string,
-  newValueRange: [number, number] | [string, string],
-  newRange: [number, number],
-  oldRange: [number, number],
-  keepValueIndex?: boolean,
-  shouldApplyRangeOriginInCoord?: boolean,
-) {
-  const updatedCoord = updatedCoords.find(
-    (coord) => coord.name === coordNameToUpdate,
+export const restoreRangeInGrid = async (
+  coordinate: Coordinates,
+  customizedDataGrid: DataGridPlot,
+) => {
+  const next = cloneGridStructure(customizedDataGrid);
+  const updatedCoord = next.coordinates.find(
+    (coord) => coord.name === coordinate.name,
   );
-  const coordinate = structuredClone(updatedCoord);
-
-  // Trim coordinate.data
-  const trimmed = await trimCoordData(
-    updatedCoords,
-    updatedCoord.name,
-    newValueRange,
-    newRange,
-    oldRange,
-    undefined,
-    shouldApplyRangeOriginInCoord,
-  );
-  // Format coordinate with trimmed data
-  await formatTrimmedCoordinate(
-    updatedCoord,
-    trimmed,
-    undefined,
-    keepValueIndex,
-  );
-
-  // Trim coordinates having dependencies
-  for (const coordDependencie of updatedCoords) {
-    if (coordDependencie.name === coordinate.name) {
-      // Don't check dependencies of updated coordinate
-      continue;
-    }
-
-    const dependencyIndex = (
-      structuredClone(coordDependencie.coord_dependencies) as string[]
-    )
-      .reverse() // We reverse dependencies to get dependency index in the order of the matrix
-      .findIndex((dep) => dep === coordinate.name);
-    if (dependencyIndex === -1) {
-      // No dependencies with updated coordinate
-      continue;
-    }
-
-    const trimmedDep = await trimCoordData(
-      updatedCoords,
-      coordDependencie.name,
-      newValueRange,
-      newRange,
-      oldRange,
-      dependencyIndex,
-      shouldApplyRangeOriginInCoord,
-    );
-    await formatTrimmedCoordinate(
-      coordDependencie,
-      trimmedDep,
-      updatedCoord,
-      keepValueIndex,
-    );
-  }
-}
-
-export async function applyRangeInPlot(
-  coordinates: Coordinates[],
-  updatedPlots: DataPlotly[],
-  axeIndexToUpdate: number,
-  newRange: [number, number],
-  oldRange?: [number, number],
-  newPlotsUri?: string[],
-) {
-  for (const updatedPlot of updatedPlots) {
-    // Update plot.x with trimmed coordinates
-    const newX = getArrayValueFromDependance(coordinates, 0);
-    updatedPlot.x = newX;
-
-    let rangeAlreadyAppliedInPlot = true;
-    if (newPlotsUri && newPlotsUri.includes(updatedPlot.nodeUri)) {
-      // Boolean used for determined if range has already been applied in this plot
-      rangeAlreadyAppliedInPlot = false;
-    }
-
-    // Trim plot.yData
-    const trimmed = await trimPlotData(
-      updatedPlot,
-      structuredClone(coordinates),
-      axeIndexToUpdate,
-      newRange,
-      rangeAlreadyAppliedInPlot === true ? oldRange : null,
-    );
-    const newYData = (await trimmed.array()) as AxisData;
-    updatedPlot.yData = newYData;
-    updatedPlot.shape = trimmed.shape;
-
-    // Update plot.y with trimmed plot.yData
-    const newY = getVectorData(coordinates, updatedPlot.yData);
-    updatedPlot.y = newY;
-
-    // Trim error bands if existing
-    if (updatedPlot?.error_bands) {
-      for (const error_band of updatedPlot.error_bands) {
-        if (
-          (error_band.path.endsWith('_error_upper') &&
-            error_band.array.length === 0) ||
-          (error_band.path.endsWith('_error_lower') &&
-            error_band.array.length === 0)
-        ) {
-          continue;
-        }
-        const upperOrLower = error_band.path.endsWith('_error_upper')
-          ? '_error_upper'
-          : '_error_lower';
-        if (
-          newPlotsUri &&
-          newPlotsUri.includes(updatedPlot.nodeUri + upperOrLower)
-        ) {
-          // Check if error band has already been applied
-          rangeAlreadyAppliedInPlot = false;
-        }
-
-        const trimmed = await trimPlotData(
-          error_band,
-          structuredClone(coordinates),
-          axeIndexToUpdate,
-          newRange,
-          rangeAlreadyAppliedInPlot === true ? oldRange : null,
-        );
-        const newYData = (await trimmed.array()) as AxisData;
-        error_band.yData = newYData;
-      }
-      const swapped_error_bands = getErrorYVectors(updatedPlot, coordinates);
-      updatedPlot.error_bands = swapped_error_bands;
-    }
-  }
-}
+  delete updatedCoord.range;
+  delete updatedCoord.rangeValues;
+  resetCursor(next.coordinates, updatedCoord);
+  return applyRangesToGrid(next);
+};
 
 export function formatGeometriesToSave(
   geometries: Geometry[],
