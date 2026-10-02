@@ -313,12 +313,14 @@ const updateInterpolatedPlots = async (
     plot.yData = plotInterpolated.data.value;
     plot.yDataRef = plotInterpolated.data.valueRef;
     plot.shape = plotInterpolated.data.downsampled_shape;
+  }
 
-    if (isInDeleteCase) {
-      // Fit the refetched trace to the windows the grid already has. The ranges
-      // are absolute, so this does not need to know which traces were narrowed.
-      interpolatedDataPlot = await applyRangesToGrid(interpolatedDataPlot);
-    }
+  if (isInDeleteCase) {
+    // Fit the refetched traces to the windows the grid already has. The ranges
+    // are absolute, so this does not need to know which traces were narrowed.
+    // Once, after the loop: `applyRangesToGrid` returns a copy, so calling it
+    // inside would leave the loop writing into traces no longer in the grid.
+    interpolatedDataPlot = await applyRangesToGrid(interpolatedDataPlot);
   }
   return interpolatedDataPlot;
 };
@@ -659,8 +661,14 @@ export const handleExistingPlot = async (
       await fetchErrorBandsInConfig(updatedActive, defaultUri, findDataPlot.i);
     }
 
-    // Fit the trace and its error bands to the windows the grid already has
-    updatedPlot = await applyRangesToGrid(updatedPlot);
+    // Fit the trace and its error bands to the windows the grid already has.
+    // `applyRangesToGrid` returns a copy: put that copy in the configuration.
+    if (updatedPlot) {
+      const windowed = await applyRangesToGrid(updatedPlot);
+      updatedActive.dataPlot = updatedActive.dataPlot.map((dataPlot) =>
+        dataPlot.i === windowed.i ? windowed : dataPlot,
+      );
+    }
   }
 
   return updatedActive;
