@@ -31,7 +31,6 @@ export const Visualization = () => {
           >
             <Paper shadow="md" h={HEIGHT} radius="md" pt="sm">
               <VisualizationTree
-                height={HEIGHT}
                 extended={opened}
                 handleExtended={toggle}
                 data-testid="visualization-tree"

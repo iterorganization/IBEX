@@ -19,6 +19,8 @@ import {
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
+  openTreeFolder,
+  openUriAccordion,
 } from '../utils';
 import {
   assertPerfInstalled,
@@ -105,22 +107,10 @@ describe('Reactivity benchmark', function () {
     await waitForElementToDisappear(uriModal, 60000);
 
     await ensureCssElementIsDisplayed(`uriAccordion-${dataPath}`, 600, 100);
-    await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#${EQUILIBRIUM}/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#${TIME_SLICE}/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#${PROFILES_2D}/`,
-      200,
-      100,
-    );
+    await openUriAccordion(dataPath);
+    await openTreeFolder(`folder-${dataPath}#${EQUILIBRIUM}/`);
+    await openTreeFolder(`folder-${dataPath}#${TIME_SLICE}/`);
+    await openTreeFolder(`folder-${dataPath}#${PROFILES_2D}/`);
 
     // Grid 1: the 2-D psi heatmap, with a usable time slider.
     await findCssElementAndClickIt(`checkbox-${dataPath}#${PROFILES_2D}/psi`);
@@ -136,16 +126,8 @@ describe('Reactivity benchmark', function () {
     await leaveEditMode(0);
 
     // Grid 2: two 1-D traces over time.
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#disruption:0/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#${GLOBAL_QUANTITIES}/`,
-      200,
-      100,
-    );
+    await openTreeFolder(`folder-${dataPath}#disruption:0/`);
+    await openTreeFolder(`folder-${dataPath}#${GLOBAL_QUANTITIES}/`);
     await addTrace(dataPath, `${GLOBAL_QUANTITIES}/power_ohm`, 1, 2);
     lineGridId = (await getTestState()).active.dataPlot[1].i;
     await addTrace(dataPath, `${GLOBAL_QUANTITIES}/power_ohm_halo`, 2, 2);

@@ -108,6 +108,7 @@ export const projectTestState = (state: TestState): TestState => ({
   editingGridId: state.editingGridId ?? null,
   metadataGridId: state.metadataGridId ?? null,
   customizing: state.customizing ?? null,
+  treeView: state.treeView ?? {},
 });
 
 /**

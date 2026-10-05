@@ -1,6 +1,8 @@
 import {
   Checkbox,
+  getTreeExpandedState,
   Group,
+  Loader,
   RenderTreeNodePayload,
   ScrollArea,
   Text,
@@ -9,7 +11,7 @@ import {
   UseTreeReturnType,
   useTree,
 } from '@mantine/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconMathFunction,
   IconFileUnknown,
@@ -22,7 +24,6 @@ import {
 import classes from './TreeLibrary.module.css';
 import {
   CustomTreeNodeData,
-  DataGridPlot,
   NodeInfoTypeEnum,
   URITreeNodeData,
 } from '../../types';
@@ -33,6 +34,7 @@ interface NodeIconProps {
   type: NodeInfoTypeEnum;
   uriLabel: string;
   expanded: boolean;
+  loading: boolean;
   checkedNodes: URITreeNodeData[];
   tree: UseTreeReturnType;
   shouldDisableTree: boolean;
@@ -43,29 +45,32 @@ interface NodeIconProps {
 
 interface TreeLibraryProps {
   treeData: CustomTreeNodeData[];
-  editedDataPlot?: DataGridPlot;
+  /** The data entry this tree browses. */
+  uri: string;
+  /**
+   * `browse` keeps its expanded nodes in the store, so they outlive this
+   * component; `search` shows a search's results, all expanded, and forgets
+   * them with the search.
+   */
+  mode: 'browse' | 'search';
   height?: string;
   checkedNodes?: URITreeNodeData[];
-  expendAll?: boolean;
   metadataGridLayout?: string;
   customizedGridLayout?: string;
-  previousEditedIdRef?: React.MutableRefObject<string>;
-  handleSelectChildren: (nodeUri: string) => Promise<void>;
+  /** Loads the children of a node; resolves whether it has any. */
+  handleSelectChildren: (nodeUri: string) => Promise<boolean>;
   getCheckedNodes?: (nodes: URITreeNodeData[]) => void;
-  getCurrentSelectedURI: () => string;
-  handleAccordionChange(value: string): Promise<void>;
 }
 
 interface ElementProps extends RenderTreeNodePayload {
   node: CustomTreeNodeData;
   type: NodeInfoTypeEnum;
   uriLabel: string;
-  selectedNode: string | null;
   checkedNodes?: URITreeNodeData[];
   tree: UseTreeReturnType;
   shouldDisableTree: boolean;
-  setSelectedNode: (node: string | null) => void;
-  handleSelectChildren: (nodeUri: string) => Promise<void>;
+  setExpanded: (nodeValue: string, expanded: boolean) => void;
+  handleSelectChildren: (nodeUri: string) => Promise<boolean>;
   getCheckedNodes: (nodes: URITreeNodeData[]) => void;
 }
 
@@ -74,40 +79,23 @@ function Element({
   expanded,
   elementProps,
   type,
-  selectedNode,
   checkedNodes,
   tree,
   shouldDisableTree,
   uriLabel,
-  setSelectedNode,
+  setExpanded,
   handleSelectChildren,
   getCheckedNodes,
 }: ElementProps) {
   const textRef = useRef<HTMLDivElement>(null);
   const [isTextOverflowing, setIsTextOverflowing] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const fetchData = async () => {
-    if (
-      type === NodeInfoTypeEnum.STRUCTURE ||
-      type === NodeInfoTypeEnum.ARRAY
-    ) {
-      await handleSelectChildren(node.value);
-    }
-  };
-
-  useEffect(() => {
-    if (expanded) {
-      setSelectedNode(node.value);
-    } else if (!expanded) {
-      setSelectedNode(null);
-    }
-  }, [expanded]);
-
-  useEffect(() => {
-    if (selectedNode == node.value && expanded) {
-      fetchData();
-    }
-  }, [selectedNode]);
+  const isFolder =
+    type === NodeInfoTypeEnum.STRUCTURE || type === NodeInfoTypeEnum.ARRAY;
+  // A node only counts as open when its subtree is on screen: one marked
+  // expanded over children that are not loaded (yet, or any more) is closed.
+  const isOpen = expanded && node.children?.length > 0;
 
   useEffect(() => {
     const el = textRef.current;
@@ -126,12 +114,28 @@ function Element({
     return () => resizeObserver.disconnect();
   }, [node.label]);
 
-  const handleExpandTree = () => {
-    if (!expanded) {
-      tree.expand(node.value);
-    } else {
-      tree.collapse(node.value);
+  /**
+   * Opens a folder once its children are there, or closes it.
+   *
+   * Expanding first and loading from an effect on `expanded` left the folder
+   * open over nothing whenever the load was slow, failed or came back empty.
+   */
+  const handleExpandTree = async () => {
+    if (!isFolder || loading) return;
+    if (isOpen) {
+      setExpanded(node.value, false);
+      return;
     }
+    let hasChildren = node.children?.length > 0;
+    if (!hasChildren) {
+      setLoading(true);
+      try {
+        hasChildren = await handleSelectChildren(node.value);
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (hasChildren) setExpanded(node.value, true);
   };
 
   return (
@@ -139,7 +143,8 @@ function Element({
       <NodeIcon
         type={type}
         uriLabel={uriLabel}
-        expanded={expanded}
+        expanded={isOpen}
+        loading={loading}
         node={node}
         checkedNodes={checkedNodes}
         tree={tree}
@@ -156,6 +161,7 @@ function NodeIcon({
   node,
   type,
   expanded,
+  loading,
   checkedNodes,
   tree,
   shouldDisableTree,
@@ -244,8 +250,15 @@ function NodeIcon({
     );
 
     const getFolderIcon = () => (
-      <Group gap={2} wrap="nowrap" data-testid={`folder-${node.value}`}>
-        {expanded ? (
+      <Group
+        gap={2}
+        wrap="nowrap"
+        data-testid={`folder-${node.value}`}
+        data-open={expanded}
+      >
+        {loading ? (
+          <Loader size={14} className={classes.forcedWidth} />
+        ) : expanded ? (
           <IconFolderOpen {...commonProps} className={classes.forcedWidth} />
         ) : (
           <IconFolder {...commonProps} className={classes.forcedWidth} />
@@ -337,46 +350,29 @@ function NodeIcon({
   );
 }
 
+const NO_EXPANDED_NODES: string[] = [];
+
 export const TreeLibrary = ({
   treeData,
-  editedDataPlot,
+  uri,
+  mode,
   height,
   checkedNodes,
-  expendAll,
   metadataGridLayout,
   customizedGridLayout,
-  previousEditedIdRef,
   handleSelectChildren,
   getCheckedNodes,
-  getCurrentSelectedURI,
-  handleAccordionChange,
 }: TreeLibraryProps) => {
   const tree = useTree();
-  const [selectedNode, setSelectedNode] = useState<string>(null);
   const [shouldDisableTree, setShouldDisableTree] = useState<boolean>(false);
-
-  const expandNodesWithFiles = (nodes: CustomTreeNodeData[]) => {
-    const expandRecursively = (node: CustomTreeNodeData) => {
-      if (!node.children || node.children.length === 0) return; // No data on folder
-
-      // If the node has files, expand it
-      const hasFiles = node.children.length > 0;
-
-      if (hasFiles) {
-        tree.expand(node.value);
-      }
-
-      // Recursively expand children
-      node.children.forEach(expandRecursively);
-    };
-
-    nodes.forEach((node) => {
-      if (node.children.length > 0) {
-        tree.expand(node.value);
-      }
-      expandRecursively(node);
-    });
-  };
+  const configurationName = useIbexStore((state) => state.active?.name);
+  const expandedNodes =
+    useIbexStore(
+      (state) => state.treeView[state.active?.name]?.expanded[uri],
+    ) ?? NO_EXPANDED_NODES;
+  const setTreeNodeExpanded = useIbexStore(
+    (state) => state.setTreeNodeExpanded,
+  );
 
   const handleDisableTree = (
     metadataGridLayout?: string,
@@ -389,90 +385,34 @@ export const TreeLibrary = ({
     }
   };
 
+  const browsedExpandedState = useMemo(
+    () => Object.fromEntries(expandedNodes.map((value) => [value, true])),
+    [expandedNodes],
+  );
+
+  // The store is the source of truth in browse mode. `Tree` re-initializes its
+  // controller whenever the data changes, dropping the nodes not loaded yet, so
+  // this also runs on data changes (it runs after `Tree`'s own effect).
   useEffect(() => {
-    if (expendAll) {
-      expandNodesWithFiles(treeData);
-    } else {
-      tree.collapseAllNodes();
-      tree.clearSelected();
-    }
-  }, [expendAll]);
+    tree.setExpandedState(
+      mode === 'search'
+        ? getTreeExpandedState(treeData, '*')
+        : browsedExpandedState,
+    );
+  }, [mode, browsedExpandedState, treeData]);
 
-  useEffect(() => {
-    if (!editedDataPlot) {
-      previousEditedIdRef.current = null;
-      return;
-    }
-
-    const openSelectedNodes = async () => {
-      if (!editedDataPlot || editedDataPlot.plot.length === 0) return;
-
-      let selectedURI: string | undefined = undefined;
-
-      let mainPlotUri: string;
-      for (const [index, plot] of editedDataPlot.plot.entries()) {
-        const plotUriSplit = plot.nodeUri.split('#');
-        const plotUri = plotUriSplit[0];
-        const nodeList = plotUriSplit[1]
-          .replace(/\[\d+\]/g, '[:]')
-          .split(/(?<=\/)/);
-        nodeList.pop();
-
-        if (index === 0) {
-          mainPlotUri = plotUri;
-        } else if (plotUri !== mainPlotUri) {
-          continue;
-        }
-
-        if (!plotUri || plotUri === '') {
-          continue;
-        }
-
-        if (!nodeList || nodeList.length === 0) {
-          continue;
-        }
-
-        if (!selectedURI || selectedURI === getCurrentSelectedURI()) {
-          selectedURI = plotUri;
-
-          if (selectedURI !== getCurrentSelectedURI()) {
-            await handleAccordionChange(selectedURI);
-          }
-
-          let endPoint = selectedURI + '#';
-          const { active } = useIbexStore.getState();
-          let customTreeNodeData = active.customDataTree.find(
-            (customTreeData) => customTreeData.uri === selectedURI,
-          )?.data;
-          let nodeLoaded = true;
-          for (const node of nodeList) {
-            endPoint += node;
-            customTreeNodeData = customTreeNodeData?.find(
-              (customTreeData) => customTreeData.value === endPoint,
-            )?.children;
-            if (
-              !nodeLoaded ||
-              !customTreeNodeData ||
-              customTreeNodeData.length === 0
-            ) {
-              nodeLoaded = false;
-              await handleSelectChildren(endPoint);
-            }
-            setSelectedNode(endPoint);
-            tree.expand(endPoint);
-          }
-        }
+  const setExpanded = useCallback(
+    (nodeValue: string, expanded: boolean) => {
+      if (mode === 'search') {
+        if (expanded) tree.expand(nodeValue);
+        else tree.collapse(nodeValue);
+        return;
       }
-    };
-
-    if (
-      previousEditedIdRef.current === null &&
-      editedDataPlot?.i !== previousEditedIdRef.current
-    ) {
-      openSelectedNodes();
-      previousEditedIdRef.current = editedDataPlot.i;
-    }
-  }, [editedDataPlot?.i]);
+      if (!configurationName) return;
+      setTreeNodeExpanded(configurationName, uri, nodeValue, expanded);
+    },
+    [mode, tree, configurationName, uri, setTreeNodeExpanded],
+  );
 
   useEffect(() => {
     handleDisableTree(metadataGridLayout, customizedGridLayout);
@@ -492,11 +432,10 @@ export const TreeLibrary = ({
               node={payload.node as CustomTreeNodeData}
               type={(payload.node as CustomTreeNodeData).type}
               uriLabel={(payload.node as CustomTreeNodeData).uriLabel}
-              selectedNode={selectedNode}
               tree={tree}
               shouldDisableTree={shouldDisableTree}
               checkedNodes={checkedNodes}
-              setSelectedNode={setSelectedNode}
+              setExpanded={setExpanded}
               handleSelectChildren={handleSelectChildren}
               getCheckedNodes={getCheckedNodes}
             />
