@@ -392,4 +392,57 @@ describe('UI Tests for the node tree', function () {
         .be.false;
     }
   });
+
+  it('Should leave the other traces as they are when a compared node goes', async () => {
+    const [scenario, disruption] = await setupConfiguration('Tree Compare');
+    const QUANTITIES = 'summary:0/global_quantities/';
+    const IP = `${QUANTITIES}ip/value`;
+    const BETA_POL = `${QUANTITIES}beta_pol/value`;
+
+    await ensureCssElementIsDisplayed(`uriAccordion-${scenario}`, 600, 100);
+    await openUriAccordion(scenario);
+    await openPath(scenario, ['summary:0/', QUANTITIES, `${QUANTITIES}ip/`]);
+    await ctrlClick(`checkbox-${scenario}#${IP}`);
+    await waitForValue(
+      'ip from both entries',
+      async () => (await getTestState()).active.dataPlot[0]?.plot.length,
+      2,
+    );
+
+    // What is drawn of each ip: one time base for the grid, the union of the
+    // two entries' (1 and 3 times).
+    type Trace = { nodeUri: string; x: number[]; y: number[] };
+    const drawnIp = async () =>
+      JSON.stringify(
+        ((await getTestState()).active.dataPlot[0].plot as Trace[])
+          .filter((trace) => trace.nodeUri.endsWith('ip/value'))
+          .map((trace) => [trace.nodeUri, trace.x, trace.y]),
+      );
+    const ipAlone = await drawnIp();
+    expect(JSON.parse(ipAlone)[0][1]).to.have.length(4);
+
+    // beta_pol has the same time bases: ip does not move when it joins...
+    await openTreeFolder(`folder-${scenario}#${QUANTITIES}beta_pol/`);
+    await ctrlClick(`checkbox-${scenario}#${BETA_POL}`);
+    await waitForValue(
+      'beta_pol from both entries',
+      async () => (await getTestState()).active.dataPlot[0]?.plot.length,
+      4,
+    );
+    expect(await drawnIp()).to.equal(ipAlone);
+
+    // ...nor when it leaves. Each removal used to put the grid on the times of
+    // the beta_pol left, and ip was drawn against them.
+    await ctrlClick(`checkbox-${scenario}#${BETA_POL}`);
+    await waitForValue(
+      'beta_pol removed from both entries',
+      async () => (await getTestState()).active.dataPlot[0]?.plot.length,
+      2,
+    );
+    expect(await drawnIp()).to.equal(ipAlone);
+    for (const dataPath of [scenario, disruption]) {
+      expect(await isLeafChecked(`checkbox-${dataPath}#${IP}`), dataPath).to.be
+        .true;
+    }
+  });
 });
