@@ -12,6 +12,11 @@
  */
 
 import { clearRequestCache, getRequestCacheStats } from './requestCache';
+import {
+  clearPayloads,
+  payloadStats,
+  setFreezePayloads,
+} from '../stores/payloadRegistry';
 
 /** Request-cache counters, mirrored from requestCache.ts. */
 export interface PerfCacheStats {
@@ -35,6 +40,8 @@ export interface PerfSnapshot {
   redraws: Record<string, number>;
   /** Cumulative request-cache counters (not reset between measurements). */
   cache: PerfCacheStats;
+  /** Cumulative payload-registry counters (not reset between measurements). */
+  payloads: ReturnType<typeof payloadStats>;
 }
 
 interface PerfApi {
@@ -80,12 +87,22 @@ export const installPerfCounters = (): void => {
         renders: { ...counters.renders },
         redraws: { ...counters.redraws },
         cache: getRequestCacheStats(),
+        payloads: payloadStats(),
       };
     },
-    clearRequestCache,
+    // Clears both caches: a spec that warms one and not the other exercises a
+    // different path than it looks like it does.
+    clearRequestCache: () => {
+      clearRequestCache();
+      clearPayloads();
+    },
   };
 
   window.__ibexPerf = api;
+
+  // The suites are what can tell whether anything still writes into a
+  // payload the cache shares, so they run with payloads frozen.
+  setFreezePayloads(true);
 
   // Every renderer -> backend call goes through fetchFromApi, which uses the
   // global fetch, so this is the single accounting point for backend traffic.

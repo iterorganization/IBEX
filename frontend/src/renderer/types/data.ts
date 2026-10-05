@@ -5,6 +5,8 @@ export type PlotCoordinatesResponse = {
   target: string;
   unit: string;
   value: AxisData;
+  /** Registry key for `value`, stamped by `fetchDataPlot`. */
+  valueRef?: string;
   downsampled_shape: number[];
   shape: number[] | 'irregular';
   coordinates: string[];
@@ -18,6 +20,8 @@ export type PlotDataResponse = {
     name: string;
     unit: string;
     value: AxisData;
+    /** Registry key for `value`, stamped by `fetchDataPlot`. */
+    valueRef?: string;
     downsampled_shape: number[];
     downsampled_method: string;
     interpolated_method: string;
@@ -31,6 +35,8 @@ export type PlotDataResponse = {
 
 export type FieldValueResponse = {
   value: AxisData;
+  /** Registry key for `value`, stamped by `fetchFieldValue`. */
+  valueRef?: string;
 };
 
 export type DownsamplingMethodsResponse = {

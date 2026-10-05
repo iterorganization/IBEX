@@ -2,14 +2,17 @@ import { useEffect, useMemo } from 'react';
 import { AxisType, Layout } from 'plotly.js';
 import { Configuration, DataGridPlot } from 'src/renderer/types';
 import { useIbexStore } from '../../../stores';
+import { axisVector } from '../../../derive/vectors';
 
 interface UsePlotLayoutParams {
   itemDataGrid: DataGridPlot;
 }
 
 /** Type of the values actually plotted on x, which decides a category axis. */
-const typeOfXData = (itemDataGrid: DataGridPlot): string | undefined =>
-  itemDataGrid.plot[0]?.x ? typeof itemDataGrid.plot[0].x[0] : undefined;
+const typeOfXData = (itemDataGrid: DataGridPlot): string | undefined => {
+  const x = axisVector(itemDataGrid.coordinates, 0);
+  return x ? typeof x[0] : undefined;
+};
 
 /**
  * Axis type for x: string data forces a category axis, and an axis left on

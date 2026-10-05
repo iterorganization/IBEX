@@ -3,13 +3,12 @@ import { DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
   fetchErrorBands,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
-  getVectorData,
   normalizeIndices,
   getInterpolationMethods,
   getUrisToInterpolate,
   reapplyAxisOrder,
+  cloneGridStructure,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Group, Loader, Select, Stack } from '@mantine/core';
@@ -44,9 +43,7 @@ export const CustomizeInterpolation = ({
     currentRequest.current = requestId;
     try {
       open();
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
@@ -87,6 +84,8 @@ export const CustomizeInterpolation = ({
             // Apply new data
             coordinate.data =
               dataPlotInterpolated.data.coordinates[coordinateIndex].value;
+            coordinate.dataRef =
+              dataPlotInterpolated.data.coordinates[coordinateIndex].valueRef;
             coordinateIndex++;
             // Apply new range
             coordinate.range = [
@@ -111,15 +110,8 @@ export const CustomizeInterpolation = ({
 
         // Update plot with interpolated data
         plot.shape = dataPlotInterpolated.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotInterpolated.data.value;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
+        plot.yDataRef = dataPlotInterpolated.data.valueRef;
 
         plotIndex++;
       }

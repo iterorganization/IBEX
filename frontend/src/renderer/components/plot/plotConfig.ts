@@ -35,8 +35,9 @@ const STATIC_CONFIG: Partial<Config> = {
 };
 
 /**
- * @param isGridStatic `itemDataGrid.static` — note the plots invert it, a
- *   "static" grid is the interactive one.
+ * @param isEditing whether this grid is the one being edited. The grid used to
+ *   carry a `static` field that was always set to the same value, and the
+ *   plots inverted it: the "static" grid was the interactive one.
  */
-export const getPlotConfig = (isGridStatic: boolean): Partial<Config> =>
-  isGridStatic ? INTERACTIVE_CONFIG : STATIC_CONFIG;
+export const getPlotConfig = (isEditing: boolean): Partial<Config> =>
+  isEditing ? INTERACTIVE_CONFIG : STATIC_CONFIG;

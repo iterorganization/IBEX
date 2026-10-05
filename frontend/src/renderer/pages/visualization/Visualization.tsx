@@ -7,7 +7,9 @@ import { DataplotCustomization } from './DataplotCustomization';
 import { useDisclosure } from '@mantine/hooks';
 
 export const Visualization = () => {
-  const { active, configurations } = useIbexStore();
+  const { configurations } = useIbexStore();
+  const metadataGridId = useIbexStore((state) => state.metadataGridId);
+  const customizing = useIbexStore((state) => state.customizing);
   const [opened, { toggle }] = useDisclosure(true);
 
   const HEIGHT = '88.5vh';
@@ -45,9 +47,9 @@ export const Visualization = () => {
             data-testid="visualization-right-panel"
           >
             <Paper shadow="md" h={HEIGHT} radius="md">
-              {active?.metadataGridLayout ? (
+              {metadataGridId ? (
                 <VisualizationMetaData data-testid="visualization-metadata" />
-              ) : active?.customizedGridLayout ? (
+              ) : customizing ? (
                 <DataplotCustomization />
               ) : (
                 <VisualizationPlot

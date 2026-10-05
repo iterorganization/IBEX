@@ -263,17 +263,15 @@ export async function openCustomization(
   const accordionSelector = By.css(`[data-testid="${accordionTestId}"]`);
   const applyButtonSelector = By.css(`[data-testid="${sectionContentTestId}"]`);
 
-  const isPanelOpen = async () =>
-    Boolean((await getTestState()).active?.customizedGridLayout);
+  const isPanelOpen = async () => Boolean((await getTestState()).customizing);
 
   /** Closes the panel through the store, to mount it again from scratch. */
   const closePanel = async () => {
     const state = await getTestState();
     if (state.active) {
-      await setTestState({
-        configurations: state.configurations,
-        active: { ...state.active, customizedGridLayout: null },
-      });
+      // Which panel is open is UI state, so this writes one field instead of
+      // round-tripping the whole configuration.
+      await setTestState({ customizing: null });
       // The renderer applies the message after `setTestState` has resolved
       await waitForValue(
         'Customization panel closed through the store',
@@ -394,7 +392,7 @@ export async function saveCustomization() {
   await findCssElementAndClickIt('customization-save-button', 200, 100);
   await waitForValue(
     'Customization panel closed',
-    async () => (await getTestState()).active.customizedGridLayout,
+    async () => (await getTestState()).customizing,
     null,
     (actual, expected) => actual == expected,
     100,

@@ -16,25 +16,21 @@ export const CustomizeHeatmap = ({
   setApplyToAllHeatmap,
 }: CustomizeHeatmapProps) => {
   const updateColorscale = (value: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    if (applyToAllHeatmap) {
-      for (const plot of updatedDataPlot.plot) {
-        const updatedCustomPref = plot?.customPreferences || {};
-        updatedCustomPref.colorscale = value;
-        plot.customPreferences = updatedCustomPref;
-      }
-    } else {
-      const updatedCustomPref = selectedPlot?.customPreferences || {};
-      updatedCustomPref.colorscale = value;
-      updatedDataPlot.plot.find(
-        (plot) => plot.name === selectedPlot.name,
-      ).customPreferences = updatedCustomPref;
-    }
-
+    // New trace objects for the traces that change, and nothing deeper: the
+    // payloads stay shared rather than deep-copied on every colourscale pick.
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: customizedDataGrid.plot.map((plot) =>
+        applyToAllHeatmap || plot.name === selectedPlot.name
+          ? {
+              ...plot,
+              customPreferences: {
+                ...plot.customPreferences,
+                colorscale: value,
+              },
+            }
+          : plot,
+      ),
     });
   };
 

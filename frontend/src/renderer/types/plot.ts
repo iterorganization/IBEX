@@ -34,6 +34,8 @@ export interface Coordinates extends BaseCoordinates {
   shape: number[] | 'irregular';
   coord_dependencies: string[];
   data: AxisData;
+  /** Registry key for `data`. See `stores/payloadRegistry.ts`. */
+  dataRef?: string;
   unit?: string;
 }
 
@@ -105,9 +107,17 @@ type GeometryLine = {
 
 export type DataPlotly = BaseDataPlotly &
   Data & {
-    x: (string | number)[];
-    y: (string | number)[];
+    /**
+     * The drawn vectors. Derived from `yData` and the grid's cursor, never
+     * stored: see `derive/vectors.ts`. They are declared here because the
+     * render path and the e2e projection both build trace objects that carry
+     * them - a grid in the store does not.
+     */
+    x?: (string | number)[];
+    y?: (string | number)[];
     yData: AxisData;
+    /** Registry key for `yData`. See `stores/payloadRegistry.ts`. */
+    yDataRef?: string;
     unit: string;
     error_bands?: ErrorBandData[];
     path?: string;
@@ -119,12 +129,15 @@ export type DataPlotly = BaseDataPlotly &
     connectgaps?: boolean;
   };
 
-type Datum = string | number | Date;
+export type Datum = string | number | Date;
 
 export type ErrorBandData = {
   path: string;
   yData: AxisData;
-  array: Datum[];
+  /** Registry key for `yData`. See `stores/payloadRegistry.ts`. */
+  yDataRef?: string;
+  /** Derived, like `DataPlotly.y`. Not stored. */
+  array?: Datum[];
 };
 
 export type CustomPreferences = {
@@ -158,7 +171,6 @@ export interface BaseDataGridPlot {
 
 export interface DataGridPlot extends Layout, BaseDataGridPlot {
   plot: DataPlotly[];
-  isEditing: boolean;
   dataType?: NodeInfoTypeEnum;
   coordinates?: Coordinates[];
   downsampled_method?: string;
