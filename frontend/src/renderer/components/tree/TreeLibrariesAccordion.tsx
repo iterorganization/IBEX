@@ -25,6 +25,7 @@ interface VisualizationTreeProps {
   handleAccordionChange(value: string[]): void;
   handleSelectChildren: (nodeUri: string) => Promise<boolean>;
   getNodesChecked: (nodes: URITreeNodeData[]) => void;
+  handleCheckInAllUris: (nodeValue: string, check: boolean) => void;
 }
 
 interface AccordionLabelProps {
@@ -66,6 +67,7 @@ export const TreeLibrariesAccordion = ({
   handleAccordionChange,
   handleSelectChildren,
   getNodesChecked,
+  handleCheckInAllUris,
 }: VisualizationTreeProps) => {
   // Both are plain ids in the ui slice, so the selectors are already stable and
   // the JSON.stringify memos they used to need are gone.
@@ -103,6 +105,7 @@ export const TreeLibrariesAccordion = ({
               customizedGridLayout={customizingGridId}
               handleSelectChildren={handleSelectChildren}
               getCheckedNodes={getNodesChecked}
+              handleCheckInAllUris={handleCheckInAllUris}
             />
           )}
         </Accordion.Panel>

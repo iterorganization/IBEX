@@ -41,6 +41,7 @@ interface NodeIconProps {
   textRef: React.RefObject<HTMLDivElement>;
   isOverflowing: boolean;
   getCheckedNodes: (nodes: URITreeNodeData[]) => void;
+  handleCheckInAllUris?: (nodeValue: string, check: boolean) => void;
 }
 
 interface TreeLibraryProps {
@@ -60,6 +61,11 @@ interface TreeLibraryProps {
   /** Loads the children of a node; resolves whether it has any. */
   handleSelectChildren: (nodeUri: string) => Promise<boolean>;
   getCheckedNodes?: (nodes: URITreeNodeData[]) => void;
+  /**
+   * Checks (`true`) or unchecks a node in every data entry that has it; what a
+   * Ctrl+click (⌘+click on macOS) on a leaf does.
+   */
+  handleCheckInAllUris?: (nodeValue: string, check: boolean) => void;
 }
 
 interface ElementProps extends RenderTreeNodePayload {
@@ -72,6 +78,7 @@ interface ElementProps extends RenderTreeNodePayload {
   setExpanded: (nodeValue: string, expanded: boolean) => void;
   handleSelectChildren: (nodeUri: string) => Promise<boolean>;
   getCheckedNodes: (nodes: URITreeNodeData[]) => void;
+  handleCheckInAllUris?: (nodeValue: string, check: boolean) => void;
 }
 
 function Element({
@@ -86,6 +93,7 @@ function Element({
   setExpanded,
   handleSelectChildren,
   getCheckedNodes,
+  handleCheckInAllUris,
 }: ElementProps) {
   const textRef = useRef<HTMLDivElement>(null);
   const [isTextOverflowing, setIsTextOverflowing] = useState(false);
@@ -152,6 +160,7 @@ function Element({
         textRef={textRef}
         isOverflowing={isTextOverflowing}
         getCheckedNodes={getCheckedNodes}
+        handleCheckInAllUris={handleCheckInAllUris}
       />
     </Group>
   );
@@ -169,6 +178,7 @@ function NodeIcon({
   textRef,
   uriLabel,
   getCheckedNodes,
+  handleCheckInAllUris,
 }: NodeIconProps) {
   const [checked, setChecked] = useState<boolean>(false);
 
@@ -185,61 +195,78 @@ function NodeIcon({
       color: 'var(--mantine-color-blue-8)',
     };
 
-    const handleCheckNode = useCallback(() => {
-      if (
-        shouldDisableTree ||
-        node.label.toString().endsWith('_error_lower') ||
-        node.label.toString().endsWith('_error_upper') ||
-        (node.is_geometry_node === true &&
-          checkedNodes.length &&
-          checkedNodes[0].is_geometry_node !== true &&
-          checkedNodes[0]?.type !== 'STR')
-      ) {
-        return;
-      }
-      if (
-        [
-          NodeInfoTypeEnum.INTEGER,
-          NodeInfoTypeEnum.FLOAT,
-          NodeInfoTypeEnum.STRING,
-          NodeInfoTypeEnum.COMPLEX,
-        ].includes(type)
-      ) {
-        if (checked) {
-          // Remove node & his error bands
-          const nodesToUncheck = checkedNodes.filter(
-            (checkedNode) =>
-              checkedNode.uri === node.value ||
-              checkedNode.uri === node.value + '_error_upper' ||
-              checkedNode.uri === node.value + '_error_lower',
-          );
-
-          // Uncheck node & his error bands
-          for (const nodeToUncheck of nodesToUncheck) {
-            tree.uncheckNode(nodeToUncheck.uri);
-          }
-
-          checkedNodes = checkedNodes.filter(
-            (uncheckedNode) =>
-              uncheckedNode.uri !== node.value &&
-              uncheckedNode.uri !== node.value + '_error_upper' &&
-              uncheckedNode.uri !== node.value + '_error_lower',
-          );
-        } else {
-          // Add node
-          tree.checkNode(node.value);
-          const newCheckedNode: URITreeNodeData = {
-            name: uriLabel,
-            uri: node.value,
-            type: node.type,
-            is_geometry_node: node.is_geometry_node,
-          };
-          checkedNodes.push(newCheckedNode);
+    const handleCheckNode = useCallback(
+      (event: React.MouseEvent) => {
+        if (
+          shouldDisableTree ||
+          node.label.toString().endsWith('_error_lower') ||
+          node.label.toString().endsWith('_error_upper') ||
+          (node.is_geometry_node === true &&
+            checkedNodes.length &&
+            checkedNodes[0].is_geometry_node !== true &&
+            checkedNodes[0]?.type !== 'STR')
+        ) {
+          return;
         }
-        setChecked(!checked);
-        getCheckedNodes(checkedNodes);
-      }
-    }, [checked, checkedNodes, getCheckedNodes, node.value, tree, type]);
+        if (
+          [
+            NodeInfoTypeEnum.INTEGER,
+            NodeInfoTypeEnum.FLOAT,
+            NodeInfoTypeEnum.STRING,
+            NodeInfoTypeEnum.COMPLEX,
+          ].includes(type)
+        ) {
+          // Ctrl on Windows and Linux, ⌘ on macOS, where Ctrl+click is a
+          // right click.
+          if ((event.ctrlKey || event.metaKey) && handleCheckInAllUris) {
+            handleCheckInAllUris(node.value, !checked);
+            return;
+          }
+          if (checked) {
+            // Remove node & his error bands
+            const nodesToUncheck = checkedNodes.filter(
+              (checkedNode) =>
+                checkedNode.uri === node.value ||
+                checkedNode.uri === node.value + '_error_upper' ||
+                checkedNode.uri === node.value + '_error_lower',
+            );
+
+            // Uncheck node & his error bands
+            for (const nodeToUncheck of nodesToUncheck) {
+              tree.uncheckNode(nodeToUncheck.uri);
+            }
+
+            checkedNodes = checkedNodes.filter(
+              (uncheckedNode) =>
+                uncheckedNode.uri !== node.value &&
+                uncheckedNode.uri !== node.value + '_error_upper' &&
+                uncheckedNode.uri !== node.value + '_error_lower',
+            );
+          } else {
+            // Add node
+            tree.checkNode(node.value);
+            const newCheckedNode: URITreeNodeData = {
+              name: uriLabel,
+              uri: node.value,
+              type: node.type,
+              is_geometry_node: node.is_geometry_node,
+            };
+            checkedNodes.push(newCheckedNode);
+          }
+          setChecked(!checked);
+          getCheckedNodes(checkedNodes);
+        }
+      },
+      [
+        checked,
+        checkedNodes,
+        getCheckedNodes,
+        handleCheckInAllUris,
+        node.value,
+        tree,
+        type,
+      ],
+    );
 
     const labels = (
       <Tooltip label={node.label} position="left" disabled={!isOverflowing}>
@@ -362,6 +389,7 @@ export const TreeLibrary = ({
   customizedGridLayout,
   handleSelectChildren,
   getCheckedNodes,
+  handleCheckInAllUris,
 }: TreeLibraryProps) => {
   const tree = useTree();
   const [shouldDisableTree, setShouldDisableTree] = useState<boolean>(false);
@@ -438,6 +466,7 @@ export const TreeLibrary = ({
               setExpanded={setExpanded}
               handleSelectChildren={handleSelectChildren}
               getCheckedNodes={getCheckedNodes}
+              handleCheckInAllUris={handleCheckInAllUris}
             />
           );
         }}

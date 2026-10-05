@@ -21,6 +21,7 @@ import {
   Loader,
   ScrollArea,
   Switch,
+  Text,
   TextInput,
   Transition,
 } from '@mantine/core';
@@ -47,6 +48,9 @@ const FILL_COLUMN: CSSProperties = { display: 'flex', flexDirection: 'column' };
 /** Takes the height left in a column; `minHeight: 0` lets it shrink below its content, which then scrolls. */
 const GROW: CSSProperties = { flex: 1, minHeight: 0 };
 const FILL_REST: CSSProperties = { ...FILL_COLUMN, ...GROW };
+
+/** The modifier that checks a node in every URI: Ctrl+click is a right click on macOS. */
+const CHECK_ALL_URIS_KEY = /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
 
 interface FormSearchNode {
   node: string;
@@ -283,13 +287,17 @@ export const VisualizationTree = ({
   }, [openUris, active?.name]);
 
   /**
-   * Opens the folders down to each node, loading them on the way, in the data
-   * entry each one belongs to. Nothing is ever collapsed.
+   * Loads the folders down to each node, parents first, in the data entry
+   * each one belongs to.
    * @param nodeUris full node URIs, `<uri>#<ids>:<occurrence>/<path>`
+   * @returns the folders that ended up with children, per data entry
    */
-  const revealNodes = async (nodeUris: string[]) => {
-    const { active, revealTreeNodes } = useIbexStore.getState();
-    if (!active) return;
+  const loadNodeFolders = async (
+    nodeUris: string[],
+  ): Promise<Map<string, string[]>> => {
+    const loaded = new Map<string, string[]>();
+    const { active } = useIbexStore.getState();
+    if (!active) return loaded;
 
     // Folder chain of every node, parents first, per data entry.
     const foldersByUri = new Map<string, string[]>();
@@ -316,10 +324,86 @@ export const VisualizationTree = ({
         for (const folder of folders) {
           if (await fetchNodeTree(folder, showErrorBars)) opened.push(folder);
         }
-        revealTreeNodes(active.name, uri, opened);
+        loaded.set(uri, opened);
       }),
     );
+    return loaded;
   };
+
+  /**
+   * Opens the folders down to each node, loading them on the way, in the data
+   * entry each one belongs to. Nothing is ever collapsed.
+   * @param nodeUris full node URIs, `<uri>#<ids>:<occurrence>/<path>`
+   */
+  const revealNodes = async (nodeUris: string[]) => {
+    const loaded = await loadNodeFolders(nodeUris);
+    const { active, revealTreeNodes } = useIbexStore.getState();
+    if (!active) return;
+    for (const [uri, opened] of loaded) {
+      revealTreeNodes(active.name, uri, opened);
+    }
+  };
+
+  /**
+   * Checks or unchecks a node in every data entry that has it, the one clicked
+   * included, so the same signal can be compared across entries in one click.
+   *
+   * Each node is queued as a click of its own: a new grid is built from the
+   * first node only, and the next ones join it as the grid being edited.
+   * @param nodeValue the node clicked, `<uri>#<path>`
+   * @param check whether to check it, or else uncheck it, everywhere
+   */
+  const handleCheckInAllUris = useCallback(
+    async (nodeValue: string, check: boolean) => {
+      const path = nodeValue.split('#')[1];
+      const { active } = useIbexStore.getState();
+      if (!path || !active) return;
+      const values = [
+        nodeValue,
+        ...active.dataURI
+          .map((dataUri) => `${dataUri.uri}#${path}`)
+          .filter((value) => value !== nodeValue),
+      ];
+      const checkedNow = () =>
+        useIbexStore.getState().active?.checkedNodeURI ?? [];
+
+      if (!check) {
+        for (const value of values) {
+          const nodes = checkedNow().filter(
+            (node) =>
+              node.uri !== value &&
+              node.uri !== value + '_error_upper' &&
+              node.uri !== value + '_error_lower',
+          );
+          if (nodes.length < checkedNow().length) getNodesChecked(nodes);
+        }
+        return;
+      }
+
+      // Only where the node exists: an entry without it opens nothing.
+      const loaded = await loadNodeFolders(values);
+      const { active: latest, revealTreeNodes } = useIbexStore.getState();
+      if (!latest || latest.name !== active.name) return;
+      for (const value of values) {
+        const uri = value.split('#')[0];
+        const dataTree = latest.customDataTree.find((tree) => tree.uri === uri);
+        const node = dataTree && findTreeNode(dataTree.data, value);
+        if (!node) continue;
+        revealTreeNodes(latest.name, uri, loaded.get(uri) ?? []);
+        if (checkedNow().some((checked) => checked.uri === value)) continue;
+        getNodesChecked([
+          ...checkedNow(),
+          {
+            name: dataTree.name,
+            uri: value,
+            type: node.type,
+            is_geometry_node: node.is_geometry_node,
+          },
+        ]);
+      }
+    },
+    [showErrorBars],
+  );
 
   // Editing a plot shows every signal it uses, whichever data entry it is in.
   useEffect(() => {
@@ -727,6 +811,17 @@ export const VisualizationTree = ({
                       },
                     }}
                   />
+                  {active.dataURI.length > 1 && (
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                      mb="sm"
+                      data-testid="check-all-uris-hint"
+                    >
+                      {CHECK_ALL_URIS_KEY}+click a signal to check it in every
+                      URI that has it.
+                    </Text>
+                  )}
                 </Fieldset>
               </Container>
               <TreeLibrariesAccordion
@@ -737,6 +832,7 @@ export const VisualizationTree = ({
                 handleAccordionChange={handleAccordionChange}
                 handleSelectChildren={handleSelectChildren}
                 getNodesChecked={getNodesChecked}
+                handleCheckInAllUris={handleCheckInAllUris}
               />
             </Container>
           </div>

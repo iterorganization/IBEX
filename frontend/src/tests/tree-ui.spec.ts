@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+import { Key } from 'selenium-webdriver';
 import {
   startApp,
   getDriver,
@@ -120,7 +121,11 @@ const treeOverflowingPanel = async () =>
       ?.querySelector('.mantine-Paper-root');
     if (!panel) return ['no panel'];
     const box = panel.getBoundingClientRect();
+    // Only the outermost: the ones inside it are clipped by its viewport.
     return Array.from(panel.querySelectorAll('.mantine-ScrollArea-root'))
+      .filter(
+        (area) => !area.parentElement?.closest('.mantine-ScrollArea-root'),
+      )
       .map((area) => area.getBoundingClientRect())
       .filter(
         (area) =>
@@ -149,6 +154,22 @@ const toggleSwitch = async (testId: string) =>
   getDriver().executeScript((id: string) => {
     (document.querySelector(`[data-testid="${id}"]`) as HTMLElement)?.click();
   }, testId);
+
+/** Ctrl+click: checks or unchecks a leaf in every data entry that has it. */
+async function ctrlClick(testId: string) {
+  const element = await ensureCssElementIsDisplayed(testId, 200, 100);
+  await getDriver()
+    .actions()
+    .keyDown(Key.CONTROL)
+    .click(element)
+    .keyUp(Key.CONTROL)
+    .perform();
+}
+
+const isLeafChecked = async (testId: string) =>
+  (await getCssElementFromDataTestId(testId))
+    .findElement({ css: 'input' })
+    .isSelected();
 
 async function checkLeaf(testId: string, traces: number) {
   await findCssElementAndClickIt(testId, 200, 100);
@@ -320,5 +341,55 @@ describe('UI Tests for the node tree', function () {
       await ensureCssElementIsDisplayed(`checkbox-${dataPath}#${PROFILES_1D}q`);
     }
     expect(await openFoldersWithoutSubtree()).to.deep.equal([]);
+  });
+
+  it('Should check a node in every data entry with one Ctrl+click', async () => {
+    const [scenario, disruption] = await setupConfiguration('Tree Check All');
+    await ensureCssElementIsDisplayed('check-all-uris-hint');
+
+    // Only the scenario is browsed: the disruption's folders load on the way.
+    await ensureCssElementIsDisplayed(`uriAccordion-${scenario}`, 600, 100);
+    await openUriAccordion(scenario);
+    await openPath(scenario, [EQUILIBRIUM, TIME_SLICE, PROFILES_1D]);
+    const leaf = `${PROFILES_1D}psi`;
+    await ctrlClick(`checkbox-${scenario}#${leaf}`);
+
+    await waitForValue(
+      'One grid with psi from both entries',
+      async () => {
+        const { dataPlot } = (await getTestState()).active;
+        return dataPlot.length === 1
+          ? dataPlot[0].plot.map(
+              (p: { nodeUri: string }) => p.nodeUri.split('#')[0],
+            )
+          : dataPlot.length;
+      },
+      [scenario, disruption],
+      (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    );
+    await waitForValue(
+      'disruption profiles_1d revealed',
+      () => isFolderOpen(disruption, PROFILES_1D),
+      true,
+    );
+    expect(await isUriOpen(disruption)).to.be.true;
+    for (const dataPath of [scenario, disruption]) {
+      expect(await isLeafChecked(`checkbox-${dataPath}#${leaf}`), dataPath).to
+        .be.true;
+    }
+    expect(await openFoldersWithoutSubtree()).to.deep.equal([]);
+
+    // Ctrl+click on a checked node unchecks it everywhere: the grid had
+    // nothing else, so it goes with it.
+    await ctrlClick(`checkbox-${disruption}#${leaf}`);
+    await waitForValue(
+      'psi unchecked in both entries',
+      async () => (await getTestState()).active.dataPlot.length,
+      0,
+    );
+    for (const dataPath of [scenario, disruption]) {
+      expect(await isLeafChecked(`checkbox-${dataPath}#${leaf}`), dataPath).to
+        .be.false;
+    }
   });
 });
