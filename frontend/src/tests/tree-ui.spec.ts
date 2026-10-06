@@ -345,7 +345,6 @@ describe('UI Tests for the node tree', function () {
 
   it('Should check a node in every data entry with one Ctrl+click', async () => {
     const [scenario, disruption] = await setupConfiguration('Tree Check All');
-    await ensureCssElementIsDisplayed('check-all-uris-hint');
 
     // Only the scenario is browsed: the disruption's folders load on the way.
     await ensureCssElementIsDisplayed(`uriAccordion-${scenario}`, 600, 100);

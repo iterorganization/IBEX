@@ -21,7 +21,6 @@ import {
   Loader,
   ScrollArea,
   Switch,
-  Text,
   TextInput,
   Transition,
 } from '@mantine/core';
@@ -48,9 +47,6 @@ const FILL_COLUMN: CSSProperties = { display: 'flex', flexDirection: 'column' };
 /** Takes the height left in a column; `minHeight: 0` lets it shrink below its content, which then scrolls. */
 const GROW: CSSProperties = { flex: 1, minHeight: 0 };
 const FILL_REST: CSSProperties = { ...FILL_COLUMN, ...GROW };
-
-/** The modifier that checks a node in every URI: Ctrl+click is a right click on macOS. */
-const CHECK_ALL_URIS_KEY = /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
 
 interface FormSearchNode {
   node: string;
@@ -786,42 +782,21 @@ export const VisualizationTree = ({
                       disabled={searchNodeIsLoading}
                     />
                   </form>
-                  <Switch
-                    mt="sm"
-                    label="Search all URIs"
-                    labelPosition="left"
-                    checked={searchAllUris}
-                    onChange={() => handleSearchAllUris(!searchAllUris)}
-                    data-testid="search-all-uris"
-                    styles={{
-                      labelWrapper: {
-                        width: '100%',
-                      },
-                    }}
-                  />
-                  <Switch
-                    my="sm"
-                    label="See errors"
-                    labelPosition="left"
-                    checked={showErrorBars}
-                    onChange={() => handleSeeErrorBars(!showErrorBars)}
-                    styles={{
-                      labelWrapper: {
-                        width: '100%',
-                      },
-                    }}
-                  />
-                  {active.dataURI.length > 1 && (
-                    <Text
-                      size="xs"
-                      c="dimmed"
-                      mb="sm"
-                      data-testid="check-all-uris-hint"
-                    >
-                      {CHECK_ALL_URIS_KEY}+click a signal to check it in every
-                      URI that has it.
-                    </Text>
-                  )}
+                  <Group my="sm" justify="space-between" wrap="nowrap">
+                    <Switch
+                      label="All URIs"
+                      labelPosition="left"
+                      checked={searchAllUris}
+                      onChange={() => handleSearchAllUris(!searchAllUris)}
+                      data-testid="search-all-uris"
+                    />
+                    <Switch
+                      label="See errors"
+                      labelPosition="left"
+                      checked={showErrorBars}
+                      onChange={() => handleSeeErrorBars(!showErrorBars)}
+                    />
+                  </Group>
                 </Fieldset>
               </Container>
               <TreeLibrariesAccordion
