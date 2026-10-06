@@ -62,7 +62,7 @@ export const Visualization = () => {
         </div>
       ) : (
         <Center h={HEIGHT}>
-          <Text>No configurations available</Text>
+          <Text>No configuration loaded</Text>
         </Center>
       )}
     </Container>
