@@ -533,9 +533,14 @@ class IMASPythonSource(DataSourceInterface):
                 try:
                     try:
                         filled_paths = entry.list_filled_paths(ids, occurrence=0)
-                    except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                    except (
+                        AttributeError,
+                        imas.backends.imas_core.imas_interface.LLInterfaceError,
+                        imas_core.exception.ImasCoreBackendException,
+                    ):
                         # AttributeError - current version of IMAS-Python doesn't support list_filled paths
                         # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                        # ImasCoreBackendException - backend (e.g. MDSplus) doesn't support list_filled paths
                         # proceed
                         filled_paths = []
                     ids_obj = entry.get(ids, occurrence=0, autoconvert=False, lazy=True)
@@ -836,9 +841,14 @@ class IMASPythonSource(DataSourceInterface):
                     if not show_empty_nodes:
                         try:
                             filled_paths = entry.list_filled_paths(ids_dict["name"], int(occurrence))
-                        except (AttributeError, imas.backends.imas_core.imas_interface.LLInterfaceError):
+                        except (
+                            AttributeError,
+                            imas.backends.imas_core.imas_interface.LLInterfaceError,
+                            imas_core.exception.ImasCoreBackendException,
+                        ):
                             # AttributeError - current version of IMAS-Python doesn't support list_filled paths
                             # LLInterfaceError - current version of IMAS-Core doesn't support list_filled paths
+                            # ImasCoreBackendException - backend (e.g. MDSplus) doesn't support list_filled paths
                             # proceed without filtering empty nodes
                             ...
 

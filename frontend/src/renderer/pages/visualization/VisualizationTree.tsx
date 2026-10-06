@@ -54,6 +54,19 @@ interface FormSearchNode {
 
 const NO_OPEN_URIS: string[] = [];
 
+/** How long typing must pause before the search runs. */
+const LIVE_SEARCH_DELAY_MS = 300;
+
+/** Whether the input is a complete regular expression, not one half typed. */
+const isValidRegex = (value: string) => {
+  try {
+    new RegExp(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const VisualizationTree = ({
   extended,
   handleExtended,
@@ -96,14 +109,34 @@ export const VisualizationTree = ({
   > | null>(null);
   /** The checked nodes when the search started, to tell those it added. */
   const checkedBeforeSearch = useRef<URITreeNodeData[] | null>(null);
+  /** Numbers the searches, so only the last one started shows its results. */
+  const searchSeq = useRef(0);
+  /** The search waiting for the user to pause typing. */
+  const liveSearchTimer = useRef<number | undefined>(undefined);
+  /** Runs a live search with the switches as they are when it fires. */
+  const runLiveSearch = useRef<() => void>(() => undefined);
+
+  const cancelLiveSearch = () => {
+    window.clearTimeout(liveSearchTimer.current);
+    liveSearchTimer.current = undefined;
+  };
 
   const formSearchNode = useForm<FormSearchNode>({
     initialValues: {
       node: '',
     },
 
+    // The search refines while typing, once there are 2 characters.
     onValuesChange: (values) => {
-      if (values.node === '') clearSearch();
+      cancelLiveSearch();
+      if (values.node.length < 2) {
+        clearSearch();
+      } else {
+        liveSearchTimer.current = window.setTimeout(
+          () => runLiveSearch.current(),
+          LIVE_SEARCH_DELAY_MS,
+        );
+      }
     },
     validate: (values) => {
       if (values.node.length < 2) {
@@ -528,15 +561,24 @@ export const VisualizationTree = ({
    * The results are shown in place of the browsed trees, which are left as
    * they are: clearing the search brings them back, with the nodes checked
    * meanwhile revealed in them.
+   *
+   * A live search - one run while typing - skips a half-typed regular
+   * expression and stays silent when no data entry is selected.
    */
-  const handleSearchNode = async (showErrors: boolean, allUris: boolean) => {
+  const handleSearchNode = async (
+    showErrors: boolean,
+    allUris: boolean,
+    live = false,
+  ) => {
     const { active, revealTreeNodes } = useIbexStore.getState();
     if (!active) return;
-    const value = formSearchNode.values.node;
+    const value = formSearchNode.getValues().node;
     if (!value) return;
+    if (live && !isValidRegex(value)) return;
 
     const targets = allUris ? active.dataURI : uriSelected ? [uriSelected] : [];
     if (targets.length === 0) {
+      if (live) return;
       console.error('Accordion not selected');
       showNotification({
         title: 'Search node',
@@ -546,6 +588,7 @@ export const VisualizationTree = ({
       return;
     }
 
+    const seq = ++searchSeq.current;
     setSearchNodeIsLoading(true);
     if (checkedBeforeSearch.current === null) {
       checkedBeforeSearch.current = active.checkedNodeURI ?? [];
@@ -577,8 +620,9 @@ export const VisualizationTree = ({
       }
     }
 
-    // The input may have been cleared while the search ran.
-    if (formSearchNode.getValues().node !== '') {
+    // A later search, or clearing the input, supersedes this one.
+    if (seq !== searchSeq.current) return;
+    if (formSearchNode.getValues().node === value) {
       setSearchResults(results);
       for (const [uri, nodes] of Object.entries(results)) {
         if (nodes.length > 0) revealTreeNodes(active.name, uri, []);
@@ -587,8 +631,14 @@ export const VisualizationTree = ({
     setSearchNodeIsLoading(false);
   };
 
+  runLiveSearch.current = () =>
+    handleSearchNode(showErrorBars, searchAllUris, true);
+  useEffect(() => () => window.clearTimeout(liveSearchTimer.current), []);
+
   /** Back to the browsed trees, revealing the nodes checked in the results. */
   const clearSearch = () => {
+    searchSeq.current++;
+    setSearchNodeIsLoading(false);
     const before = checkedBeforeSearch.current;
     checkedBeforeSearch.current = null;
     setSearchResults(null);
@@ -753,33 +803,33 @@ export const VisualizationTree = ({
                 >
                   <form
                     onSubmit={formSearchNode.onSubmit(() => {
+                      cancelLiveSearch();
                       handleSearchNode(showErrorBars, searchAllUris);
                     })}
                   >
+                    {/* Never disabled while searching: typing refines it. */}
                     <TextInput
                       label="Search node"
-                      placeholder="Enter node name"
+                      placeholder="Type a node name (regex)"
                       data-testid="search-node-input"
                       {...formSearchNode.getInputProps('node')}
-                      rightSection={
-                        searchNodeIsLoading ? (
-                          <Loader size="xs" />
-                        ) : (
-                          <ActionIcon
-                            variant="filled"
-                            aria-label="Search node"
-                            data-testid="search-node-submit"
-                            component="button"
-                            type="submit"
-                          >
-                            <IconSearch
-                              style={{ width: '70%', height: '70%' }}
-                              stroke={1.5}
-                            />
-                          </ActionIcon>
-                        )
+                      leftSection={
+                        searchNodeIsLoading ? <Loader size="xs" /> : undefined
                       }
-                      disabled={searchNodeIsLoading}
+                      rightSection={
+                        <ActionIcon
+                          variant="filled"
+                          aria-label="Search node"
+                          data-testid="search-node-submit"
+                          component="button"
+                          type="submit"
+                        >
+                          <IconSearch
+                            style={{ width: '70%', height: '70%' }}
+                            stroke={1.5}
+                          />
+                        </ActionIcon>
+                      }
                     />
                   </form>
                   <Group my="sm" justify="space-between" wrap="nowrap">

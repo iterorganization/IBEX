@@ -19,7 +19,9 @@ You can collapse the tree view to allow other components to use the full availab
 Search a node
 -------------
 
-Type a part of a node path in "Search node" and press Enter to list the matching nodes. Clear the field to go back to the tree as you left it: the nodes checked from the results are revealed in it.
+Type a part of a node path in "Search node": the matching nodes are listed as soon as you have typed 2 characters, and the list is refined as you keep typing. Pressing Enter or the search button searches right away. The text is a regular expression (e.g. ``profiles_1d/psi$``); while you type one that is not complete yet, such as ``psi(``, the previous results are kept.
+
+Clear the field, or leave fewer than 2 characters in it, to go back to the tree as you left it: the nodes checked from the results are revealed in it.
 
 By default, the search only covers the URI opened last. Switch on "All URIs" to search every URI of the configuration at once: each URI that has matches is opened with its own results.
 
