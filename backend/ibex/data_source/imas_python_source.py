@@ -24,6 +24,7 @@ from imas.ids_base import IDSBase  # type: ignore
 from imas.ids_path import IDSPath  # type: ignore
 
 from itertools import zip_longest, chain  # type: ignore
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from imas_core.exception import ImasCoreBackendException
 
@@ -84,6 +85,26 @@ class IMASPythonSource(DataSourceInterface):
             return (obj.real, obj.imag)
         raise TypeError
 
+    @staticmethod
+    def _disable_uda_cache(uri: str) -> str:
+        """
+        Adds ``cache_mode=none`` to UDA URIs that set neither ``cache_mode`` nor ``fetch``.
+
+        With UDA caching on, IMAS-Python refuses to read an IDS whose DD version differs
+        from the DBEntry's one, which is the usual case since IBEX reads data with
+        ``autoconvert=False``.
+
+        :param uri: imas URI
+        :return: imas URI, unchanged unless it uses the UDA backend
+        """
+        parts = urlsplit(uri)
+        if parts.path.rsplit("/", 1)[-1] != "uda":
+            return uri
+        query = parse_qs(parts.query)
+        if "cache_mode" in query or "fetch" in query:
+            return uri
+        return urlunsplit(parts._replace(query=f"{parts.query}&cache_mode=none" if parts.query else "cache_mode=none"))
+
     def _open_entry(self, uri: str) -> imas.DBEntry:
         """
         Opens DBEntry with mode "r". Handles possible exceptions.
@@ -92,7 +113,7 @@ class IMASPythonSource(DataSourceInterface):
         :return: DBEntry object
         """
         try:
-            return imas.DBEntry(uri, mode="r")
+            return imas.DBEntry(self._disable_uda_cache(uri), mode="r")
         except ImasCoreBackendException:
             message = f"Could not open pulsefile: {uri}"
             raise EntryNotFoundException(message) from None
