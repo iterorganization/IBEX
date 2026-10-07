@@ -23,7 +23,9 @@ Type a part of a node path in "Search node": the matching nodes are listed as so
 
 Clear the field, or leave fewer than 2 characters in it, to go back to the tree as you left it: the nodes checked from the results are revealed in it.
 
-By default, the search only covers the URI opened last. Switch on "All URIs" to search every URI of the configuration at once: each URI that has matches is opened with its own results.
+By default, the search only covers the URI opened last, whose header is highlighted and marked with a search icon. Opening another URI while searching runs the search in it as well. A URI left open from before the search shows "Not searched in this URI" rather than "No match": click "Search here" to run the search in it too, which also makes it the URI searched next.
+
+Switch on "All URIs" to search every URI of the configuration at once: each URI that has matches is opened with its own results.
 
 "See errors" also shows the "_error_upper" & "_error_lower" nodes in the tree and in the search results.
 

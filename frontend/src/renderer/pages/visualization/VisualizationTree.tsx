@@ -455,6 +455,9 @@ export const VisualizationTree = ({
 
     if (opened) {
       setUriSelected(active.dataURI.find((item) => item.uri === opened));
+      if (searchResults && !searchAllUris && !(opened in searchResults)) {
+        searchEntry(opened);
+      }
     } else if (!values.includes(uriSelected?.uri)) {
       const last = values[values.length - 1];
       setUriSelected(active.dataURI.find((item) => item.uri === last) ?? null);
@@ -594,6 +597,30 @@ export const VisualizationTree = ({
       checkedBeforeSearch.current = active.checkedNodeURI ?? [];
     }
 
+    const results = await findInEntries(targets, value, showErrors);
+
+    // A later search, or clearing the input, supersedes this one.
+    if (seq !== searchSeq.current) return;
+    if (formSearchNode.getValues().node === value) {
+      setSearchResults(results);
+      for (const [uri, nodes] of Object.entries(results)) {
+        if (nodes.length > 0) revealTreeNodes(active.name, uri, []);
+      }
+    }
+    setSearchNodeIsLoading(false);
+  };
+
+  /**
+   * The search results per data entry; an entry whose search failed has none.
+   * @param targets the data entries to search
+   * @param value the node name searched (regex)
+   * @param showErrors whether to list the error bar nodes
+   */
+  const findInEntries = async (
+    targets: URIData[],
+    value: string,
+    showErrors: boolean,
+  ) => {
     // One data entry failing must not hide what the others found.
     const settled = await Promise.allSettled(
       targets.map(async (dataUri) => {
@@ -619,15 +646,28 @@ export const VisualizationTree = ({
         console.error(result.reason);
       }
     }
+    return results;
+  };
 
-    // A later search, or clearing the input, supersedes this one.
+  /**
+   * Runs the search shown in one more data entry, adding its results to the
+   * others': opening an entry while searching the selected one searches it
+   * too, rather than showing it as if nothing matched there.
+   * @param uri the data entry to search
+   */
+  const searchEntry = async (uri: string) => {
+    const { active, revealTreeNodes } = useIbexStore.getState();
+    const dataUri = active?.dataURI.find((item) => item.uri === uri);
+    const value = formSearchNode.getValues().node;
+    if (!dataUri || !value) return;
+
+    // Not a new search: only a new one, or clearing the input, supersedes it.
+    const seq = searchSeq.current;
+    setSearchNodeIsLoading(true);
+    const results = await findInEntries([dataUri], value, showErrorBars);
     if (seq !== searchSeq.current) return;
-    if (formSearchNode.getValues().node === value) {
-      setSearchResults(results);
-      for (const [uri, nodes] of Object.entries(results)) {
-        if (nodes.length > 0) revealTreeNodes(active.name, uri, []);
-      }
-    }
+    setSearchResults((current) => current && { ...current, ...results });
+    if (results[uri]?.length) revealTreeNodes(active.name, uri, []);
     setSearchNodeIsLoading(false);
   };
 
@@ -852,6 +892,13 @@ export const VisualizationTree = ({
               <TreeLibrariesAccordion
                 value={openUris}
                 searchResults={searchResults}
+                searchedUri={searchAllUris ? undefined : uriSelected?.uri}
+                handleSearchEntry={(uri) => {
+                  setUriSelected(
+                    active.dataURI.find((item) => item.uri === uri) ?? null,
+                  );
+                  searchEntry(uri);
+                }}
                 customDataTree={active.customDataTree}
                 checkedNodes={active.checkedNodeURI || []}
                 handleAccordionChange={handleAccordionChange}

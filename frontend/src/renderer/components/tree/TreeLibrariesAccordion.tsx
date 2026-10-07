@@ -1,5 +1,6 @@
 import {
   Accordion,
+  Button,
   ColorSwatch,
   Group,
   ScrollArea,
@@ -7,6 +8,7 @@ import {
   Text,
   Tooltip,
 } from '@mantine/core';
+import { IconSearch } from '@tabler/icons-react';
 import {
   CustomTreeData,
   CustomTreeNodeData,
@@ -22,6 +24,10 @@ interface VisualizationTreeProps {
   value: string[];
   /** A search's results per data entry, or `null` when not searching. */
   searchResults: Record<string, CustomTreeNodeData[]> | null;
+  /** The data entry a search not over all of them reads, if any. */
+  searchedUri?: string;
+  /** Runs the search shown in a data entry it has not been run in. */
+  handleSearchEntry: (uri: string) => void;
   handleAccordionChange(value: string[]): void;
   handleSelectChildren: (nodeUri: string) => Promise<boolean>;
   getNodesChecked: (nodes: URITreeNodeData[]) => void;
@@ -32,12 +38,30 @@ interface AccordionLabelProps {
   label: string;
   description: string;
   color: string;
+  /** Whether a search not over all data entries reads this one. */
+  searched: boolean;
 }
 
-function AccordionLabel({ label, description, color }: AccordionLabelProps) {
+function AccordionLabel({
+  label,
+  description,
+  color,
+  searched,
+}: AccordionLabelProps) {
   return (
     <Group wrap="nowrap">
       <ColorSwatch color={color} />
+      {searched && (
+        <Tooltip label="The search runs in this URI" position="right">
+          <IconSearch
+            size={16}
+            stroke={2.5}
+            color="var(--mantine-primary-color-filled)"
+            data-testid="searched-uri"
+            style={{ flexShrink: 0 }}
+          />
+        </Tooltip>
+      )}
       <SimpleGrid cols={1} verticalSpacing={0}>
         <Text>{label}</Text>
         <Tooltip label={description} position="right">
@@ -64,6 +88,8 @@ export const TreeLibrariesAccordion = ({
   checkedNodes,
   value,
   searchResults,
+  searchedUri,
+  handleSearchEntry,
   handleAccordionChange,
   handleSelectChildren,
   getNodesChecked,
@@ -76,21 +102,45 @@ export const TreeLibrariesAccordion = ({
 
   const items = customDataTree.map((item) => {
     const results = searchResults?.[item.uri];
+    const searched = item.uri === searchedUri;
     return (
       <Accordion.Item
         data-testid={`uriAccordion-${item.uri}`}
         key={`accodion-${item.uri}`}
         value={`${item.uri}`}
       >
-        <Accordion.Control style={{ userSelect: 'none' }}>
+        <Accordion.Control
+          style={{
+            userSelect: 'none',
+            ...(searched && {
+              backgroundColor: 'var(--mantine-primary-color-light)',
+            }),
+          }}
+        >
           <AccordionLabel
             label={item.name}
             description={item.uri}
             color={item?.uriColor}
+            searched={searched}
           />
         </Accordion.Control>
         <Accordion.Panel>
-          {searchResults && !results?.length ? (
+          {searchResults && !results ? (
+            <Group gap="xs" data-testid={`notSearched-${item.uri}`}>
+              <Text size="sm" c="dimmed">
+                Not searched in this URI
+              </Text>
+              <Button
+                size="compact-xs"
+                variant="light"
+                leftSection={<IconSearch size={12} />}
+                onClick={() => handleSearchEntry(item.uri)}
+                data-testid={`searchEntry-${item.uri}`}
+              >
+                Search here
+              </Button>
+            </Group>
+          ) : searchResults && !results.length ? (
             <Text size="sm" c="dimmed" data-testid={`noMatch-${item.uri}`}>
               No match
             </Text>

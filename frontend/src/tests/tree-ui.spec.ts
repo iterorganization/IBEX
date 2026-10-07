@@ -343,6 +343,71 @@ describe('UI Tests for the node tree', function () {
     expect(await openFoldersWithoutSubtree()).to.deep.equal([]);
   });
 
+  it('Should show where a single data entry search runs, and run it in the entries opened', async () => {
+    const [scenario, disruption] = await setupConfiguration('Tree Search One');
+    const leaf = `${PROFILES_1D}psi`;
+    /** The data entries whose header is marked as the one searched. */
+    const searchedUris = async () =>
+      (await getDriver().executeScript(() =>
+        Array.from(
+          document.querySelectorAll('[data-testid="searched-uri"]'),
+          (icon) =>
+            icon
+              .closest('[data-testid^="uriAccordion-"]')
+              ?.getAttribute('data-testid'),
+        ),
+      )) as string[];
+
+    // The switch is the tree's, which an earlier spec may have left on.
+    const allUrisOn = await getDriver().executeScript(
+      () =>
+        (
+          document.querySelector(
+            '[data-testid="search-all-uris"]',
+          ) as HTMLInputElement | null
+        )?.checked,
+    );
+    if (allUrisOn) await toggleSwitch('search-all-uris');
+
+    // The entry opened last is the one searched, and is marked so.
+    await ensureCssElementIsDisplayed(`uriAccordion-${scenario}`, 600, 100);
+    await openUriAccordion(scenario);
+    await openUriAccordion(disruption);
+    expect(await searchedUris()).to.deep.equal([`uriAccordion-${disruption}`]);
+
+    await writeTextInCssElement('search-node-input', 'profiles_1d/psi$');
+    await findCssElementAndClickIt('search-node-submit');
+    await ensureCssElementIsDisplayed(
+      `checkbox-${disruption}#${leaf}`,
+      600,
+      100,
+    );
+    // Not "No match": the search did not run there.
+    await ensureCssElementIsDisplayed(`notSearched-${scenario}`);
+
+    // One click runs it there too, which becomes the entry searched.
+    await findCssElementAndClickIt(`searchEntry-${scenario}`);
+    await ensureCssElementIsDisplayed(`checkbox-${scenario}#${leaf}`, 600, 100);
+    await ensureCssElementIsDisplayed(`checkbox-${disruption}#${leaf}`);
+    expect(await searchedUris()).to.deep.equal([`uriAccordion-${scenario}`]);
+
+    // Opening an entry while searching runs the search in it.
+    await closeUriAccordion(disruption);
+    await openUriAccordion(disruption);
+    await ensureCssElementIsDisplayed(
+      `checkbox-${disruption}#${leaf}`,
+      600,
+      100,
+    );
+    expect(await searchedUris()).to.deep.equal([`uriAccordion-${disruption}`]);
+
+    // Searching all of them, none is marked.
+    await toggleSwitch('search-all-uris');
+    expect(await searchedUris()).to.deep.equal([]);
+    await toggleSwitch('search-all-uris');
+    await writeTextInCssElement('search-node-input', '', true);
+  });
+
   it('Should check a node in every data entry with one Ctrl+click', async () => {
     const [scenario, disruption] = await setupConfiguration('Tree Check All');
 
