@@ -16,7 +16,6 @@ import {
   NodeInfoTypeEnum,
   PlotCoordinatesResponse,
   PlotDataResponse,
-  PlotLine,
   URIData,
   URITreeNodeData,
   GeometryInfos,
@@ -62,15 +61,7 @@ import {
   customdataOf,
   lineVector,
 } from '../derive/vectors';
-
-const defaultColorsRGB = [
-  'rgb(31, 119, 180)',
-  'rgb(255, 127, 14)',
-  'rgb(44, 160, 44)',
-  'rgb(214, 39, 40)',
-  'rgb(148, 103, 189)',
-  'rgb(140, 86, 75)',
-];
+import { nextDefaultColor, withDefaultColors } from './plotColors';
 
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
@@ -98,11 +89,14 @@ export const plotData = (
   y2Axis?: boolean,
   yDataRef?: string,
 ): DataGridPlot => {
+  const currentPlot = Array.isArray(dataPlot.plot) ? dataPlot.plot : [];
   const trace: DataPlotly = {
     yData: yData,
     yDataRef: yDataRef,
     name: name ? `${name}_${labelUri}` : '',
-    line: {},
+    line: {
+      color: nextDefaultColor(currentPlot.map((plot) => plot.line?.color)),
+    },
     mode: 'lines',
     nodeUri: nodeUri,
     description: description,
@@ -120,8 +114,6 @@ export const plotData = (
       color: 'yellow',
     });
   }
-
-  const currentPlot = Array.isArray(dataPlot.plot) ? dataPlot.plot : [];
 
   return {
     ...dataPlot,
@@ -1472,7 +1464,6 @@ const formatErrorBandLayout = (
   x: (string | number)[],
   mainY: number[],
   bands: Datum[][],
-  plotIndex: number,
   symmetricalCase?: boolean,
 ) => {
   const lineShape = (mainPlot.line?.shape ?? 'linear') as 'linear' | 'hv';
@@ -1509,9 +1500,8 @@ const formatErrorBandLayout = (
   } else {
     errBandPartPlot.name = 'error bands';
     errBandPartPlot.fill = 'tonexty';
-    errBandPartPlot.fillcolor = mainPlot.line?.color
-      ? rgbToRgba(mainPlot.line?.color, 0.2)
-      : rgbToRgba(defaultColorsRGB[plotIndex], 0.2);
+    // `buildTraces` gives every trace a colour before its bands are built.
+    errBandPartPlot.fillcolor = rgbToRgba(mainPlot.line.color, 0.2);
   }
   return errBandPartPlot;
 };
@@ -1533,7 +1523,9 @@ export function buildTraces(
   const entirePlotList: (Partial<ScatterData> | DataPlotly)[] = [];
   const x = axisVector(coordinates, 0) ?? [];
 
-  for (const [plotIndex, storedPlot] of plots.entries()) {
+  // Traces from configurations saved before colours were assigned on add have
+  // none; Plotly's index-based default would let two of them share one.
+  for (const storedPlot of withDefaultColors(plots)) {
     const y = (lineVector(storedPlot.yData, coordinates) ?? []) as number[];
     const bands = bandVectors(storedPlot, coordinates);
 
@@ -1548,24 +1540,10 @@ export function buildTraces(
 
     if (storedPlot?.error_bands && storedPlot.error_bands.length === 2) {
       // Add lower and upper
-      const lowerPlot = formatErrorBandLayout(
-        'lower',
-        mainPlot,
-        x,
-        y,
-        bands,
-        plotIndex,
-      );
+      const lowerPlot = formatErrorBandLayout('lower', mainPlot, x, y, bands);
       lowerPlot.connectgaps = true;
       entirePlotList.push(lowerPlot);
-      const upperPlot = formatErrorBandLayout(
-        'upper',
-        mainPlot,
-        x,
-        y,
-        bands,
-        plotIndex,
-      );
+      const upperPlot = formatErrorBandLayout('upper', mainPlot, x, y, bands);
       upperPlot.connectgaps = true;
       entirePlotList.push(upperPlot);
     } else if (storedPlot?.error_bands && storedPlot.error_bands.length === 1) {
@@ -1576,7 +1554,6 @@ export function buildTraces(
         x,
         y,
         bands,
-        plotIndex,
         true,
       );
       lowerPlot.connectgaps = true;
@@ -1587,7 +1564,6 @@ export function buildTraces(
         x,
         y,
         bands,
-        plotIndex,
         true,
       );
       upperPlot.connectgaps = true;
@@ -1674,70 +1650,20 @@ export const mergeAxisRelayout = (
 };
 
 /**
- * Init plots color by adding color in plot.line for each plot
+ * Give every trace of the grid that has no colour its default one, so the
+ * customization panel has a value to show. The setter is only called when a
+ * colour was actually missing.
  */
-export const initPlotColors = async (
+export const initPlotColors = (
   customizedDataGrid: DataGridPlot,
-  customContainerRef: React.MutableRefObject<HTMLDivElement>,
-  setterForCustomization?: React.Dispatch<React.SetStateAction<DataGridPlot>>,
+  setterForCustomization: React.Dispatch<React.SetStateAction<DataGridPlot>>,
 ) => {
-  // Get plot colors when select 1D plots accordion
-  const customContainer = customContainerRef.current;
-  if (!customContainer) return;
-  // Get child elements from the legend
-  const legends = Array.from(
-    customContainer.querySelectorAll<SVGGElement>('g.layers'),
-  ).filter((g) => {
-    return g.previousSibling.textContent?.trim() !== 'error bands';
-  });
-
-  const updatedPlotColors = setterForCustomization
-    ? cloneGridStructure(customizedDataGrid)
-    : customizedDataGrid;
-
-  if (
-    updatedPlotColors.plot.length &&
-    legends.length === updatedPlotColors.plot.length
-  ) {
-    // When we have a color legend (so several plots)
-    let plotIndex = 0;
-    let shouldUpdateColors = false;
-    for (const plot of updatedPlotColors.plot) {
-      // Get from DOM & set color in plot.line for each plots
-      if (!plot?.line?.color) {
-        shouldUpdateColors = true;
-      }
-
-      const line = legends[plotIndex].querySelector<SVGGElement>(
-        'g.legendlines > path',
-      );
-      // We get color from point when plot.mode === "markers"
-      const point = legends[plotIndex].querySelector<SVGGElement>(
-        'g.legendpoints > path',
-      );
-      const colorFromDOM = line?.style?.stroke || point?.style?.fill;
-
-      // A new object rather than a write into `plot.line`, which the copy
-      // above shares with the grid it came from.
-      plot.line = { ...plot.line, color: colorFromDOM } as PlotLine;
-      plotIndex++;
-    }
-    if (!shouldUpdateColors) {
-      return;
-    }
-  } else if (updatedPlotColors.plot.length) {
-    // When we have only one plot, there is no legend so we set manualy to his default plotly color
-    for (const [index, plot] of updatedPlotColors.plot.entries()) {
-      if (!plot?.line?.color) {
-        plot.line = { ...plot.line, color: defaultColorsRGB[index] };
-      }
-    }
+  if (!customizedDataGrid?.plot) return;
+  const plots = withDefaultColors(customizedDataGrid.plot);
+  if (plots.every((plot, index) => plot === customizedDataGrid.plot[index])) {
+    return;
   }
-  if (setterForCustomization) {
-    setterForCustomization(updatedPlotColors);
-  } else {
-    return updatedPlotColors;
-  }
+  setterForCustomization({ ...customizedDataGrid, plot: plots });
 };
 
 /**

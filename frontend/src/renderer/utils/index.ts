@@ -5,6 +5,7 @@ export * from './grid';
 export * from './matrix';
 export * from './mergeErrorBands';
 export * from './plot';
+export * from './plotColors';
 export * from './tensor';
 export * from './tree';
 export * from './uuid';

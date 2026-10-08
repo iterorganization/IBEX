@@ -109,12 +109,10 @@ export const DataplotCustomization = () => {
   }, [customizedDataGrid]);
 
   useEffect(() => {
-    initPlotColors(
-      customizedDataGrid,
-      customContainerRef,
-      setCustomizedDataGrid,
-    );
-  }, [customContainerRef.current]);
+    // Null until the customized grid is picked from the configuration.
+    if (!customizedDataGrid) return;
+    initPlotColors(customizedDataGrid, setCustomizedDataGrid);
+  }, [customizedDataGrid?.plot]);
 
   /**
    * Handle the resizing of the width
@@ -320,7 +318,6 @@ export const DataplotCustomization = () => {
                           selectedAccordion={selectedAccordion}
                           selectedPlot={selectedPlot}
                           applyToAllHeatmap={applyToAllHeatmap}
-                          customContainerRef={customContainerRef}
                           setCustomizedDataGrid={setCustomizedDataGrid}
                           setSelectedAccordion={setSelectedAccordion}
                           setApplyToAllHeatmap={setApplyToAllHeatmap}
@@ -343,7 +340,6 @@ interface CustomizationProps {
   selectedAccordion: string | null;
   selectedPlot: DataPlotly | null;
   applyToAllHeatmap: boolean;
-  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
   setSelectedAccordion: React.Dispatch<React.SetStateAction<string | null>>;
   setApplyToAllHeatmap: React.Dispatch<React.SetStateAction<boolean>>;
@@ -354,7 +350,6 @@ const Customization = ({
   selectedAccordion,
   selectedPlot,
   applyToAllHeatmap,
-  customContainerRef,
   setCustomizedDataGrid,
   setSelectedAccordion,
   setApplyToAllHeatmap,
@@ -382,7 +377,6 @@ const Customization = ({
         <Customize1DPlot
           customizedDataGrid={customizedDataGrid}
           selectedPlot={selectedPlot}
-          customContainerRef={customContainerRef}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />
       ),

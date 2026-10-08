@@ -10,7 +10,6 @@ import {
   emptyUserRelayout,
   getArrayValueFromDependance,
   buildTraces,
-  initPlotColors,
   isMatrixPlottable,
   mergeAxisRelayout,
   normalizeIndices,
@@ -319,17 +318,6 @@ export const SimplePlotly = ({
     // Update title when itemDataGrid.title change (when selecting a plot with original plot title)
     setTitle(itemDataGrid.title);
   }, [itemDataGrid.title]);
-
-  const handleInitPlotColor = async (
-    customContainerRef: React.MutableRefObject<HTMLDivElement>,
-    itemDataGrid: DataGridPlot,
-  ) => {
-    await initPlotColors(itemDataGrid, customContainerRef);
-  };
-
-  useEffect(() => {
-    handleInitPlotColor(customContainerRef, itemDataGrid);
-  }, [customContainerRef.current, itemDataGrid.plot.length]);
 
   return (
     <Grid
