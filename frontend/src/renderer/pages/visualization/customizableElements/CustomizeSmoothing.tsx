@@ -65,7 +65,7 @@ export const CustomizeSmoothing = ({
   const updateSmoothing = (next: SmoothingParams | undefined) => {
     if (!selectedPlot) return;
     const updated = cloneGridStructure(customizedDataGrid);
-    const plot = updated.plot.find((p) => p.name === selectedPlot.name);
+    const plot = updated.plot.find((p) => p.nodeUri === selectedPlot.nodeUri);
     if (plot) {
       plot.smoothing = next;
     }
@@ -100,7 +100,7 @@ export const CustomizeSmoothing = ({
       const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       const plot = updatedDataPlot.plot.find(
-        (p) => p.name === selectedPlot.name,
+        (p) => p.nodeUri === selectedPlot.nodeUri,
       );
       if (!plot) return;
 

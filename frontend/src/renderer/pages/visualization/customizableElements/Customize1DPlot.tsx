@@ -29,7 +29,7 @@ export const Customize1DPlot = ({
    */
   const updateSelectedPlot = (update: (plot: DataPlotly) => DataPlotly) =>
     customizedDataGrid.plot.map((plot) =>
-      plot.name === selectedPlot.name ? update(plot) : plot,
+      plot.nodeUri === selectedPlot.nodeUri ? update(plot) : plot,
     );
 
   const updatePlotColor = (newColor: string) => {
@@ -53,7 +53,7 @@ export const Customize1DPlot = ({
     );
 
     setColorPlot(
-      updatedPlots.find((plot) => plot.name === selectedPlot?.name)?.line
+      updatedPlots.find((plot) => plot.nodeUri === selectedPlot?.nodeUri)?.line
         ?.color || '',
     );
     setCustomizedDataGrid({ ...customizedDataGrid, plot: updatedPlots });

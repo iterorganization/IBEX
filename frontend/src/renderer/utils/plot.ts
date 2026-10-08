@@ -2903,3 +2903,49 @@ export function formatGeometriesToSave(
 
   return result;
 }
+
+/**
+ * The label of each trace's tab, keyed by `nodeUri` (unique in a grid). A
+ * trace keeps its `name` unless another trace of the grid shares it - two
+ * `measured` nodes of the same entry are both `measured_URI-0` - then it gets
+ * the shortest end of its node path that tells them apart:
+ * `diamagnetic_flux/measured_URI-0` and `ip/measured_URI-0`.
+ */
+export const plotTabLabels = (plots: DataPlotly[]): Map<string, string> => {
+  const labels = new Map<string, string>();
+  const byName = new Map<string, DataPlotly[]>();
+  plots.forEach((plot) =>
+    byName.set(plot.name, [...(byName.get(plot.name) ?? []), plot]),
+  );
+
+  byName.forEach((group) => {
+    if (group.length === 1) {
+      labels.set(group[0].nodeUri, group[0].name);
+      return;
+    }
+    // The node path below `#ids:occurrence`, one entry per segment.
+    const segments = group.map((plot) => {
+      const fragment = plot.nodeUri.split('#')[1] ?? plot.nodeUri;
+      return fragment.split('/').slice(1);
+    });
+    const longest = Math.max(...segments.map((path) => path.length));
+    const suffixesOf = (depth: number) =>
+      segments.map((path) => path.slice(-depth).join('/'));
+    let depth = 1;
+    while (
+      depth < longest &&
+      new Set(suffixesOf(depth)).size !== group.length
+    ) {
+      depth++;
+    }
+    const suffixes = suffixesOf(depth);
+    const distinct = new Set(suffixes).size === group.length;
+    group.forEach((plot, index) =>
+      labels.set(
+        plot.nodeUri,
+        distinct ? `${suffixes[index]}_${plot.labelUri}` : plot.nodeUri,
+      ),
+    );
+  });
+  return labels;
+};

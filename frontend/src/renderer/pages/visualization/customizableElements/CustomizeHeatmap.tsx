@@ -21,7 +21,7 @@ export const CustomizeHeatmap = ({
     setCustomizedDataGrid({
       ...customizedDataGrid,
       plot: customizedDataGrid.plot.map((plot) =>
-        applyToAllHeatmap || plot.name === selectedPlot.name
+        applyToAllHeatmap || plot.nodeUri === selectedPlot.nodeUri
           ? {
               ...plot,
               customPreferences: {

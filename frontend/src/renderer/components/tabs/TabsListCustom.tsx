@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   ActionIcon,
+  ColorSwatch,
   FloatingIndicator,
   Group,
   ScrollArea,
@@ -10,8 +11,18 @@ import {
 import classes from './TabsListCustom.module.css';
 import { IconArrowLeft, IconCheck, IconX } from '@tabler/icons-react';
 
+export interface TabItem {
+  /** Tab value, unique in the list. */
+  value: string;
+  label: string;
+  /** Colour of the curve the tab customizes, shown as a dot. */
+  color?: string;
+  /** Shown on hover, e.g. the full node URI. */
+  title?: string;
+}
+
 interface TabsListCustomProps {
-  data: string[];
+  data: TabItem[];
   value: string | null;
   usedFor: 'metadatas' | 'personalization';
   closeWithoutSaving: () => void;
@@ -95,16 +106,25 @@ export const TabsListCustom = ({
           }}
         >
           {data.length > 0 &&
-            data.map((item, index) => (
-              <Tabs.Tab
-                key={index}
-                value={item}
-                ref={setControlRef(item)}
-                className={classes.tab}
-                data-testid={`customization-tab-${item}`}
+            data.map((item) => (
+              <Tooltip
+                key={item.value}
+                label={item.title}
+                disabled={!item.title}
+                openDelay={500}
               >
-                {item}
-              </Tabs.Tab>
+                <Tabs.Tab
+                  value={item.value}
+                  ref={setControlRef(item.value)}
+                  className={classes.tab}
+                  data-testid={`customization-tab-${item.label}`}
+                  leftSection={
+                    item.color && <ColorSwatch color={item.color} size={10} />
+                  }
+                >
+                  {item.label}
+                </Tabs.Tab>
+              </Tooltip>
             ))}
 
           <FloatingIndicator

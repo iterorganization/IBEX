@@ -11,7 +11,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SimplePlotly, TabsListCustom } from '../../components';
 import {
   ArraySummaryResponse,
@@ -26,6 +26,7 @@ import {
   fetchArraySummary,
   fetchDataPlot,
   getUrisToInterpolate,
+  plotTabLabels,
 } from '../../utils';
 import { lineVector } from '../../derive/vectors';
 
@@ -273,11 +274,11 @@ export const VisualizationMetaData = () => {
       );
       if (data) {
         setDataGridLayout(data);
-        const selectedName = data.plot.some((item) => item.name === tabsValue)
+        const selectedUri = data.plot.some((item) => item.nodeUri === tabsValue)
           ? tabsValue
-          : data.plot[0]?.name || null;
-        setTabsValue(selectedName);
-        const findPlot = data.plot.find((item) => item.name === selectedName);
+          : data.plot[0]?.nodeUri || null;
+        setTabsValue(selectedUri);
+        const findPlot = data.plot.find((item) => item.nodeUri === selectedUri);
         if (findPlot) {
           setItemDataGrid({
             ...data,
@@ -320,7 +321,7 @@ export const VisualizationMetaData = () => {
       setTabsValue(value);
       if (dataGridLayout) {
         const selectedPlot = dataGridLayout.plot.find(
-          (item) => item.name === value,
+          (item) => item.nodeUri === value,
         );
         if (selectedPlot) {
           setItemDataGrid({
@@ -333,24 +334,30 @@ export const VisualizationMetaData = () => {
     [dataGridLayout, setItemDataGrid],
   );
 
+  // One tab per trace, keyed by its node: two traces can share a name.
+  const tabItems = useMemo(() => {
+    const plots = (dataGridLayout?.plot ?? []).filter((plot) => plot?.name);
+    const labels = plotTabLabels(plots);
+    return plots.map((plot) => ({
+      value: plot.nodeUri,
+      label: labels.get(plot.nodeUri),
+      color: plot.line?.color,
+      title: plot.nodeUri,
+    }));
+  }, [dataGridLayout?.plot]);
+
   return (
     <Container fluid pb={10}>
       <Tabs value={tabsValue} onChange={(value) => handleSelectedTab(value)}>
         <TabsListCustom
-          data={
-            dataGridLayout
-              ? dataGridLayout.plot
-                  .map((item) => item?.name || '')
-                  .filter((item) => item)
-              : []
-          }
+          data={tabItems}
           value={tabsValue}
           usedFor="metadatas"
           closeWithoutSaving={closeWithoutSaving}
         />
 
         {dataGridLayout &&
-          dataGridLayout.plot.map((item: DataPlotly, index) => {
+          dataGridLayout.plot.map((item: DataPlotly) => {
             // force to have only one axis in metadata plot
             const itemWithoutY2axis = structuredClone(item);
             if (item.yaxis != '') {
@@ -359,8 +366,8 @@ export const VisualizationMetaData = () => {
 
             return (
               item?.name && (
-                <Tabs.Panel key={index} value={item.name}>
-                  {tabsValue === item.name && (
+                <Tabs.Panel key={item.nodeUri} value={item.nodeUri}>
+                  {tabsValue === item.nodeUri && (
                     <Grid type="container" ref={containerRef}>
                       <Grid.Col span={5}>
                         <SimplePlotly

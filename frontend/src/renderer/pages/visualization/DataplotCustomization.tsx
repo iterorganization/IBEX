@@ -11,7 +11,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SimplePlotly, Heatmap2D, TabsListCustom } from '../../components';
 import {
   Configuration,
@@ -33,7 +33,7 @@ import {
   CustomizeGeometry,
 } from './customizableElements';
 import { IconGeometry, IconLink } from '@tabler/icons-react';
-import { cloneGridStructure, initPlotColors } from '../../utils';
+import { cloneGridStructure, initPlotColors, plotTabLabels } from '../../utils';
 import { keysOf, pin, unpin } from '../../stores/payloadRegistry';
 
 export const DataplotCustomization = () => {
@@ -70,7 +70,7 @@ export const DataplotCustomization = () => {
       } as DataGridPlot;
       setDataGridLayout(updatedDataGridLayout);
       setSelectedPlot(
-        updatedDataGridLayout.plot.find((data) => data.name === tabsValue),
+        updatedDataGridLayout.plot.find((data) => data.nodeUri === tabsValue),
       );
     }
   }, [customizedDataGrid]);
@@ -90,7 +90,7 @@ export const DataplotCustomization = () => {
       if (data) {
         setDataGridLayout(data);
         setCustomizedDataGrid(data);
-        setTabsValue(data.plot[0]?.name || null);
+        setTabsValue(data.plot[0]?.nodeUri || null);
       }
     }
   }, []);
@@ -252,7 +252,9 @@ export const DataplotCustomization = () => {
     (value: string | null) => {
       setTabsValue(value);
       if (dataGridLayout) {
-        const plotTab = dataGridLayout.plot.find((item) => item.name === value);
+        const plotTab = dataGridLayout.plot.find(
+          (item) => item.nodeUri === value,
+        );
         if (plotTab) {
           setSelectedPlot(plotTab);
         }
@@ -261,17 +263,23 @@ export const DataplotCustomization = () => {
     [dataGridLayout, setCustomizedDataGrid],
   );
 
+  // One tab per trace, keyed by its node: two traces can share a name.
+  const tabItems = useMemo(() => {
+    const plots = (customizedDataGrid?.plot ?? []).filter((plot) => plot?.name);
+    const labels = plotTabLabels(plots);
+    return plots.map((plot) => ({
+      value: plot.nodeUri,
+      label: labels.get(plot.nodeUri),
+      color: plot.line?.color,
+      title: plot.nodeUri,
+    }));
+  }, [customizedDataGrid?.plot]);
+
   return (
     <Container fluid pb={10}>
       <Tabs value={tabsValue} onChange={(value) => handleSelectedTab(value)}>
         <TabsListCustom
-          data={
-            dataGridLayout
-              ? dataGridLayout.plot
-                  .map((item) => item?.name || '')
-                  .filter((item) => item)
-              : []
-          }
+          data={tabItems}
           value={tabsValue}
           usedFor="personalization"
           closeWithoutSaving={closeWithoutSaving}
@@ -279,11 +287,11 @@ export const DataplotCustomization = () => {
         />
 
         {dataGridLayout &&
-          dataGridLayout.plot.map((item: DataPlotly, index) => {
+          dataGridLayout.plot.map((item: DataPlotly) => {
             return (
               item?.name && (
-                <Tabs.Panel key={index} value={item.name}>
-                  {tabsValue === item.name && (
+                <Tabs.Panel key={item.nodeUri} value={item.nodeUri}>
+                  {tabsValue === item.nodeUri && (
                     <Grid type="container" ref={customContainerRef}>
                       <Grid.Col span={6}>
                         {selectedAccordion === 'Heatmap' ||
@@ -293,7 +301,9 @@ export const DataplotCustomization = () => {
                             width={WIDTH_PLOT}
                             height={HEIGHT_PLOT}
                             plotIndex={customizedDataGrid.plot
-                              .findIndex((data) => data.name === item.name)
+                              .findIndex(
+                                (data) => data.nodeUri === item.nodeUri,
+                              )
                               .toString()}
                             showSliders={false}
                             forcedPlotType={
