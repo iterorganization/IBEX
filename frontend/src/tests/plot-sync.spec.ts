@@ -8,6 +8,8 @@ import {
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
+  openTreeFolder,
+  openUriAccordion,
 } from './utils';
 import {
   getDriver,
@@ -206,18 +208,10 @@ async function buildCanvas() {
   await waitForElementToDisappear(uriModal, 60000);
 
   await ensureCssElementIsDisplayed(`uriAccordion-${dataPath}`, 600, 100);
-  await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
-  await findCssElementAndClickIt(
-    `folder-${dataPath}#${EQUILIBRIUM}/`,
-    200,
-    100,
-  );
-  await findCssElementAndClickIt(`folder-${dataPath}#${TIME_SLICE}/`, 200, 100);
-  await findCssElementAndClickIt(
-    `folder-${dataPath}#${PROFILES_2D}/`,
-    200,
-    100,
-  );
+  await openUriAccordion(dataPath);
+  await openTreeFolder(`folder-${dataPath}#${EQUILIBRIUM}/`);
+  await openTreeFolder(`folder-${dataPath}#${TIME_SLICE}/`);
+  await openTreeFolder(`folder-${dataPath}#${PROFILES_2D}/`);
 
   firstGridId = await addGrid(dataPath, `${PROFILES_2D}/psi`, 1);
   secondGridId = await addGrid(dataPath, `${PROFILES_2D}/b_field_r`, 2);

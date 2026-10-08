@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { TreeLibrariesAccordion } from '../../components';
 import { useIbexStore } from '../../stores';
 import {
@@ -32,26 +32,50 @@ import {
   fetchDataIds,
   fetchFindPaths,
   fetchNodeInfos,
+  findTreeNode,
   handleExistingPlot,
   handleNewPlot,
+  mapTreeNode,
 } from '../../utils';
 
 interface VisualizationTreeProps {
-  height: string;
   extended?: boolean;
   handleExtended?: () => void;
 }
+
+const FILL_COLUMN: CSSProperties = { display: 'flex', flexDirection: 'column' };
+/** Takes the height left in a column; `minHeight: 0` lets it shrink below its content, which then scrolls. */
+const GROW: CSSProperties = { flex: 1, minHeight: 0 };
+const FILL_REST: CSSProperties = { ...FILL_COLUMN, ...GROW };
 
 interface FormSearchNode {
   node: string;
 }
 
+const NO_OPEN_URIS: string[] = [];
+
+/** How long typing must pause before the search runs. */
+const LIVE_SEARCH_DELAY_MS = 300;
+
+/** Whether the input is a complete regular expression, not one half typed. */
+const isValidRegex = (value: string) => {
+  try {
+    new RegExp(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const VisualizationTree = ({
-  height,
   extended,
   handleExtended,
 }: VisualizationTreeProps) => {
   const { active } = useIbexStore();
+  const editingGridId = useIbexStore((state) => state.editingGridId);
+  const openUris =
+    useIbexStore((state) => state.treeView[state.active?.name]?.openUris) ??
+    NO_OPEN_URIS;
 
   /**
    * Writes a node tree onto the active configuration as it is *now*.
@@ -72,40 +96,45 @@ export const VisualizationTree = ({
     updatedConfiguration({ ...latest, customDataTree });
   };
 
+  /** The data entry opened last: the one a search not over all of them reads. */
   const [uriSelected, setUriSelected] = useState<URIData | null>();
   const [showErrorBars, setShowErrorBars] = useState<boolean>(false);
-  const [nodeSelected, setNodeSelected] = useState<string | null>();
   const [searchNodeIsLoading, setSearchNodeIsLoading] =
     useState<boolean>(false);
-  const uriSelectedRef = useRef(uriSelected);
+  const [searchAllUris, setSearchAllUris] = useState<boolean>(false);
+  /** A search's results per data entry, or `null` when not searching. */
+  const [searchResults, setSearchResults] = useState<Record<
+    string,
+    CustomTreeNodeData[]
+  > | null>(null);
+  /** The checked nodes when the search started, to tell those it added. */
+  const checkedBeforeSearch = useRef<URITreeNodeData[] | null>(null);
+  /** Numbers the searches, so only the last one started shows its results. */
+  const searchSeq = useRef(0);
+  /** The search waiting for the user to pause typing. */
+  const liveSearchTimer = useRef<number | undefined>(undefined);
+  /** Runs a live search with the switches as they are when it fires. */
+  const runLiveSearch = useRef<() => void>(() => undefined);
 
-  const heightFormatted = `calc(${height} - 155px)`;
+  const cancelLiveSearch = () => {
+    window.clearTimeout(liveSearchTimer.current);
+    liveSearchTimer.current = undefined;
+  };
 
   const formSearchNode = useForm<FormSearchNode>({
     initialValues: {
       node: '',
     },
 
+    // The search refines while typing, once there are 2 characters.
     onValuesChange: (values) => {
-      //If form.values.node is empty, reset active.customDataTree onchange input
-
-      if (values.node === '') {
-        writeCustomDataTree(
-          active,
-          active.customDataTree.map((item) => {
-            if (item.uri === uriSelected.uri) {
-              return {
-                ...item,
-                data: item.data.map((node) => ({
-                  ...node,
-                  children: [] as CustomTreeNodeData[],
-                  seeErrorBars: showErrorBars,
-                })),
-                expendAll: false,
-              };
-            }
-            return item;
-          }),
+      cancelLiveSearch();
+      if (values.node.length < 2) {
+        clearSearch();
+      } else {
+        liveSearchTimer.current = window.setTimeout(
+          () => runLiveSearch.current(),
+          LIVE_SEARCH_DELAY_MS,
         );
       }
     },
@@ -117,116 +146,125 @@ export const VisualizationTree = ({
   });
 
   /**
-   * Handle node update using full URI
-   * @param fullUri The full URI for fetching or updating node data
+   * Builds tree nodes for the children a node info lists.
+   * @param nodeInfoschildren
+   * @param nodeUri the parent's node value
+   * @param uriLabel the name of the data entry the tree browses
+   */
+  const fetchChildrenNodeInfos = (
+    nodeInfoschildren: NodeInfoChildrenResponse[],
+    nodeUri: string,
+    uriLabel: string,
+    seeErrorBars: boolean,
+  ): CustomTreeNodeData[] =>
+    nodeInfoschildren.map((child: NodeInfoChildrenResponse) => {
+      const newValue =
+        child.type === NodeInfoTypeEnum.ARRAY
+          ? `${nodeUri}${child.name}[:]/`
+          : child.type === NodeInfoTypeEnum.STRUCTURE
+            ? `${nodeUri}${child.name}/`
+            : `${nodeUri}${child.name}`;
+      return {
+        label: child.name,
+        value: newValue,
+        seeErrorBars,
+        type: child.type,
+        children: [] as CustomTreeNodeData[],
+        uriLabel,
+        is_geometry_node: child.is_geometry_node,
+      };
+    });
+
+  /**
+   * Loads the children of a node, unless they are loaded already.
+   *
+   * The children are fetched first and then written onto the tree as it is
+   * once they arrive, so two folders opened at the same time - in one data
+   * entry or two - both keep what they loaded.
+   *
+   * @returns whether the node has children
    */
   async function fetchNodeTree(
     nodeUri: string,
-    showErrorBars: boolean,
-    searchNode: boolean,
-  ) {
-    if (!nodeUri) return;
-    if (searchNode) return;
+    seeErrorBars: boolean,
+  ): Promise<boolean> {
+    if (!nodeUri) return false;
 
     const { active } = useIbexStore.getState();
+    const dataTree = active?.customDataTree.find(
+      (tree) => tree.uri && nodeUri.startsWith(tree.uri + '#'),
+    );
+    const node = dataTree && findTreeNode(dataTree.data, nodeUri);
+    if (!node) return false;
+    if (node.children?.length > 0 && node.seeErrorBars === seeErrorBars) {
+      return true;
+    }
 
     try {
       /**
-       * Update the children of the node
-       * @param nodes
-       * @param nodeValueToUpdate
-       * @returns
+       * Replace [:] and remove the last /
        */
-      const updateNodeChildren = async (
-        dataTree: CustomTreeNodeData[],
-        targetUri: string,
-      ): Promise<CustomTreeNodeData[]> => {
-        if (dataTree.length === 0) {
-          const nodeInfos: NodeInfoResponse = await fetchNodeInfos(
-            targetUri.slice(0, -1),
-            showErrorBars,
-          );
-          const nodeInfoschildren = nodeInfos.children || [];
-
-          return await fetchChildrenNodeInfos(nodeInfoschildren, nodeUri);
-        }
-
-        return Promise.all(
-          dataTree.map(async (node) => {
-            if (node.value === targetUri) {
-              if (
-                node.children.length === 0 ||
-                node.seeErrorBars !== showErrorBars
-              ) {
-                /**
-                 * Replace [:] and remove the last /
-                 */
-                targetUri = targetUri.replace(/\[:\]/, '').slice(0, -1);
-
-                const nodeInfos: NodeInfoResponse = await fetchNodeInfos(
-                  targetUri,
-                  showErrorBars,
-                );
-                const nodeInfoschildren = nodeInfos.children || [];
-
-                const newChildren = await fetchChildrenNodeInfos(
-                  nodeInfoschildren,
-                  nodeUri,
-                );
-
-                return {
-                  ...node,
-                  seeErrorBars: showErrorBars,
-                  shape: nodeInfos.shape,
-                  children: newChildren,
-                };
-              }
-            }
-
-            if (node.children.length > 0) {
-              const updatedChildren = await updateNodeChildren(
-                node.children,
-                targetUri,
-              );
-              return {
-                ...node,
-                children: updatedChildren,
-              };
-            }
-
-            return node;
-          }),
-        );
-      };
-
-      const updatedCustomDataTree: CustomTreeData[] = await Promise.all(
-        active.customDataTree.map(async (dataTree: CustomTreeData) => {
-          if (dataTree.uri && nodeUri.startsWith(dataTree.uri)) {
-            const updatedData = await updateNodeChildren(
-              dataTree.data,
-              nodeUri,
-            );
-            return {
-              ...dataTree,
-              data: updatedData,
-            };
-          }
-          return dataTree;
-        }),
+      const nodeInfos: NodeInfoResponse = await fetchNodeInfos(
+        nodeUri.replace(/\[:\]/, '').slice(0, -1),
+        seeErrorBars,
+      );
+      const children = fetchChildrenNodeInfos(
+        nodeInfos.children || [],
+        nodeUri,
+        dataTree.name,
+        seeErrorBars,
       );
 
-      writeCustomDataTree(active, updatedCustomDataTree);
+      const { active: latest } = useIbexStore.getState();
+      if (!latest || latest.name !== active.name) return false;
+      writeCustomDataTree(
+        latest,
+        latest.customDataTree.map((tree) =>
+          tree.uri !== dataTree.uri
+            ? tree
+            : {
+                ...tree,
+                data: mapTreeNode(tree.data, nodeUri, (current) => ({
+                  ...current,
+                  seeErrorBars,
+                  // Keep what was loaded under the children already there.
+                  children: children.map((child) => {
+                    const old = (
+                      current.children as CustomTreeNodeData[]
+                    )?.find((c) => c.value === child.value);
+                    return old ? { ...child, children: old.children } : child;
+                  }),
+                })),
+              },
+        ),
+      );
+      return children.length > 0;
     } catch (error) {
       console.error(error);
+      return false;
     }
   }
 
+  /** The root lists being fetched, so a data entry is listed only once. */
+  const pendingIDSData = useRef(new Map<string, Promise<void>>());
+
   /**
-   * Fetch IDS data
-   * @param uri
+   * Lists the IDSs of a data entry, unless its tree is loaded already.
+   *
+   * It used to list them again each time the entry was opened, replacing the
+   * whole tree with roots without children - while the nodes stayed marked
+   * expanded, so they showed open folders over nothing.
    */
-  const fetchIDSData = useCallback(
-    async (dataUri: URIData) => {
+  const fetchIDSData = (dataUri: URIData): Promise<void> => {
+    const loaded = useIbexStore
+      .getState()
+      .active?.customDataTree.find((item) => item.uri === dataUri.uri);
+    if (!loaded || loaded.data.length > 0) return Promise.resolve();
+
+    const pending = pendingIDSData.current.get(dataUri.uri);
+    if (pending) return pending;
+
+    const load = (async () => {
       try {
         const listIdsResult = await fetchDataIds(dataUri.uri);
         const newTree: CustomTreeNodeData[] = [];
@@ -252,134 +290,188 @@ export const VisualizationTree = ({
         if (!latest) return;
         writeCustomDataTree(
           latest,
-          latest.customDataTree.map((item) => {
-            if (item.uri === dataUri.uri) {
-              return {
-                ...item,
-                data: newTree,
-              };
-            }
-            return item;
-          }),
+          latest.customDataTree.map((item) =>
+            item.uri === dataUri.uri && item.data.length === 0
+              ? { ...item, data: newTree }
+              : item,
+          ),
         );
       } catch (error) {
         console.error(error);
+      } finally {
+        pendingIDSData.current.delete(dataUri.uri);
       }
-    },
-    [active],
-  );
+    })();
+    pendingIDSData.current.set(dataUri.uri, load);
+    return load;
+  };
+
+  // Whatever opened a data entry - a click, a search, an edited plot, a
+  // configuration switched back to - its roots must be there.
+  useEffect(() => {
+    for (const uri of openUris) {
+      const dataUri = active?.dataURI.find((item) => item.uri === uri);
+      if (dataUri) fetchIDSData(dataUri);
+    }
+  }, [openUris, active?.name]);
 
   /**
-   * Fetch search node
-   * @param value
+   * Loads the folders down to each node, parents first, in the data entry
+   * each one belongs to.
+   * @param nodeUris full node URIs, `<uri>#<ids>:<occurrence>/<path>`
+   * @returns the folders that ended up with children, per data entry
    */
-  const fetchSearchNode = async (
-    dataUri: URIData,
-    value: string,
-    showErrorBars: boolean,
-  ) => {
-    if (!value) return;
+  const loadNodeFolders = async (
+    nodeUris: string[],
+  ): Promise<Map<string, string[]>> => {
+    const loaded = new Map<string, string[]>();
+    const { active } = useIbexStore.getState();
+    if (!active) return loaded;
 
-    try {
-      const searchResults: SearchNodeResponse = await fetchFindPaths(
-        dataUri.uri,
-        value,
-        showErrorBars,
-      );
+    // Folder chain of every node, parents first, per data entry.
+    const foldersByUri = new Map<string, string[]>();
+    for (const nodeUri of nodeUris) {
+      const [uri, path] = nodeUri.split('#');
+      if (!uri || !path) continue;
+      const segments = path.replace(/\[\d+\]/g, '[:]').split(/(?<=\/)/);
+      segments.pop();
+      const folders = foldersByUri.get(uri) ?? [];
+      let value = uri + '#';
+      for (const segment of segments) {
+        value += segment;
+        if (!folders.includes(value)) folders.push(value);
+      }
+      foldersByUri.set(uri, folders);
+    }
 
-      const customDataTreeUri = active.customDataTree.find(
-        (item) => item.uri === dataUri.uri,
-      ).data;
+    await Promise.all(
+      [...foldersByUri].map(async ([uri, folders]) => {
+        const dataUri = active.dataURI.find((item) => item.uri === uri);
+        if (!dataUri) return;
+        await fetchIDSData(dataUri);
+        const opened: string[] = [];
+        for (const folder of folders) {
+          if (await fetchNodeTree(folder, showErrorBars)) opened.push(folder);
+        }
+        loaded.set(uri, opened);
+      }),
+    );
+    return loaded;
+  };
 
-      const dataTree = buildTree(customDataTreeUri, dataUri, searchResults);
-
-      writeCustomDataTree(
-        active,
-        active.customDataTree.map((item) => {
-          if (item.uri === dataUri.uri) {
-            return {
-              ...item,
-              data: dataTree,
-              expendAll: true,
-            };
-          }
-          return item;
-        }),
-      );
-    } catch (error) {
-      console.error(error);
+  /**
+   * Opens the folders down to each node, loading them on the way, in the data
+   * entry each one belongs to. Nothing is ever collapsed.
+   * @param nodeUris full node URIs, `<uri>#<ids>:<occurrence>/<path>`
+   */
+  const revealNodes = async (nodeUris: string[]) => {
+    const loaded = await loadNodeFolders(nodeUris);
+    const { active, revealTreeNodes } = useIbexStore.getState();
+    if (!active) return;
+    for (const [uri, opened] of loaded) {
+      revealTreeNodes(active.name, uri, opened);
     }
   };
 
-  const getCurrentSelectedURI = useCallback(() => {
-    return uriSelectedRef.current?.uri;
-  }, [uriSelectedRef.current]);
+  /**
+   * Checks or unchecks a node in every data entry that has it, the one clicked
+   * included, so the same signal can be compared across entries in one click.
+   *
+   * Each node is queued as a click of its own: a new grid is built from the
+   * first node only, and the next ones join it as the grid being edited.
+   * @param nodeValue the node clicked, `<uri>#<path>`
+   * @param check whether to check it, or else uncheck it, everywhere
+   */
+  const handleCheckInAllUris = useCallback(
+    async (nodeValue: string, check: boolean) => {
+      const path = nodeValue.split('#')[1];
+      const { active } = useIbexStore.getState();
+      if (!path || !active) return;
+      const values = [
+        nodeValue,
+        ...active.dataURI
+          .map((dataUri) => `${dataUri.uri}#${path}`)
+          .filter((value) => value !== nodeValue),
+      ];
+      const checkedNow = () =>
+        useIbexStore.getState().active?.checkedNodeURI ?? [];
+
+      if (!check) {
+        for (const value of values) {
+          const nodes = checkedNow().filter(
+            (node) =>
+              node.uri !== value &&
+              node.uri !== value + '_error_upper' &&
+              node.uri !== value + '_error_lower',
+          );
+          if (nodes.length < checkedNow().length) getNodesChecked(nodes);
+        }
+        return;
+      }
+
+      // Only where the node exists: an entry without it opens nothing.
+      const loaded = await loadNodeFolders(values);
+      const { active: latest, revealTreeNodes } = useIbexStore.getState();
+      if (!latest || latest.name !== active.name) return;
+      for (const value of values) {
+        const uri = value.split('#')[0];
+        const dataTree = latest.customDataTree.find((tree) => tree.uri === uri);
+        const node = dataTree && findTreeNode(dataTree.data, value);
+        if (!node) continue;
+        revealTreeNodes(latest.name, uri, loaded.get(uri) ?? []);
+        if (checkedNow().some((checked) => checked.uri === value)) continue;
+        getNodesChecked([
+          ...checkedNow(),
+          {
+            name: dataTree.name,
+            uri: value,
+            type: node.type,
+            is_geometry_node: node.is_geometry_node,
+          },
+        ]);
+      }
+    },
+    [showErrorBars],
+  );
+
+  // Editing a plot shows every signal it uses, whichever data entry it is in.
+  useEffect(() => {
+    if (!editingGridId) return;
+    const grid = useIbexStore
+      .getState()
+      .active?.dataPlot.find((plot) => plot.i === editingGridId);
+    if (!grid?.plot.length) return;
+    revealNodes(grid.plot.map((plot) => plot.nodeUri));
+  }, [editingGridId]);
 
   /**
    * Handle accordion change
-   * @param value
-   * @returns
+   * @param values the data entries now open
    */
-  async function handleAccordionChange(value: string) {
-    if (value) {
-      const selectedURIData = active.dataURI.find((item) => item.uri === value);
+  function handleAccordionChange(values: string[]) {
+    if (!active) return;
+    const opened = values.find((uri) => !openUris.includes(uri));
+    useIbexStore.getState().setOpenUris(active.name, values);
 
-      if (selectedURIData) {
-        setUriSelected(selectedURIData);
-        await fetchIDSData(selectedURIData);
+    if (opened) {
+      setUriSelected(active.dataURI.find((item) => item.uri === opened));
+      if (searchResults && !searchAllUris && !(opened in searchResults)) {
+        searchEntry(opened);
       }
-    } else {
-      setUriSelected(null);
+    } else if (!values.includes(uriSelected?.uri)) {
+      const last = values[values.length - 1];
+      setUriSelected(active.dataURI.find((item) => item.uri === last) ?? null);
     }
   }
 
   /**
    * Fetch children node infos
    * @param nodeUri
-   * @returns
+   * @returns whether the node has children
    */
-  async function handleSelectChildren(nodeUri: string) {
-    await fetchNodeTree(
-      nodeUri,
-      showErrorBars,
-      formSearchNode.values.node !== '',
-    );
-    setNodeSelected(nodeUri);
+  function handleSelectChildren(nodeUri: string) {
+    return fetchNodeTree(nodeUri, showErrorBars);
   }
-
-  /**
-   * Fetch children node infos
-   * @param nodeInfoschildren
-   * @param nodeUri
-   */
-  const fetchChildrenNodeInfos = async (
-    nodeInfoschildren: NodeInfoChildrenResponse[],
-    nodeUri: string,
-  ): Promise<CustomTreeNodeData[]> => {
-    if (nodeInfoschildren.length === 0) return;
-
-    const newChildren: CustomTreeNodeData[] = nodeInfoschildren.map(
-      (child: NodeInfoChildrenResponse) => {
-        const newValue =
-          child.type === NodeInfoTypeEnum.ARRAY
-            ? `${nodeUri}${child.name}[:]/`
-            : child.type === NodeInfoTypeEnum.STRUCTURE
-              ? `${nodeUri}${child.name}/`
-              : `${nodeUri}${child.name}`;
-        return {
-          label: child.name,
-          value: newValue,
-          seeErrorBars: showErrorBars,
-          type: child.type,
-          children: [] as CustomTreeNodeData[],
-          uriLabel: uriSelectedRef.current.name,
-          is_geometry_node: child.is_geometry_node,
-        };
-      },
-    );
-
-    return newChildren;
-  };
 
   // Update recursively each node
   async function updateTreeNode(
@@ -425,10 +517,15 @@ export const VisualizationTree = ({
       cleanedNodeValue,
       seeErrorBars,
     );
-    const childrenInfos = nodeInfos.children;
+    const childrenInfos = nodeInfos.children || [];
 
     // Fetch updated children to include/remove error bands
-    const newChildren = await fetchChildrenNodeInfos(childrenInfos, node.value);
+    const newChildren = fetchChildrenNodeInfos(
+      childrenInfos,
+      node.value,
+      node.uriLabel,
+      seeErrorBars,
+    );
 
     // Add related childrens from config to each new children
     for (const newChild of newChildren) {
@@ -447,54 +544,161 @@ export const VisualizationTree = ({
   /**
    * Handles see error bars
    */
-  const handleSeeErrorBars = useCallback(
-    async (value: boolean) => {
+  const handleSeeErrorBars = async (value: boolean) => {
+    setShowErrorBars(value);
+    if (searchResults) {
+      handleSearchNode(value, searchAllUris);
+    } else {
+      // Update customDataTree with see errors param
       const updatedCustomDataTree: CustomTreeData[] = structuredClone(
         active.customDataTree,
       );
-
-      setShowErrorBars(value);
-      if (formSearchNode.values.node) {
-        handleSearchNode(value);
-      } else {
-        // Update customDataTree with see errors param
-        await updateTreeNode(updatedCustomDataTree, value);
-        writeCustomDataTree(active, updatedCustomDataTree);
-      }
-    },
-    [active, uriSelected, nodeSelected],
-  );
-
-  useEffect(() => {
-    uriSelectedRef.current = uriSelected;
-  }, [uriSelected]);
+      await updateTreeNode(updatedCustomDataTree, value);
+      writeCustomDataTree(active, updatedCustomDataTree);
+    }
+  };
 
   /**
-   * Handle search node
+   * Searches the node name in the data entry opened last, or in all of them.
+   *
+   * The results are shown in place of the browsed trees, which are left as
+   * they are: clearing the search brings them back, with the nodes checked
+   * meanwhile revealed in them.
+   *
+   * A live search - one run while typing - skips a half-typed regular
+   * expression and stays silent when no data entry is selected.
    */
-  const handleSearchNode = useCallback(
-    async (showErrors: boolean) => {
-      if (uriSelected) {
-        setSearchNodeIsLoading(true);
+  const handleSearchNode = async (
+    showErrors: boolean,
+    allUris: boolean,
+    live = false,
+  ) => {
+    const { active, revealTreeNodes } = useIbexStore.getState();
+    if (!active) return;
+    const value = formSearchNode.getValues().node;
+    if (!value) return;
+    if (live && !isValidRegex(value)) return;
 
-        await fetchSearchNode(
-          uriSelected,
-          formSearchNode.values.node,
+    const targets = allUris ? active.dataURI : uriSelected ? [uriSelected] : [];
+    if (targets.length === 0) {
+      if (live) return;
+      console.error('Accordion not selected');
+      showNotification({
+        title: 'Search node',
+        message: 'Select an uri to search',
+        color: 'red',
+      });
+      return;
+    }
+
+    const seq = ++searchSeq.current;
+    setSearchNodeIsLoading(true);
+    if (checkedBeforeSearch.current === null) {
+      checkedBeforeSearch.current = active.checkedNodeURI ?? [];
+    }
+
+    const results = await findInEntries(targets, value, showErrors);
+
+    // A later search, or clearing the input, supersedes this one.
+    if (seq !== searchSeq.current) return;
+    if (formSearchNode.getValues().node === value) {
+      setSearchResults(results);
+      for (const [uri, nodes] of Object.entries(results)) {
+        if (nodes.length > 0) revealTreeNodes(active.name, uri, []);
+      }
+    }
+    setSearchNodeIsLoading(false);
+  };
+
+  /**
+   * The search results per data entry; an entry whose search failed has none.
+   * @param targets the data entries to search
+   * @param value the node name searched (regex)
+   * @param showErrors whether to list the error bar nodes
+   */
+  const findInEntries = async (
+    targets: URIData[],
+    value: string,
+    showErrors: boolean,
+  ) => {
+    // One data entry failing must not hide what the others found.
+    const settled = await Promise.allSettled(
+      targets.map(async (dataUri) => {
+        const searchResults: SearchNodeResponse = await fetchFindPaths(
+          dataUri.uri,
+          value,
           showErrors,
         );
+        const roots =
+          useIbexStore
+            .getState()
+            .active?.customDataTree.find((item) => item.uri === dataUri.uri)
+            ?.data ?? [];
+        return [dataUri.uri, buildTree(roots, dataUri, searchResults)] as const;
+      }),
+    );
 
-        setSearchNodeIsLoading(false);
+    const results: Record<string, CustomTreeNodeData[]> = {};
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        results[result.value[0]] = result.value[1];
       } else {
-        console.error('Accordion not selected');
-        showNotification({
-          title: 'Search node',
-          message: 'Select an uri to search',
-          color: 'red',
-        });
+        console.error(result.reason);
       }
-    },
-    [active, formSearchNode.values.node],
-  );
+    }
+    return results;
+  };
+
+  /**
+   * Runs the search shown in one more data entry, adding its results to the
+   * others': opening an entry while searching the selected one searches it
+   * too, rather than showing it as if nothing matched there.
+   * @param uri the data entry to search
+   */
+  const searchEntry = async (uri: string) => {
+    const { active, revealTreeNodes } = useIbexStore.getState();
+    const dataUri = active?.dataURI.find((item) => item.uri === uri);
+    const value = formSearchNode.getValues().node;
+    if (!dataUri || !value) return;
+
+    // Not a new search: only a new one, or clearing the input, supersedes it.
+    const seq = searchSeq.current;
+    setSearchNodeIsLoading(true);
+    const results = await findInEntries([dataUri], value, showErrorBars);
+    if (seq !== searchSeq.current) return;
+    setSearchResults((current) => current && { ...current, ...results });
+    if (results[uri]?.length) revealTreeNodes(active.name, uri, []);
+    setSearchNodeIsLoading(false);
+  };
+
+  runLiveSearch.current = () =>
+    handleSearchNode(showErrorBars, searchAllUris, true);
+  useEffect(() => () => window.clearTimeout(liveSearchTimer.current), []);
+
+  /** Back to the browsed trees, revealing the nodes checked in the results. */
+  const clearSearch = () => {
+    searchSeq.current++;
+    setSearchNodeIsLoading(false);
+    const before = checkedBeforeSearch.current;
+    checkedBeforeSearch.current = null;
+    setSearchResults(null);
+    if (before === null) return;
+
+    // A node just checked may still be on its way to the configuration.
+    pendingChecks.current.then(() => {
+      const checked = useIbexStore.getState().active?.checkedNodeURI ?? [];
+      const added = checked.filter(
+        (node) =>
+          !before.some((old) => old.uri === node.uri && old.name === node.name),
+      );
+      if (added.length > 0) revealNodes(added.map((node) => node.uri));
+    });
+  };
+
+  const handleSearchAllUris = (value: boolean) => {
+    setSearchAllUris(value);
+    if (searchResults) handleSearchNode(showErrorBars, value);
+  };
 
   /** The check operations still running, so the next one waits its turn. */
   const pendingChecks = useRef<Promise<void>>(Promise.resolve());
@@ -592,12 +796,20 @@ export const VisualizationTree = ({
         // Set savable if successfully checked
         updatedActive.saved = false;
       }
+      // The tree is not this operation's to write: folders loaded while it
+      // plotted - revealing the grid now being edited, say - would be undone.
+      const latest = useIbexStore.getState().active;
+      if (latest?.name === updatedActive.name) {
+        updatedActive.customDataTree = latest.customDataTree;
+      }
       updatedConfiguration(updatedActive);
     }
   };
 
+  // A column filling the panel: the tree takes whatever height the controls
+  // above it leave, instead of the panel's height minus a guess at theirs.
   return (
-    <Container fluid p={0}>
+    <Container fluid p={0} h="100%" style={FILL_COLUMN}>
       <Group justify="end" mr="sm">
         <ActionIcon
           variant="filled"
@@ -622,8 +834,8 @@ export const VisualizationTree = ({
         timingFunction="ease"
       >
         {(styles) => (
-          <div style={styles}>
-            <Container fluid p={0}>
+          <div style={{ ...styles, ...FILL_REST }}>
+            <Container fluid p={0} style={FILL_REST}>
               <Container fluid pt={1}>
                 <Fieldset
                   variant="unstyled"
@@ -631,56 +843,68 @@ export const VisualizationTree = ({
                 >
                   <form
                     onSubmit={formSearchNode.onSubmit(() => {
-                      handleSearchNode(showErrorBars);
+                      cancelLiveSearch();
+                      handleSearchNode(showErrorBars, searchAllUris);
                     })}
                   >
+                    {/* Never disabled while searching: typing refines it. */}
                     <TextInput
                       label="Search node"
-                      placeholder="Enter node name"
+                      placeholder="Type a node name (regex)"
+                      data-testid="search-node-input"
                       {...formSearchNode.getInputProps('node')}
-                      rightSection={
-                        searchNodeIsLoading ? (
-                          <Loader size="xs" />
-                        ) : (
-                          <ActionIcon
-                            variant="filled"
-                            aria-label="Search node"
-                            component="button"
-                            type="submit"
-                          >
-                            <IconSearch
-                              style={{ width: '70%', height: '70%' }}
-                              stroke={1.5}
-                            />
-                          </ActionIcon>
-                        )
+                      leftSection={
+                        searchNodeIsLoading ? <Loader size="xs" /> : undefined
                       }
-                      disabled={searchNodeIsLoading}
+                      rightSection={
+                        <ActionIcon
+                          variant="filled"
+                          aria-label="Search node"
+                          data-testid="search-node-submit"
+                          component="button"
+                          type="submit"
+                        >
+                          <IconSearch
+                            style={{ width: '70%', height: '70%' }}
+                            stroke={1.5}
+                          />
+                        </ActionIcon>
+                      }
                     />
                   </form>
-                  <Switch
-                    my="sm"
-                    label="See errors"
-                    labelPosition="left"
-                    checked={showErrorBars}
-                    onChange={() => handleSeeErrorBars(!showErrorBars)}
-                    styles={{
-                      labelWrapper: {
-                        width: '100%',
-                      },
-                    }}
-                  />
+                  <Group my="sm" justify="space-between" wrap="nowrap">
+                    <Switch
+                      label="All URIs"
+                      labelPosition="left"
+                      checked={searchAllUris}
+                      onChange={() => handleSearchAllUris(!searchAllUris)}
+                      data-testid="search-all-uris"
+                    />
+                    <Switch
+                      label="See errors"
+                      labelPosition="left"
+                      checked={showErrorBars}
+                      onChange={() => handleSeeErrorBars(!showErrorBars)}
+                    />
+                  </Group>
                 </Fieldset>
               </Container>
               <TreeLibrariesAccordion
-                value={uriSelected?.uri}
+                value={openUris}
+                searchResults={searchResults}
+                searchedUri={searchAllUris ? undefined : uriSelected?.uri}
+                handleSearchEntry={(uri) => {
+                  setUriSelected(
+                    active.dataURI.find((item) => item.uri === uri) ?? null,
+                  );
+                  searchEntry(uri);
+                }}
                 customDataTree={active.customDataTree}
-                height={heightFormatted}
                 checkedNodes={active.checkedNodeURI || []}
                 handleAccordionChange={handleAccordionChange}
                 handleSelectChildren={handleSelectChildren}
                 getNodesChecked={getNodesChecked}
-                getCurrentSelectedURI={getCurrentSelectedURI}
+                handleCheckInAllUris={handleCheckInAllUris}
               />
             </Container>
           </div>
@@ -688,7 +912,7 @@ export const VisualizationTree = ({
       </Transition>
 
       {!extended && (
-        <ScrollArea h={heightFormatted}>
+        <ScrollArea style={GROW}>
           <Group justify="center" mt="sm">
             {active?.customDataTree.map((item, index) => {
               return (
@@ -698,7 +922,9 @@ export const VisualizationTree = ({
                   radius="xl"
                   onClick={() => {
                     handleExtended();
-                    handleAccordionChange(item.uri);
+                    if (!openUris.includes(item.uri)) {
+                      handleAccordionChange([...openUris, item.uri]);
+                    }
                   }}
                 >
                   {item.name.charAt(0).toUpperCase()}

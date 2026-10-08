@@ -31,7 +31,6 @@ export const Visualization = () => {
           >
             <Paper shadow="md" h={HEIGHT} radius="md" pt="sm">
               <VisualizationTree
-                height={HEIGHT}
                 extended={opened}
                 handleExtended={toggle}
                 data-testid="visualization-tree"
@@ -63,7 +62,7 @@ export const Visualization = () => {
         </div>
       ) : (
         <Center h={HEIGHT}>
-          <Text>No configurations available</Text>
+          <Text>No configuration loaded</Text>
         </Center>
       )}
     </Container>

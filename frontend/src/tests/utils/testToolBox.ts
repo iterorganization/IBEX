@@ -209,6 +209,68 @@ export async function findCssElementAndClickIt(
   });
 }
 
+/**
+ * Opens a data entry in the node tree, unless it is open already.
+ *
+ * Open entries stay open - switching to another one no longer closes them -
+ * so clicking one blindly could close it instead.
+ */
+export async function openUriAccordion(dataPath: string, timeout = 60000) {
+  const testId = `uriAccordion-${dataPath}`;
+  const item = await getCssElementFromDataTestId(testId, timeout);
+  if ((await item.getAttribute('data-active')) === null) {
+    await findCssElementAndClickIt(testId, timeout / 100, 100);
+  }
+  await getDriver().wait(
+    async () =>
+      (await (
+        await getCssElementFromDataTestId(testId, timeout)
+      ).getAttribute('data-active')) !== null,
+    timeout,
+    `Data entry "${dataPath}" never opened`,
+  );
+}
+
+/**
+ * Closes a data entry in the node tree by clicking its header: the middle of
+ * an open item is its panel, where a click lands on a tree node instead.
+ */
+export async function closeUriAccordion(dataPath: string, timeout = 20000) {
+  const testId = `uriAccordion-${dataPath}`;
+  await retryOnStale(async () => {
+    const item = await getCssElementFromDataTestId(testId, timeout);
+    if ((await item.getAttribute('data-active')) === null) return;
+    await item.findElement(By.css('.mantine-Accordion-control')).click();
+  });
+  await getDriver().wait(
+    async () =>
+      (await (
+        await getCssElementFromDataTestId(testId, timeout)
+      ).getAttribute('data-active')) === null,
+    timeout,
+    `Data entry "${dataPath}" never closed`,
+  );
+}
+
+/**
+ * Opens a folder of the node tree, unless it is open already, and waits for
+ * its children to be on screen.
+ * @param testId the folder's `folder-<node value>` test id
+ */
+export async function openTreeFolder(testId: string, timeout = 20000) {
+  const isOpen = async () =>
+    retryOnStale(
+      async () =>
+        (await (
+          await getCssElementFromDataTestId(testId, timeout)
+        ).getAttribute('data-open')) === 'true',
+    );
+  if (!(await isOpen())) {
+    await findCssElementAndClickIt(testId, timeout / 100, 100);
+  }
+  await getDriver().wait(isOpen, timeout, `Folder "${testId}" never opened`);
+}
+
 export async function findTextElementAndClickIt(
   text: string,
   retries = 5,

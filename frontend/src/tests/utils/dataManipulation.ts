@@ -10,6 +10,8 @@ import {
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
+  openTreeFolder,
+  openUriAccordion,
 } from './testToolBox';
 
 /**
@@ -106,7 +108,8 @@ export async function resetAppState() {
    * Clears the store and checks it stays cleared.
    */
   const clearAndConfirm = async (steadyMs: number) => {
-    await setTestState({ configurations: [], active: null });
+    // The tree view is kept per configuration name, and the specs reuse names.
+    await setTestState({ configurations: [], active: null, treeView: {} });
     const deadline = Date.now() + steadyMs;
     while (Date.now() < deadline) {
       if (!(await isEmpty())) return false;
@@ -218,9 +221,9 @@ export async function setupGrid(setup: GridSetup): Promise<GridHandle> {
 
   // Unfold the tree down to the leaves
   await ensureCssElementIsDisplayed(`uriAccordion-${dataPath}`, 200, 100);
-  await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
+  await openUriAccordion(dataPath);
   for (const folder of folders) {
-    await findCssElementAndClickIt(`folder-${dataPath}#${folder}`, 200, 100);
+    await openTreeFolder(`folder-${dataPath}#${folder}`);
   }
 
   // Check the leaves one by one, waiting for each plot to be added

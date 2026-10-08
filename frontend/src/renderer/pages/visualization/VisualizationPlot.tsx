@@ -186,7 +186,7 @@ export const VisualizationPlot = ({
     </>
   ) : (
     <Stack h="100%" align="center" w="100%" justify="center">
-      <Text>No chart generates</Text>
+      <Text>No plot selected</Text>
     </Stack>
   );
 };

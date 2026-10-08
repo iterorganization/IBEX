@@ -1,5 +1,10 @@
 import { StateCreator } from 'zustand';
-import { Configuration, ibexState, UiState } from 'src/renderer/types';
+import {
+  Configuration,
+  ibexState,
+  TreeViewState,
+  UiState,
+} from 'src/renderer/types';
 
 /**
  * Drops the ui ids that no longer name a grid of the active configuration.
@@ -25,10 +30,25 @@ export const pruneUiState = (
   };
 };
 
+const EMPTY_TREE_VIEW: TreeViewState = { openUris: [], expanded: {} };
+
+/** Writes the tree view of one configuration, leaving the others untouched. */
+const withTreeView = (
+  state: ibexState,
+  configuration: string,
+  update: (view: TreeViewState) => TreeViewState,
+): Partial<ibexState> => {
+  const current = state.treeView[configuration] ?? EMPTY_TREE_VIEW;
+  const next = update(current);
+  if (next === current) return state;
+  return { treeView: { ...state.treeView, [configuration]: next } };
+};
+
 export const uiSlice: StateCreator<ibexState, [], [], UiState> = (set) => ({
   editingGridId: null,
   metadataGridId: null,
   customizing: null,
+  treeView: {},
 
   setEditingGrid: (id) =>
     set((state) =>
@@ -41,4 +61,43 @@ export const uiSlice: StateCreator<ibexState, [], [], UiState> = (set) => ({
     ),
 
   setCustomizing: (customizing) => set((state) => ({ ...state, customizing })),
+
+  setTreeNodeExpanded: (configuration, uri, nodeValue, expanded) =>
+    set((state) =>
+      withTreeView(state, configuration, (view) => {
+        const nodes = view.expanded[uri] ?? [];
+        if (nodes.includes(nodeValue) === expanded) return view;
+        return {
+          ...view,
+          expanded: {
+            ...view.expanded,
+            [uri]: expanded
+              ? [...nodes, nodeValue]
+              : nodes.filter((node) => node !== nodeValue),
+          },
+        };
+      }),
+    ),
+
+  revealTreeNodes: (configuration, uri, nodeValues) =>
+    set((state) =>
+      withTreeView(state, configuration, (view) => {
+        const nodes = view.expanded[uri] ?? [];
+        const added = nodeValues.filter((node) => !nodes.includes(node));
+        const opened = view.openUris.includes(uri);
+        if (added.length === 0 && opened) return view;
+        return {
+          openUris: opened ? view.openUris : [...view.openUris, uri],
+          expanded: { ...view.expanded, [uri]: [...nodes, ...added] },
+        };
+      }),
+    ),
+
+  setOpenUris: (configuration, uris) =>
+    set((state) =>
+      withTreeView(state, configuration, (view) => ({
+        ...view,
+        openUris: uris,
+      })),
+    ),
 });

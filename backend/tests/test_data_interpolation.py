@@ -164,10 +164,16 @@ def test_interpolation_codes(interpolation_entry_path_directory):
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 466
 
-    # test interpolation ...psi_error_lower over ...psi_error_lower (second node is empty - should return an error 464)
+    # test interpolation ...psi_error_lower over ...psi_error_lower: the second node is empty, but its
+    # coordinates still join the common ones, as when interpolating over the filled ...psi
     parameters = {
         "uri": f"{db_names[0]}/{uri_fragment}_error_lower",
         "interpolate_over": [f"{db_names[1]}/{uri_fragment}_error_lower"],
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
-    assert response.status_code == 464
+    assert response.status_code == 200
+    parameters["interpolate_over"] = [f"{db_names[1]}/{uri_fragment}"]
+    response_over_filled = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response_over_filled.status_code == 200
+    coordinates = [c["value"] for c in response.json()["data"]["coordinates"]]
+    assert coordinates == [c["value"] for c in response_over_filled.json()["data"]["coordinates"]]

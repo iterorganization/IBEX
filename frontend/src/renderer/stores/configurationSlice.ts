@@ -63,9 +63,15 @@ export const configurationSlice: StateCreator<
           ? updatedConfigurations[updatedConfigurations.length - 1]
           : state.active;
 
+      // A configuration loaded later under the same name starts with a closed
+      // tree, not with the nodes this one had open.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [name]: _removed, ...treeView } = state.treeView;
+
       return {
         configurations: updatedConfigurations,
         active: updateActive,
+        treeView,
         ...pruneUiState(state, updateActive),
       };
     });

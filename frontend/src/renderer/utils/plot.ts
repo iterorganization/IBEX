@@ -248,10 +248,28 @@ export const handleNewPlot = async (
   return updatedActive;
 };
 
+/** The data entry of a node URI, `<entry>#<ids>/<path>`. */
+const entryOf = (uri: string) => normalizeIndices(uri).split('#')[0];
+
+/** The data entries a grid's traces come from. */
+const entriesOf = (plots: DataPlotly[]) =>
+  new Set(plots.map((plot) => entryOf(plot.nodeUri)));
+
 /**
- * Update DataGridPlot provided by including interpolation with the newest plot. In delete case, interpolate without the deleted one.
- * @param findDataPlot
- * @param mainUri
+ * Refetch the traces of a grid whose common coordinates changed with the trace
+ * added or removed. In delete case, interpolate without the deleted one.
+ *
+ * The grid draws every trace against one set of coordinates: the union of the
+ * coordinates of every data entry it uses (see `getUrisToInterpolate`). Only a
+ * data entry joining or leaving the grid changes that union, so a trace added
+ * from - or removed from - an entry other traces still come from leaves the
+ * other traces as they are. Refetching only the traces sharing its path used to
+ * move the coordinates under the others: with ip and tau_energy from 4 entries,
+ * removing one tau_energy put the grid on the union of 3 entries while the 4 ip
+ * kept values for the union of 4.
+ * @param findDataPlot the grid, without the trace added or with the trace
+ *   removed already gone
+ * @param mainUri the trace added or removed
  * @param nodeType Optional parameter used in add case to get data from BE
  */
 const updateInterpolatedPlots = async (
@@ -264,20 +282,16 @@ const updateInterpolatedPlots = async (
   let interpolatedDataPlot = cloneGridStructure(findDataPlot);
   const isInDeleteCase = !nodeType;
   let formattedCoordinates: Coordinates[];
-  const urisToInterpolate = getUrisToInterpolate(
-    mainUri,
-    interpolatedDataPlot.plot,
-  );
-
-  if (!isInDeleteCase) {
-    // In add case we add main uri in list of dependencies because we update plots interpolable with it
-    urisToInterpolate.push(mainUri);
+  if (!commonCoordinatesChange(findDataPlot.plot, mainUri)) {
+    return interpolatedDataPlot;
   }
+  // The traces as they will be: in add case, with the one being added.
+  const plotsAfter: DataPlotly[] = isInDeleteCase
+    ? interpolatedDataPlot.plot
+    : [...interpolatedDataPlot.plot, { nodeUri: mainUri } as DataPlotly];
+
   let plotsUpdated = 0;
   for (const plot of interpolatedDataPlot.plot) {
-    if (!urisToInterpolate.includes(normalizeIndices(plot.nodeUri))) {
-      continue;
-    }
     plotsUpdated++;
 
     // Update all plots with the interpolation parameter
@@ -285,8 +299,9 @@ const updateInterpolatedPlots = async (
       normalizeIndices(plot.nodeUri),
       interpolatedDataPlot?.downsampled_method,
       interpolatedDataPlot?.downsampled_size,
-      nodeType,
-      urisToInterpolate.filter((uri) => uri !== normalizeIndices(plot.nodeUri)),
+      // The trace's own type, not the one added: it may be another node now.
+      isInDeleteCase ? undefined : (interpolatedDataPlot.dataType ?? nodeType),
+      getUrisToInterpolate(plot.nodeUri, plotsAfter),
       interpolatedDataPlot?.interpolated_method,
     );
 
@@ -326,30 +341,32 @@ const updateInterpolatedPlots = async (
 };
 
 /**
- * Get uri list to base interpolation on in order to get interpolate_over param when calling fetchDataPlot with interpolation
- * @param uriToAdd
- * @param plots
+ * The URIs to interpolate a trace over, for the `interpolate_over` parameter of
+ * `fetchDataPlot`: its own node in every other data entry of the grid.
+ *
+ * The back-end puts a trace on the union of its coordinates and those of the
+ * nodes it is interpolated over, which must have its path. Over the nodes of
+ * the grid sharing its path only, traces of two paths from the same entries -
+ * ip and tau_energy, say - ended up on two different unions while the grid
+ * draws them all against one.
+ * @param uriToAdd the trace's node URI
+ * @param plots the grid's traces; the trace itself may be among them
  */
 export const getUrisToInterpolate = (uriToAdd: string, plots: DataPlotly[]) => {
-  const getPath = (uri: string) => normalizeIndices(uri).split('#')[1] ?? '';
-
-  const normalizedUriToAdd = normalizeIndices(uriToAdd);
-  const targetPath = getPath(normalizeIndices(uriToAdd));
-
-  const urisToInterpolate = [
-    ...new Set(
-      plots
-        .map((plot) => normalizeIndices(plot.nodeUri))
-        .filter(
-          (uri) =>
-            getPath(uri) === targetPath &&
-            normalizeIndices(uri) !== normalizedUriToAdd,
-        ),
-    ),
-  ];
-
-  return urisToInterpolate;
+  const [entry, path = ''] = normalizeIndices(uriToAdd).split('#');
+  return [...entriesOf(plots)]
+    .filter((other) => other !== entry)
+    .map((other) => `${other}#${path}`);
 };
+
+/**
+ * Whether adding or removing a trace changes the coordinates the grid shares:
+ * only when its data entry joins or leaves the grid.
+ * @param plots the grid's other traces
+ * @param uri the trace added or removed
+ */
+const commonCoordinatesChange = (plots: DataPlotly[], uri: string) =>
+  !entriesOf(plots).has(entryOf(uri));
 
 const updateCoordsAfterInterpolation = (
   oldCoords: Coordinates[],
@@ -413,6 +430,10 @@ export const handleExistingPlot = async (
       defaultUri,
       findDataPlot.plot,
     );
+    // A new data entry joining others moves every trace onto a new union.
+    const areCombinedCoordinates =
+      urisToInterpolate.length > 0 &&
+      commonCoordinatesChange(findDataPlot.plot, defaultUri);
 
     // For each dataPlot call fetchDataPlot to get data from BE
     const response = await fetchDataPlot(
@@ -650,14 +671,13 @@ export const handleExistingPlot = async (
         updatedPlot,
       ];
     }
-    const areCombinedCoordinates = urisToInterpolate.length;
     if (areCombinedCoordinates) {
-      // Update all error bands when we have combined coordinates
+      // Update all error bands when the combined coordinates changed
       for (const plot of updatedPlot.plot) {
         await fetchErrorBands(updatedPlot, plot.nodeUri);
       }
     } else {
-      // Only get error bands of added plot when we don't have combined coordinates
+      // Only get error bands of added plot when the others did not move
       await fetchErrorBandsInConfig(updatedActive, defaultUri, findDataPlot.i);
     }
 
@@ -777,14 +797,12 @@ const deleteExistingPlot = async (
   );
   findDataPlot = interpolatedDataPlot;
 
-  // Update all error bands when we have combined coordinates
-  const oldUrisToInterpolate = getUrisToInterpolate(
-    findDataPlot.plot[0].nodeUri,
-    [...findDataPlot.plot, deletedPlot],
-  );
-  const areCombinedCoordinates = oldUrisToInterpolate.length;
+  // Update all error bands when the deletion moved the combined coordinates:
+  // its data entry left a grid where others remain.
+  const areCombinedCoordinates =
+    findDataPlot.plot.length > 0 &&
+    commonCoordinatesChange(findDataPlot.plot, deletedPlot.nodeUri);
   if (areCombinedCoordinates) {
-    // Update all error bands when we had combined coordinates before the deletion
     for (const plot of findDataPlot.plot) {
       await fetchErrorBands(findDataPlot, plot.nodeUri);
     }

@@ -1,4 +1,4 @@
-import { Configuration, CustomizedGrid } from '..';
+import { Configuration, CustomizedGrid, TreeViewState } from '..';
 
 /**
  * The shape the E2E bridge exchanges: the configuration and the transient state
@@ -14,4 +14,5 @@ export interface TestState {
   editingGridId: string | null;
   metadataGridId: string | null;
   customizing: CustomizedGrid | null;
+  treeView?: Record<string, TreeViewState>;
 }
