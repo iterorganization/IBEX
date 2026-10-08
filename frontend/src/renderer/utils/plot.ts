@@ -1506,6 +1506,10 @@ const formatErrorBandLayout = (
   return errBandPartPlot;
 };
 
+/** A line through fewer than two drawable points is invisible (#114). */
+const isSinglePoint = (x: unknown[], y: unknown[]): boolean =>
+  y.filter((v, i) => Number.isFinite(v) && Number.isFinite(x[i])).length === 1;
+
 /**
  * Everything Plotly is handed for one grid, built from the payloads and the
  * cursor.
@@ -1535,6 +1539,12 @@ export function buildTraces(
       y: [...y],
       // Each plot should have connectgaps equals to true to prevent gap in combined data cases
       connectgaps: true,
+      // Only the drawn trace gets the markers: the stored mode is the user's
+      // choice and comes back as soon as there is more than one point again.
+      mode:
+        isSinglePoint(x, y) && !storedPlot.mode?.includes('markers')
+          ? 'lines+markers'
+          : storedPlot.mode,
     } as DataPlotly;
     entirePlotList.push(mainPlot);
 
