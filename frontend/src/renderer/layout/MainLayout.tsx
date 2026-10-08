@@ -22,6 +22,8 @@ import {
   updateCustomDataTree,
   readIbexConfig,
   formatGeometriesToSave,
+  trackBusy,
+  afterNextPaint,
 } from '../utils';
 import { VisualizationURIModal } from '../pages';
 import { showNotification } from '@mantine/notifications';
@@ -208,7 +210,10 @@ export function MainLayout() {
       return;
     }
 
-    await window.api.fs.readFile(path).then(async (data: string) => {
+    // Busy from reading the file until its grids are drawn; the file dialog
+    // above is the user's time, not the app's.
+    await trackBusy(async () => {
+      const data: string = await window.api.fs.readFile(path);
       const newIbexState: ConfigurationToSave = JSON.parse(data);
 
       const configurationNameAlreadyExists = configurations.some((value) => {
@@ -261,6 +266,7 @@ export function MainLayout() {
 
       addConfiguration(newConfig);
       setActive(newConfig.name);
+      await afterNextPaint();
     });
   };
 

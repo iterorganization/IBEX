@@ -28,6 +28,7 @@ import { replaceNullsWithNaN } from './functions';
 import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';
 import { cachedRequest, requestCacheKey } from './requestCache';
+import { trackBusy } from './busy';
 import { payloadKey, registerPayload } from '../stores/payloadRegistry';
 
 /**
@@ -153,12 +154,26 @@ interface FetchOptions<T> {
    * arrays.
    */
   share?: (retained: T) => T;
+  /**
+   * `false` keeps the request off the header's busy spinner - for background
+   * polls the user did not ask for.
+   */
+  track?: boolean;
 }
 
 /**
- * Generic GET request to the API.
+ * Generic GET request to the API, shown as ongoing work in the header unless
+ * `track` is `false`.
  */
-const fetchFromApi = async <T>(
+const fetchFromApi = <T>(
+  endpoint: string,
+  options: FetchOptions<T> = {},
+): Promise<T> =>
+  options.track === false
+    ? fetchFromApiUntracked(endpoint, options)
+    : trackBusy(() => fetchFromApiUntracked(endpoint, options));
+
+const fetchFromApiUntracked = async <T>(
   endpoint: string,
   {
     timeout,
@@ -802,7 +817,9 @@ export const fetchGeometryNodes = async (uri: string, labelUri: string) => {
 export const fetchInfoVersion = async () => {
   // Never cached: the header polls this to show whether the backend is alive,
   // and a cached answer would freeze that indicator on its first value.
+  // Not tracked either: it would flash the busy spinner every 10 s.
   return fetchFromApi<InfoVersionResponse>(`/info/version`, {
     cacheable: false,
+    track: false,
   });
 };

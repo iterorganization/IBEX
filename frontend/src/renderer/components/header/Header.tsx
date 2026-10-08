@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Box,
   Button,
   Center,
   ComboboxData,
@@ -7,6 +8,7 @@ import {
   Divider,
   Group,
   Image,
+  Loader,
   Select,
   Title,
   Tooltip,
@@ -24,7 +26,24 @@ import {
   updateIbexConfig,
   fetchInfoVersion,
   readIbexConfig,
+  useIsBusy,
 } from '../../utils';
+
+/**
+ * Spins while the app is waiting on something - a request, a configuration
+ * being loaded, a plot being built. Its box keeps its width when empty so the
+ * header does not shift as it comes and goes.
+ */
+function BusyIndicator() {
+  const busy = useIsBusy();
+  return (
+    <Box w={24} mt="lg">
+      {busy && (
+        <Loader size="sm" data-testid="busy-indicator" aria-label="Loading" />
+      )}
+    </Box>
+  );
+}
 
 interface HeaderProps {
   active: Configuration;
@@ -195,6 +214,7 @@ export const Header = ({
               </Tooltip>
             )}
           />
+          <BusyIndicator />
         </Group>
         <Group p={12}>
           {configurationButtons}
