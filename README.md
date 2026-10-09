@@ -46,6 +46,34 @@ npm run package
 ./out/ibex-linux-x64/ibex
 ```
 
+### Command-line options
+
+`ibex`, `launch.sh` and `launch-dev.sh` all take the same options:
+
+```text
+ibex [-h] [-v] [-c FILE [FILE ...] | -u URI [URI ...] [-n NAME] [-t TEMPLATE]]
+
+  -h, --help                show this help and exit
+  -v, --version             print the IBEX version and exit
+  -c, --config FILE...      load one or more IbexState files, one configuration each
+  -u, --uri URI...          open a new configuration containing these data entries
+  -n, --name NAME           with --uri: name of the new configuration
+                            (default: config, config-1, config-2, ...)
+  -t, --template TEMPLATE   with --uri and --name: apply a template, given as a file
+                            path or as a name from the template folders; the URIs
+                            fill the template's URI-0, URI-1, ... in order
+```
+
+`--config` and `--uri` cannot be used together, since a state file already lists its
+data entries. When either is given, the default configuration set in the preferences
+is not loaded.
+
+```bash
+./launch.sh -c runIbexState.json otherIbexState.json
+./launch.sh -u "imas:hdf5?path=/path/to/entry1" "imas:hdf5?path=/path/to/entry2"
+./launch.sh -u "imas:hdf5?path=/path/to/entry" -n kinetic -t PlotKineticProfiles
+```
+
 ## Developer Installation
 
 ### installation on SDCC
