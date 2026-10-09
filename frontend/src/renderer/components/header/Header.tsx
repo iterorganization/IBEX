@@ -53,6 +53,7 @@ interface HeaderProps {
   handleRemoveConfiguration: () => void;
   handleRenameConfiguration: () => void;
   handleSaveConfiguration: () => void;
+  handleSaveConfigurationAs: () => void;
   handleLoadConfiguration: () => void;
   handleSelectConfiguration: (value: string) => void;
   handleAddTree: () => void;
@@ -67,6 +68,7 @@ export const Header = ({
   handleRemoveConfiguration,
   handleRenameConfiguration,
   handleSaveConfiguration,
+  handleSaveConfigurationAs,
   handleLoadConfiguration,
   handleSelectConfiguration,
   handleAddTree,
@@ -96,7 +98,15 @@ export const Header = ({
         disabled={configurations.length === 0 || active?.saved}
         data-testid="header-save-configuration"
       >
-        {active?.path ? 'Save' : 'Save as'}
+        Save
+      </Button>
+      <Button
+        onClick={handleSaveConfigurationAs}
+        disabled={!active}
+        variant="outline"
+        data-testid="header-save-as-configuration"
+      >
+        Save as…
       </Button>
       <Button
         onClick={handleRemoveConfiguration}

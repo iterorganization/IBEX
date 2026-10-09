@@ -114,7 +114,8 @@ export function MainLayout() {
     closeConfigDeleteModal();
   };
 
-  const handleSaveConfiguration = async () => {
+  /** The active configuration as written to an IbexState file. */
+  const buildIbexState = (): ConfigurationToSave => {
     const dataGridWithoutData: DataGridPlotToSave[] = active.dataPlot.map(
       (dataGrid: DataGridPlot): DataGridPlotToSave => ({
         title: dataGrid.title,
@@ -177,43 +178,49 @@ export function MainLayout() {
 
     // Remove ' (x)' at the end of the name if there has been name duplicates during configuration load
     const correctedName = active.name.replace(/\s*\(\d+\)$/, '');
-    let savedConfig = false;
 
-    const newIbexState: ConfigurationToSave = {
+    return {
       name: correctedName,
       dataURI: active.dataURI,
       lastURIInput: active.lastURIInput,
       lastLocalDataSetSelected: active.lastLocalDataSetSelected,
       dataPlot: dataGridWithoutData,
     };
-    if (active?.path) {
-      await window.api.fs.writeFile(
-        active.path,
-        JSON.stringify(newIbexState, null, 2),
-      );
-      savedConfig = true;
-    } else {
-      await window.api.fs
-        .saveAsDialog(`${active.name}IbexState.json`, 'json')
-        .then((path: string) => {
-          if (path) {
-            active.path = path;
-            window.api.fs.writeFile(
-              path,
-              JSON.stringify(newIbexState, null, 2),
-            );
-            savedConfig = true;
-          }
-        });
+  };
+
+  /** Write the active configuration to `path`, which it is then saved to. */
+  const writeConfiguration = async (path: string) => {
+    const result = await window.api.fs.writeFile(
+      path,
+      JSON.stringify(buildIbexState(), null, 2),
+    );
+    if (result?.success === false) {
+      showNotification({
+        title: 'Configuration not saved',
+        message: `Cannot write '${path}': ${result.message}`,
+        color: 'red',
+      });
+      return;
     }
 
-    const updateActive: Configuration = {
-      ...active,
-      saved: savedConfig,
-    };
-
-    updatedConfiguration(updateActive);
+    updatedConfiguration({ ...active, path, saved: true });
   };
+
+  /** Save the active configuration to a file the user picks. */
+  const handleSaveConfigurationAs = async () => {
+    // Suggest the folder of the current file, if any
+    const folder = active.path?.replace(/[^/]*$/, '') ?? '';
+    const path: string = await window.api.fs.saveAsDialog(
+      `${folder}${active.name}IbexState.json`,
+      'json',
+    );
+    if (path) await writeConfiguration(path);
+  };
+
+  const handleSaveConfiguration = async () =>
+    active?.path
+      ? writeConfiguration(active.path)
+      : handleSaveConfigurationAs();
 
   /**
    * Add a configuration from an IbexState (read from a file, or built from
@@ -463,6 +470,7 @@ export function MainLayout() {
           }
           handleRenameConfiguration={openConfigRenameModal}
           handleSaveConfiguration={handleSaveConfiguration}
+          handleSaveConfigurationAs={handleSaveConfigurationAs}
           handleLoadConfiguration={handleLoadConfiguration}
           handleSelectConfiguration={handleSelectConfiguration}
           handleAddTree={openAddTreeModal}
