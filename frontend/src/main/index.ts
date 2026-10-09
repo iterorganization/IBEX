@@ -4,7 +4,7 @@ import ipc from './ipc';
 import { config } from 'dotenv';
 import { BackendManager } from './backend-manager';
 import fs from 'fs';
-import { HELP_TEXT, parseCliArgs, readUserTemplateFolders } from './cli';
+import { getHelpText, parseCliArgs, readUserTemplateFolders } from './cli';
 import { getResourcesPath } from './resources';
 
 // Set at build time by webpack.main.config.ts (git describe)
@@ -21,7 +21,7 @@ const cliResult = parseCliArgs(
 );
 
 if (cliResult.action === 'help') {
-  process.stdout.write(HELP_TEXT + '\n');
+  process.stdout.write(getHelpText(getResourcesPath('templates')) + '\n');
   process.exit(0);
 } else if (cliResult.action === 'version') {
   process.stdout.write(IBEX_VERSION + '\n');

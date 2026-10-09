@@ -5,7 +5,7 @@ import { StartupRequest } from 'src/renderer/types';
 
 export const EMPTY_STARTUP_REQUEST: StartupRequest = { configs: [], uris: [] };
 
-export const HELP_TEXT = `Usage: ibex [-h] [-v] [-c FILE [FILE ...] | -u URI [URI ...] [-n NAME] [-t TEMPLATE]]
+const USAGE = `Usage: ibex [-h] [-v] [-c FILE [FILE ...] | -u URI [URI ...] [-n NAME] [-t TEMPLATE]]
 
 IBEX (IMAS variaBles EXplorer): explore and plot IMAS data.
 
@@ -55,6 +55,22 @@ const LONG_OPTIONS: OptionName[] = [
 ];
 
 const TEMPLATE_SUFFIXES = ['', '.json', 'IbexState.json'];
+
+/**
+ * The --help text, ending with the templates installed with IBEX.
+ * @param builtInTemplateDir The templates folder shipped with the app
+ */
+export const getHelpText = (builtInTemplateDir: string): string => {
+  const templates = listTemplateNames([builtInTemplateDir]);
+  const templateList = templates.length
+    ? templates.map((name) => `  ${name}`).join('\n')
+    : `  (none found in ${builtInTemplateDir})`;
+  return `${USAGE}
+
+Templates installed with IBEX (for --template):
+${templateList}
+Templates in the folders set in Preferences can also be given by name.`;
+};
 
 class CliError extends Error {}
 

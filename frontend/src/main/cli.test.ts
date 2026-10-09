@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { parseCliArgs } from './cli';
+import { getHelpText, parseCliArgs } from './cli';
 
 describe('parseCliArgs', () => {
   let cwd: string;
@@ -117,5 +117,31 @@ describe('parseCliArgs', () => {
       "unexpected argument 'name'",
     );
     expect(errorOf('-x')).to.contain("unknown option '-x'");
+  });
+});
+
+describe('getHelpText', () => {
+  let templateDir: string;
+
+  before(() => {
+    templateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ibex-templates-'));
+    fs.writeFileSync(
+      path.join(templateDir, 'PlotScenarioIbexState.json'),
+      '{}',
+    );
+    fs.writeFileSync(path.join(templateDir, 'Other.json'), '{}');
+    fs.writeFileSync(path.join(templateDir, 'notes.txt'), '');
+  });
+
+  after(() => fs.rmSync(templateDir, { recursive: true, force: true }));
+
+  it('lists the installed templates by the name --template takes', () => {
+    expect(getHelpText(templateDir)).to.contain('  Other\n  PlotScenario\n');
+  });
+
+  it('says so when no template is installed', () => {
+    expect(getHelpText(path.join(templateDir, 'missing'))).to.contain(
+      '(none found in',
+    );
   });
 });
