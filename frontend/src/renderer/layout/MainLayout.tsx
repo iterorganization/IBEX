@@ -11,6 +11,7 @@ import {
   Coordinates,
   DataGridPlot,
   DataGridPlotToSave,
+  StartupRequest,
 } from '../types';
 import { ConfigCreateModal, ConfirmModal, Header } from '../components';
 import { PreferenceModal } from '../components/preferences/PreferenceModal';
@@ -24,6 +25,11 @@ import {
   formatGeometriesToSave,
   trackBusy,
   afterNextPaint,
+  fetchURIExists,
+  getColorRandom,
+  missingTemplateLabels,
+  startupDataURI,
+  uniqueConfigurationName,
 } from '../utils';
 import { VisualizationURIModal } from '../pages';
 import { showNotification } from '@mantine/notifications';
@@ -199,6 +205,67 @@ export function MainLayout() {
     updatedConfiguration(updateActive);
   };
 
+  /**
+   * Add a configuration from an IbexState (read from a file, or built from
+   * the command line) and fetch the data of its plots.
+   * @param ibexState The state; its plots refer to data entries by name
+   * @param path The file the state was read from, if any
+   */
+  const loadIbexState = async (
+    ibexState: ConfigurationToSave,
+    path?: string,
+  ) => {
+    // Read the store rather than the rendered `configurations`: several
+    // states can be loaded in a row, before this component renders again.
+    const loadedConfigurations = useIbexStore.getState().configurations;
+
+    const configurationNameAlreadyExists = loadedConfigurations.some(
+      (value) => value.name == ibexState.name,
+    );
+
+    if (configurationNameAlreadyExists) {
+      const configurationAlreadyLoaded =
+        path && loadedConfigurations.some((value) => value.path == path);
+
+      if (configurationAlreadyLoaded) {
+        showNotification({
+          title: 'Configuration already loaded',
+          message: `The configuration ${ibexState.name} is already loaded.`,
+          color: 'yellow',
+        });
+        return;
+      }
+
+      // We have a duplicate configuration name
+      // We will add a (x) to the name until there is no name duplicate in the configuration list
+      let offsetName = 1;
+      let newConfigurationName = ibexState.name;
+      while (
+        loadedConfigurations.some((value) => value.name == newConfigurationName)
+      ) {
+        newConfigurationName = ibexState.name + ` (${offsetName})`;
+        offsetName++;
+      }
+
+      ibexState.name = newConfigurationName;
+    }
+
+    const newListDataGridPlot = formatConfigBeforeLoadingURIs(ibexState);
+    const newConfig: Configuration = {
+      name: ibexState.name,
+      dataURI: ibexState.dataURI,
+      customDataTree: updateCustomDataTree([], ibexState.dataURI),
+      checkedNodeURI: [],
+      dataPlot: await plotNodeUriLoaded(newListDataGridPlot, ibexState.dataURI),
+      saved: Boolean(path),
+      path: path,
+    };
+
+    addConfiguration(newConfig);
+    setActive(newConfig.name);
+    await afterNextPaint();
+  };
+
   const handleLoadConfiguration = async (path?: string) => {
     if (!path) {
       // If no path is provided, the file selector is opened.
@@ -214,61 +281,86 @@ export function MainLayout() {
     // above is the user's time, not the app's.
     await trackBusy(async () => {
       const data: string = await window.api.fs.readFile(path);
-      const newIbexState: ConfigurationToSave = JSON.parse(data);
-
-      const configurationNameAlreadyExists = configurations.some((value) => {
-        if (value.name == newIbexState.name) return true;
-      });
-
-      if (configurationNameAlreadyExists) {
-        const configurationAlreadyLoaded = configurations.some((value) => {
-          if (value.path == path) return true;
-        });
-
-        if (configurationAlreadyLoaded) {
-          showNotification({
-            title: 'Configuration already loaded',
-            message: `The configuration ${newIbexState.name} is already loaded.`,
-            color: 'yellow',
-          });
-          return;
-        }
-
-        // We have a duplicate configuration name
-        // We will add a (x) to the name until there is no name duplicate in the configuration list
-        let offsetName = 1;
-        let newConfigurationName = newIbexState.name;
-        while (
-          configurations.some((value) => {
-            if (value.name == newConfigurationName) return true;
-          })
-        ) {
-          newConfigurationName = newIbexState.name + ` (${offsetName})`;
-          offsetName++;
-        }
-
-        newIbexState.name = newConfigurationName;
-      }
-
-      const newListDataGridPlot = formatConfigBeforeLoadingURIs(newIbexState);
-      const newConfig: Configuration = {
-        name: newIbexState.name,
-        dataURI: newIbexState.dataURI,
-        customDataTree: updateCustomDataTree([], newIbexState.dataURI),
-        checkedNodeURI: [],
-        dataPlot: await plotNodeUriLoaded(
-          newListDataGridPlot,
-          newIbexState.dataURI,
-        ),
-        saved: true,
-        path: path,
-      };
-
-      addConfiguration(newConfig);
-      setActive(newConfig.name);
-      await afterNextPaint();
+      await loadIbexState(JSON.parse(data), path);
     });
   };
+
+  /**
+   * Open the data entries given on the command line (--uri) in a new
+   * configuration, applying a template (--template) when one is given.
+   */
+  const handleOpenUris = async (request: StartupRequest) =>
+    trackBusy(async () => {
+      const exists = await Promise.all(
+        request.uris.map((uri) =>
+          fetchURIExists(uri)
+            .then((response) => Boolean(response?.exists))
+            .catch(() => false),
+        ),
+      );
+      const dataURI = startupDataURI(request.uris, exists, getColorRandom);
+
+      const notFound = request.uris.filter((_uri, index) => !exists[index]);
+      if (notFound.length) {
+        showNotification({
+          title: 'Data entries not found',
+          message: `Not opened: ${notFound.join(', ')}`,
+          color: 'red',
+          autoClose: false,
+        });
+      }
+      if (!dataURI.length && !request.template) return;
+
+      const takenNames = useIbexStore
+        .getState()
+        .configurations.map((configuration) => configuration.name);
+      const name = uniqueConfigurationName(
+        request.name ?? 'config',
+        takenNames,
+      );
+      if (request.name && name !== request.name) {
+        showNotification({
+          title: 'Configuration name already used',
+          message: `The configuration is named '${name}' instead of '${request.name}'.`,
+          color: 'yellow',
+        });
+      }
+
+      let templateDataPlot: DataGridPlotToSave[] = [];
+      if (request.template) {
+        const template: ConfigurationToSave = JSON.parse(
+          await window.api.fs.readFile(request.template),
+        );
+        templateDataPlot = Array.isArray(template?.dataPlot)
+          ? template.dataPlot
+          : [];
+      }
+
+      const missingLabels = missingTemplateLabels(templateDataPlot, dataURI);
+      if (!missingLabels.length) {
+        await loadIbexState({ name, dataURI, dataPlot: templateDataPlot });
+        return;
+      }
+
+      // The template needs more data entries than were opened: let the user
+      // add them, as when creating a configuration from a template by hand.
+      const newConfig: Configuration = {
+        name,
+        dataURI,
+        customDataTree: updateCustomDataTree([], dataURI),
+        checkedNodeURI: [],
+        dataPlot: templateDataPlot as DataGridPlot[],
+      };
+      addConfiguration(newConfig);
+      setActive(newConfig.name);
+      openAddTreeModal();
+      showNotification({
+        title: 'Data entries missing for the template',
+        message: `The template also uses ${missingLabels.join(', ')}: add data entries for them.`,
+        color: 'yellow',
+        autoClose: false,
+      });
+    });
 
   const handleSelectConfiguration = (value: string) => {
     setActive(value);
@@ -306,7 +398,42 @@ export function MainLayout() {
       }
     };
 
-    loadDefaultConfiguration();
+    // What the command line asked for replaces the default configuration
+    const loadStartupConfigurations = async function () {
+      const request = await window.api.getStartupRequest();
+
+      if (request.configs.length) {
+        for (const path of request.configs) {
+          try {
+            await handleLoadConfiguration(path);
+          } catch (error) {
+            console.warn(`Cannot load configuration '${path}'. `, error);
+            showNotification({
+              title: 'Cannot load configuration',
+              message: `'${path}': ${error?.message ?? error}`,
+              color: 'red',
+              autoClose: false,
+            });
+          }
+        }
+      } else if (request.uris.length) {
+        try {
+          await handleOpenUris(request);
+        } catch (error) {
+          console.warn('Cannot open the data entries. ', error);
+          showNotification({
+            title: 'Cannot open the data entries',
+            message: `${error?.message ?? error}`,
+            color: 'red',
+            autoClose: false,
+          });
+        }
+      } else {
+        await loadDefaultConfiguration();
+      }
+    };
+
+    loadStartupConfigurations();
   }, []);
 
   return (
