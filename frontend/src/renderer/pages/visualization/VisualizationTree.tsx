@@ -36,6 +36,8 @@ import {
   handleExistingPlot,
   handleNewPlot,
   mapTreeNode,
+  trackBusy,
+  afterNextPaint,
 } from '../../utils';
 
 interface VisualizationTreeProps {
@@ -737,7 +739,12 @@ export const VisualizationTree = ({
       .catch((error) => console.error('Error while checking nodes: ', error));
   }, []);
 
-  const applyCheckedNodes = async (
+  /** Busy until the plot it changed is drawn, not just until data arrives. */
+  const applyCheckedNodes = (
+    nextChecked: (current: URITreeNodeData[]) => URITreeNodeData[],
+  ) => trackBusy(() => applyCheckedNodesNow(nextChecked));
+
+  const applyCheckedNodesNow = async (
     nextChecked: (current: URITreeNodeData[]) => URITreeNodeData[],
   ) => {
     const { active, editingGridId, setEditingGrid, updatedConfiguration } =
@@ -804,6 +811,7 @@ export const VisualizationTree = ({
       }
       updatedConfiguration(updatedActive);
     }
+    await afterNextPaint();
   };
 
   // A column filling the panel: the tree takes whatever height the controls

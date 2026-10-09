@@ -10,7 +10,6 @@ import {
   emptyUserRelayout,
   getArrayValueFromDependance,
   buildTraces,
-  initPlotColors,
   isMatrixPlottable,
   mergeAxisRelayout,
   normalizeIndices,
@@ -91,7 +90,9 @@ export const SimplePlotly = ({
   // derived, and it is merged last so rebuilding the layout never undoes it.
   const [userRelayout, setUserRelayout] =
     useState<UserRelayout>(emptyUserRelayout);
-  const plotDivRef = useRef<HTMLDivElement>(null);
+  // State, not a ref: the div only mounts once there is data to draw, and the
+  // legend observer below must attach then.
+  const [plotDiv, setPlotDiv] = useState<HTMLDivElement | null>(null);
   const layoutPlotWidth = showSliders
     ? width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1)
     : width;
@@ -113,21 +114,7 @@ export const SimplePlotly = ({
     );
   }, [plottedNodes]);
 
-  const isPlotInY2 = useCallback(
-    (plotName: string) => {
-      const y2Unit = itemDataGrid?.y2AxisData?.unit;
-      if (!y2Unit) return false;
-
-      const selectedPlot = itemDataGrid.plot.find(
-        (plot) => plot.name === plotName,
-      );
-      return selectedPlot?.unit === y2Unit;
-    },
-    [itemDataGrid?.y2AxisData?.unit, itemDataGrid?.plot],
-  );
-
   useEffect(() => {
-    const plotDiv = plotDivRef.current;
     if (!plotDiv) return;
 
     const applyLegendStyles = () => {
@@ -135,9 +122,13 @@ export const SimplePlotly = ({
         plotDiv.querySelectorAll<SVGTextElement>('.legendtext');
 
       legendTexts.forEach((el) => {
-        const name = el.textContent || '';
-
-        const isInY2 = isPlotInY2(name);
+        // The axis of the trace Plotly drew for this entry, bound by d3 to its
+        // `g.traces` group. Not looked up by the legend text: two curves can
+        // share a name (`measured_URI-0`) and sit on different axes.
+        const entry = el.closest('g.traces') as
+          | (Element & { __data__?: [{ trace?: { yaxis?: string } }] })
+          | null;
+        const isInY2 = entry?.__data__?.[0]?.trace?.yaxis === 'y2';
         const newColor = isInY2 ? 'rgb(148, 103, 189)' : 'rgb(68, 68, 68)';
 
         if (el.style.fill !== newColor) {
@@ -161,7 +152,7 @@ export const SimplePlotly = ({
 
     // cleanup
     return () => observer.disconnect();
-  }, [isPlotInY2]);
+  }, [plotDiv]);
 
   /**
    * Persist an edited title on the grid. The layout picks the title up from the
@@ -320,17 +311,6 @@ export const SimplePlotly = ({
     setTitle(itemDataGrid.title);
   }, [itemDataGrid.title]);
 
-  const handleInitPlotColor = async (
-    customContainerRef: React.MutableRefObject<HTMLDivElement>,
-    itemDataGrid: DataGridPlot,
-  ) => {
-    await initPlotColors(itemDataGrid, customContainerRef);
-  };
-
-  useEffect(() => {
-    handleInitPlotColor(customContainerRef, itemDataGrid);
-  }, [customContainerRef.current, itemDataGrid.plot.length]);
-
   return (
     <Grid
       ref={customContainerRef}
@@ -454,7 +434,7 @@ export const SimplePlotly = ({
             flexDirection: 'column',
           }}
         >
-          <div ref={plotDivRef}>
+          <div ref={setPlotDiv}>
             <Plot
               className={classes.simplePlot}
               data={dataToPlotWithErrorBands}

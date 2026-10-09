@@ -8,18 +8,16 @@ import {
 } from '@mantine/core';
 import { DataGridPlot, DataPlotly } from '../../../types';
 import { useEffect, useState } from 'react';
-import { initPlotColors } from '../../../utils';
+import { initPlotColors, withDefaultColors } from '../../../utils';
 
 interface Customize1DPlotProps {
   customizedDataGrid: DataGridPlot;
   selectedPlot: DataPlotly | null;
-  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
 }
 export const Customize1DPlot = ({
   customizedDataGrid,
   selectedPlot,
-  customContainerRef,
   setCustomizedDataGrid,
 }: Customize1DPlotProps) => {
   const [colorPlot, setColorPlot] = useState(selectedPlot?.line?.color || '');
@@ -31,7 +29,7 @@ export const Customize1DPlot = ({
    */
   const updateSelectedPlot = (update: (plot: DataPlotly) => DataPlotly) =>
     customizedDataGrid.plot.map((plot) =>
-      plot.name === selectedPlot.name ? update(plot) : plot,
+      plot.nodeUri === selectedPlot.nodeUri ? update(plot) : plot,
     );
 
   const updatePlotColor = (newColor: string) => {
@@ -46,15 +44,18 @@ export const Customize1DPlot = ({
   };
 
   const resetPlotColors = () => {
-    // An undefined colour is what "no colour" has always meant here: it lets
-    // Plotly pick the default, and `initPlotColors` reads it back from the DOM.
-    const updatedPlots = customizedDataGrid.plot.map((plot) =>
-      plot?.line?.color
-        ? ({ ...plot, line: { ...plot.line, color: undefined } } as DataPlotly)
-        : plot,
+    // Every trace back to the palette, in trace order, so no two share a colour.
+    const updatedPlots = withDefaultColors(
+      customizedDataGrid.plot.map(
+        (plot) =>
+          ({ ...plot, line: { ...plot.line, color: undefined } }) as DataPlotly,
+      ),
     );
 
-    setColorPlot('');
+    setColorPlot(
+      updatedPlots.find((plot) => plot.nodeUri === selectedPlot?.nodeUri)?.line
+        ?.color || '',
+    );
     setCustomizedDataGrid({ ...customizedDataGrid, plot: updatedPlots });
   };
 
@@ -82,11 +83,7 @@ export const Customize1DPlot = ({
       // Init color plot in component
       setColorPlot(selectedPlot.line.color);
     } else {
-      initPlotColors(
-        customizedDataGrid,
-        customContainerRef,
-        setCustomizedDataGrid,
-      );
+      initPlotColors(customizedDataGrid, setCustomizedDataGrid);
     }
   }, [selectedPlot?.line]);
 
@@ -98,11 +95,16 @@ export const Customize1DPlot = ({
           description="Customize the plot color"
           placeholder="Customize the plot color"
           format="rgb"
+          data-testid="plot-color-input"
           value={colorPlot}
           onChange={(value) => updatePlotColor(value)}
         />
         <Tooltip label="Reset color of each plot" position="bottom-start">
-          <Button variant="outline" onClick={resetPlotColors}>
+          <Button
+            variant="outline"
+            data-testid="plot-colors-reset-button"
+            onClick={resetPlotColors}
+          >
             Reset plot colors
           </Button>
         </Tooltip>
