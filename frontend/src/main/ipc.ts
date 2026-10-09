@@ -2,9 +2,12 @@ import { app, ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfigSync } from '../config';
-import { TestState } from 'src/renderer/types';
+import { StartupRequest, TestState } from 'src/renderer/types';
+import { EMPTY_STARTUP_REQUEST } from './cli';
+import { getResourcesPath } from './resources';
+
 export default {
-  initialize() {
+  initialize(startupRequest: StartupRequest = EMPTY_STARTUP_REQUEST) {
     const config = getConfigSync();
 
     ipcMain.handle(
@@ -144,12 +147,17 @@ export default {
       return app.getPath('home');
     });
 
-    ipcMain.handle('getPathFromRessources', (event, folderSteps: string[]) => {
-      const templatesPath =
-        process.env.NODE_ENV === 'development'
-          ? path.join(app.getAppPath(), '..', ...folderSteps) // root in dev
-          : path.join(process.resourcesPath, ...folderSteps); // resources/ in prod
-      return templatesPath;
+    ipcMain.handle('getPathFromRessources', (event, folderSteps: string[]) =>
+      getResourcesPath(...folderSteps),
+    );
+
+    // The request is handed out once: a reload of the window must not reopen
+    // what the command line asked for.
+    let pendingStartupRequest = startupRequest;
+    ipcMain.handle('getStartupRequest', () => {
+      const request = pendingStartupRequest;
+      pendingStartupRequest = EMPTY_STARTUP_REQUEST;
+      return request;
     });
   },
 };

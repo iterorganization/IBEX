@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-import { TestState } from './renderer/types';
+import { StartupRequest, TestState } from './renderer/types';
 import { contextBridge, ipcRenderer } from 'electron';
 
 const STUB_BACKEND_FUNCTIONS = process.env.E2E_TEST;
@@ -78,6 +78,9 @@ export const API = {
   },
 
   getConfig: () => ipcRenderer.invoke('getConfig'),
+
+  getStartupRequest: (): Promise<StartupRequest> =>
+    ipcRenderer.invoke('getStartupRequest'),
 
   setTestState: (testState: Partial<TestState>) =>
     ipcRenderer.invoke('setTestState', testState),

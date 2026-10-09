@@ -4,6 +4,34 @@ import ipc from './ipc';
 import { config } from 'dotenv';
 import { BackendManager } from './backend-manager';
 import fs from 'fs';
+import { HELP_TEXT, parseCliArgs, readUserTemplateFolders } from './cli';
+import { getResourcesPath } from './resources';
+
+// Set at build time by webpack.main.config.ts (git describe)
+declare const IBEX_VERSION: string;
+
+// Parse the command line before anything else: --help, --version and errors
+// exit without starting the backend. Relative paths are resolved against the
+// directory the user started IBEX from (launch scripts pass it, since they cd).
+const cliResult = parseCliArgs(
+  // In development, argv also holds the app path after the Electron binary
+  process.argv.slice(process.defaultApp ? 2 : 1),
+  process.env.IBEX_CALLER_CWD ?? process.cwd(),
+  [getResourcesPath('templates'), ...readUserTemplateFolders()],
+);
+
+if (cliResult.action === 'help') {
+  process.stdout.write(HELP_TEXT + '\n');
+  process.exit(0);
+} else if (cliResult.action === 'version') {
+  process.stdout.write(IBEX_VERSION + '\n');
+  process.exit(0);
+} else if (cliResult.action === 'error') {
+  console.error(
+    `ibex: ${cliResult.message}\nTry 'ibex --help' for more information.`,
+  );
+  process.exit(2);
+}
 
 const ensureCwd = (): void => {
   try {
@@ -56,9 +84,10 @@ app.whenReady().then(async () => {
     process.env.IBEX_BACKEND_URL = backendResult.url;
   }
 
-  createWindow();
+  // Register the IPC handlers before the renderer can call them
+  ipc.initialize(cliResult.action === 'run' ? cliResult.request : undefined);
 
-  ipc.initialize();
+  createWindow();
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
