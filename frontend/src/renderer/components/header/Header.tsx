@@ -18,6 +18,7 @@ import { Configuration } from 'src/renderer/types';
 import {
   IconPlus,
   IconCircleFilled,
+  IconPencil,
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
@@ -50,6 +51,7 @@ interface HeaderProps {
   configurations: ComboboxData;
   handleAddConfiguration: () => void;
   handleRemoveConfiguration: () => void;
+  handleRenameConfiguration: () => void;
   handleSaveConfiguration: () => void;
   handleLoadConfiguration: () => void;
   handleSelectConfiguration: (value: string) => void;
@@ -63,6 +65,7 @@ export const Header = ({
   configurations,
   handleAddConfiguration,
   handleRemoveConfiguration,
+  handleRenameConfiguration,
   handleSaveConfiguration,
   handleLoadConfiguration,
   handleSelectConfiguration,
@@ -214,6 +217,18 @@ export const Header = ({
               </Tooltip>
             )}
           />
+          <Tooltip openDelay={300} label="Rename configuration">
+            <ActionIcon
+              mt="lg"
+              variant="subtle"
+              onClick={handleRenameConfiguration}
+              disabled={!active}
+              aria-label="Rename configuration"
+              data-testid="header-rename-configuration"
+            >
+              <IconPencil size={18} />
+            </ActionIcon>
+          </Tooltip>
           <BusyIndicator />
         </Group>
         <Group p={12}>

@@ -13,7 +13,12 @@ import {
   DataGridPlotToSave,
   StartupRequest,
 } from '../types';
-import { ConfigCreateModal, ConfirmModal, Header } from '../components';
+import {
+  ConfigCreateModal,
+  ConfigRenameModal,
+  ConfirmModal,
+  Header,
+} from '../components';
 import { PreferenceModal } from '../components/preferences/PreferenceModal';
 import {
   updateIbexConfig,
@@ -42,6 +47,7 @@ export function MainLayout() {
     configurations,
     addConfiguration,
     removeConfiguration,
+    renameConfiguration,
     updatedConfiguration,
     setActive,
   } = useIbexStore();
@@ -52,6 +58,10 @@ export function MainLayout() {
   const [
     isConfigDeleteModalOpen,
     { open: openConfigDeleteModal, close: closeConfigDeleteModal },
+  ] = useDisclosure(false);
+  const [
+    isConfigRenameModalOpen,
+    { open: openConfigRenameModal, close: closeConfigRenameModal },
   ] = useDisclosure(false);
   const [
     isAddTreeModalOpen,
@@ -451,6 +461,7 @@ export function MainLayout() {
               ? openConfigDeleteModal()
               : removeConfiguration(active?.name)
           }
+          handleRenameConfiguration={openConfigRenameModal}
           handleSaveConfiguration={handleSaveConfiguration}
           handleLoadConfiguration={handleLoadConfiguration}
           handleSelectConfiguration={handleSelectConfiguration}
@@ -467,6 +478,16 @@ export function MainLayout() {
           onClose={closeConfigCreateModal}
           handleAddConfiguration={handleAddConfiguration}
           handleAddTree={openAddTreeModal}
+        />
+
+        <ConfigRenameModal
+          isOpen={isConfigRenameModalOpen}
+          currentName={active?.name ?? ''}
+          configurationsNames={configurations.map((c) => c?.name)}
+          onClose={closeConfigRenameModal}
+          handleRenameConfiguration={(newName) =>
+            renameConfiguration(active?.name, newName)
+          }
         />
 
         <ConfirmModal

@@ -14,4 +14,5 @@ export * from './uri';
 export * from './userPreferences';
 export * from './functions';
 export * from './testState';
+export * from './configurationName';
 export * from './startup';

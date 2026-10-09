@@ -1,23 +1,6 @@
 import { expect } from 'chai';
 import { DataGridPlotToSave } from '../types';
-import {
-  missingTemplateLabels,
-  startupDataURI,
-  uniqueConfigurationName,
-} from './startup';
-
-describe('uniqueConfigurationName', () => {
-  it('keeps a free name', () => {
-    expect(uniqueConfigurationName('config', ['other'])).to.equal('config');
-  });
-
-  it('adds the first free numbered suffix', () => {
-    expect(uniqueConfigurationName('config', ['config'])).to.equal('config-1');
-    expect(
-      uniqueConfigurationName('config', ['config', 'config-1', 'config-3']),
-    ).to.equal('config-2');
-  });
-});
+import { missingTemplateLabels, startupDataURI } from './startup';
 
 describe('startupDataURI', () => {
   it('names entries by position and leaves out the missing ones', () => {

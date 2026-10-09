@@ -77,6 +77,39 @@ export const configurationSlice: StateCreator<
     });
   },
 
+  renameConfiguration: (oldName, newName) => {
+    set((state) => {
+      const configuration = state.configurations.find(
+        (c) => c.name === oldName,
+      );
+      if (
+        !configuration ||
+        state.configurations.some((c) => c.name === newName)
+      ) {
+        return state;
+      }
+
+      // Renamed, not saved: `path` is kept, so Save writes the new name into
+      // the same file.
+      const renamed: Configuration = {
+        ...configuration,
+        name: newName,
+        saved: false,
+      };
+
+      // The tree view is kept under the configuration name: carry it over.
+      const { [oldName]: view, ...treeView } = state.treeView;
+
+      return {
+        configurations: state.configurations.map((c) =>
+          c.name === oldName ? renamed : c,
+        ),
+        active: state.active?.name === oldName ? renamed : state.active,
+        treeView: view ? { ...treeView, [newName]: view } : treeView,
+      };
+    });
+  },
+
   setActive: (name) => {
     set((state) => {
       const configuration = state.configurations.find((c) => c.name === name);

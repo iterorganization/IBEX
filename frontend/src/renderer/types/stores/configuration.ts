@@ -8,6 +8,8 @@ export interface ConfigurationState {
   addConfiguration?: (configuration: Configuration) => void;
   updatedConfiguration?: (configuration: Configuration) => void;
   removeConfiguration?: (name: string) => void;
+  /** Rename a configuration; a no-op if `newName` is already taken. */
+  renameConfiguration?: (oldName: string, newName: string) => void;
   setActive?: (name: string) => void;
   /** Move one coordinate's cursor; see `stores/configurationSlice.ts`. */
   setCursor?: (

@@ -1,20 +1,6 @@
 import { DataGridPlotToSave, URIData } from '../types';
 
 /**
- * First of `base`, `base-1`, `base-2`, ... that no open configuration uses.
- */
-export const uniqueConfigurationName = (
-  base: string,
-  takenNames: string[],
-): string => {
-  let name = base;
-  for (let i = 1; takenNames.includes(name); i++) {
-    name = `${base}-${i}`;
-  }
-  return name;
-};
-
-/**
  * Data entries opened from the command line, named after their position
  * (URI-0, URI-1, ...) so that they fill a template's slots in order. A URI
  * that does not exist is left out without shifting the names of the others.
