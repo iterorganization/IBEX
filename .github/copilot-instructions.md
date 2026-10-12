@@ -26,6 +26,15 @@ This is the part that isn't obvious from either directory alone:
 - The resolved URL flows main → `frontend/src/config/config.ts` (`API_URL`,
   overridden by `IBEX_BACKEND_URL`) → renderer via the preload bridge
   (`window.api.getConfig()`).
+- Command-line options (`-c/--config`, `-u/--uri`, `-n/--name`, `-t/--template`,
+  `-h`, `-v`) are parsed only in `frontend/src/main/cli.ts`, before the backend
+  is spawned; help, version and usage errors exit right there. What to open
+  reaches the renderer as a `StartupRequest` (`src/renderer/types/startup.ts`)
+  through the one-shot `window.api.getStartupRequest()`, and `MainLayout` opens
+  it instead of the default configuration. Unknown long options are Chromium or
+  Electron switches and are passed through, so never make the parser reject
+  them. The launch scripts forward `"$@"` unchanged and set `IBEX_CALLER_CWD`,
+  against which relative paths resolve.
 - **All** renderer→backend HTTP calls live in
   `frontend/src/renderer/utils/fetchData.ts`; response types come from
   `src/renderer/types/`. Adding a backend endpoint means touching that file plus
@@ -149,7 +158,14 @@ The suite attaches to the app that `start:e2e` runs (via its DevTools endpoint o
 fails in its `before all` hook. `npm run test:e2e` alone, with no app running, fails
 fast with a message saying so.
 
-There is no unit test runner configured — only lint/format and e2e specs.
+Unit tests (Mocha + chai, no app or backend needed; run in CI by
+`frontend-unit-tests.yml`):
+```bash
+npm run test:unit                   # src/{main,renderer}/**/*.test.ts
+```
+Keep the code they cover free of Electron and `window` imports (e.g.
+`src/main/cli.ts`, `src/renderer/utils/startup.ts`), so it runs under plain
+ts-node.
 
 **Dependencies**: never run `npm audit fix --force` here — npm's "fix" for the Electron
 Forge advisories is a downgrade to `@electron-forge/cli@6.4.2` and
@@ -196,6 +212,10 @@ why they are accepted.
 - `launch-dev.sh` — creates a dev venv, installs backend editable, and runs
   the frontend together; requires `module load IMAS-Python IDStools nodejs`.
 - `launch.sh` — runs an already-installed IBEX (post `install.sh`) on SDCC.
+- Both launch scripts take the same command-line options as `ibex` (see
+  README "Command-line options"); `-h`/`-v` skip the backend and set-up steps.
+  `--version` prints `git describe` captured when the main bundle is built
+  (`IBEX_VERSION` in `webpack.main.config.ts`).
 - CI (GitHub Actions in `.github/workflows/`) runs backend pytest across
   Python 3.10–3.13, backend ruff lint/format, frontend eslint/prettier, frontend
   packaging, and frontend e2e tests (which download fixture datasets listed in
