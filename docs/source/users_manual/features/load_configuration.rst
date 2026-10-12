@@ -13,4 +13,11 @@ To load an existing local configuration, you can use the “Load” button to fi
 Make sure to save your configuration by clicking the “Save” button so that you can load it later and pick up right where you left off. 
 
 When loading a configuration, the data must match the expected JSON format to be valid.
+
+Configuration files can also be loaded when starting IBEX, with ``--config`` (``-c``) followed by
+one or more files, each opened in its own configuration (see :ref:`Command-line options`):
+
+.. code-block:: bash
+
+   ./launch.sh -c myRunIbexState.json otherIbexState.json
  

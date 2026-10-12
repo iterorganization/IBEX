@@ -137,7 +137,83 @@ The application can then be launched with:
    cd IBEX
    ./launch.sh
 
+Both ``ibex`` and ``launch.sh`` take options to open configurations or data entries directly at
+startup, see `Command-line options`_.
+
 .. seealso::
 
    For the **development run mode** (running from source with hot-reloading), see
    :doc:`/developers_manual/frontend_development/installation` in the developer's manual.
+
+.. _`Command-line options`:
+
+Command-line options
+--------------------
+
+IBEX can open configurations or data entries directly at startup. The packaged ``ibex`` executable
+and the helper scripts ``launch.sh`` and ``launch-dev.sh`` all accept the same options:
+
+.. code-block:: text
+
+   ibex [-h] [-v] [-c FILE [FILE ...] | -u URI [URI ...] [-n NAME] [-t TEMPLATE]]
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Option
+     - Effect
+   * - ``-h``, ``--help``
+     - Print the usage, with the list of templates installed with IBEX, and exit.
+   * - ``-v``, ``--version``
+     - Print the IBEX version and exit.
+   * - ``-c``, ``--config FILE...``
+     - Load one or more configuration files (see :doc:`Load configuration <features/load_configuration>`),
+       each in its own configuration.
+   * - ``-u``, ``--uri URI...``
+     - Create a new configuration containing these data entries (see
+       :doc:`Add uri <features/add_uri>`).
+   * - ``-n``, ``--name NAME``
+     - With ``--uri``: name of the new configuration. Without it, the configuration is named
+       ``config``, then ``config-1``, ``config-2``, ...
+   * - ``-t``, ``--template TEMPLATE``
+     - With ``--uri`` and ``--name``: create the configuration from a template (see
+       :doc:`Add configuration <features/add_configuration>`). The template is given as a file path,
+       or by name: a template installed with IBEX, or one from the template folders set in the
+       :doc:`Preferences <features/preferences_menu>`.
+
+Rules:
+
+* ``--config`` and ``--uri`` cannot be used together: a configuration file already lists its data
+  entries.
+* ``--name`` requires ``--uri``, and ``--template`` requires both ``--uri`` and ``--name``.
+* Each option taking a list reads values until the next option, and can be repeated.
+* Relative file paths are resolved against the directory IBEX was started from, including when
+  going through the helper scripts.
+* When ``--config`` or ``--uri`` is given, the :doc:`default configuration
+  <features/default_configuration>` is not loaded.
+* With ``--help`` or ``--version``, IBEX only prints and exits: no window opens and no backend is
+  started.
+* A wrong option, a missing configuration file or an unknown template is reported in the terminal,
+  and IBEX exits without opening a window.
+
+Examples:
+
+.. code-block:: bash
+
+   # Open two saved configurations
+   ./launch.sh -c myRunIbexState.json ~/configs/otherIbexState.json
+
+   # Open two data entries side by side in a new configuration named "compare"
+   ./launch.sh -u "imas:hdf5?path=/path/to/entry1" "imas:hdf5?path=/path/to/entry2" -n compare
+
+   # Plot one data entry with a template installed with IBEX
+   ./launch.sh -u "imas:hdf5?path=/path/to/entry" -n kinetic -t PlotKineticProfiles
+
+   # List the options and the installed templates
+   ./launch.sh --help
+
+.. note::
+
+   Quote each URI: the ``?`` and ``;`` characters they contain would otherwise be interpreted by the
+   shell.
