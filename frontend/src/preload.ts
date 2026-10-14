@@ -1,7 +1,12 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-import { StartupRequest, TestState } from './renderer/types';
+import {
+  LaunchDirectoryKind,
+  LaunchDirectoryListing,
+  StartupRequest,
+  TestState,
+} from './renderer/types';
 import { contextBridge, ipcRenderer } from 'electron';
 
 const STUB_BACKEND_FUNCTIONS = process.env.E2E_TEST;
@@ -50,6 +55,12 @@ export const API = {
     selectFolder: () => ipcRenderer.invoke('selectFolder'),
 
     listFiles: (dirPath: string) => ipcRenderer.invoke('listFiles', dirPath),
+
+    // null when the directory IBEX was started from no longer exists
+    listLaunchDirectory: (
+      kind: LaunchDirectoryKind,
+    ): Promise<LaunchDirectoryListing | null> =>
+      ipcRenderer.invoke('listLaunchDirectory', kind),
 
     saveAsDialog: STUB_BACKEND_FUNCTIONS
       ? // Stub function for E2E tests

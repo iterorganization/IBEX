@@ -171,6 +171,9 @@ describe('UI Tests for Header Component', function () {
       0,
     );
     await findCssElementAndClickIt('header-load-configuration');
+    // The menu lists the launch directory below "Browse…"
+    await ensureCssElementIsDisplayed('header-load-menu');
+    await findCssElementAndClickIt('header-load-browse');
     await waitForValue(
       'Load configuration length',
       async () => (await getTestState()).configurations.length,

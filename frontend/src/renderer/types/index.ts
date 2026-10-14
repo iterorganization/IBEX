@@ -9,3 +9,4 @@ export * from './plot';
 export * from './uri';
 export * from './userPreferences';
 export * from './startup';
+export * from './launchDirectory';

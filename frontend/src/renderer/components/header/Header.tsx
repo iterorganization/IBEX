@@ -9,6 +9,7 @@ import {
   Group,
   Image,
   Loader,
+  Menu,
   Select,
   Title,
   Tooltip,
@@ -16,6 +17,7 @@ import {
 import logoPath from '../../assets/imas_extra.png';
 import { Configuration } from 'src/renderer/types';
 import {
+  IconChevronDown,
   IconPlus,
   IconCircleFilled,
   IconPencil,
@@ -23,6 +25,7 @@ import {
   IconStarFilled,
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { LaunchDirectoryMenu } from '../launchDirectory';
 import {
   updateIbexConfig,
   fetchInfoVersion,
@@ -54,7 +57,7 @@ interface HeaderProps {
   handleRenameConfiguration: () => void;
   handleSaveConfiguration: () => void;
   handleSaveConfigurationAs: () => void;
-  handleLoadConfiguration: () => void;
+  handleLoadConfiguration: (path?: string) => void;
   handleSelectConfiguration: (value: string) => void;
   handleAddTree: () => void;
   defaultConfigPath: string;
@@ -86,13 +89,27 @@ export const Header = ({
       >
         Add
       </Button>
-      <Button
-        onClick={() => handleLoadConfiguration()}
-        data-testid="header-load-configuration"
-        variant="outline"
+      <LaunchDirectoryMenu
+        kind="configs"
+        onSelect={handleLoadConfiguration}
+        testId="header-load-menu"
+        target={
+          <Button
+            data-testid="header-load-configuration"
+            variant="outline"
+            rightSection={<IconChevronDown size={16} />}
+          >
+            Load
+          </Button>
+        }
       >
-        Load
-      </Button>
+        <Menu.Item
+          onClick={() => handleLoadConfiguration()}
+          data-testid="header-load-browse"
+        >
+          Browse…
+        </Menu.Item>
+      </LaunchDirectoryMenu>
       <Button
         onClick={handleSaveConfiguration}
         disabled={configurations.length === 0 || active?.saved}
