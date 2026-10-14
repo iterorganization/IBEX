@@ -34,7 +34,13 @@ This is the part that isn't obvious from either directory alone:
   it instead of the default configuration. Unknown long options are Chromium or
   Electron switches and are passed through, so never make the parser reject
   them. The launch scripts forward `"$@"` unchanged and set `IBEX_CALLER_CWD`,
-  against which relative paths resolve.
+  against which relative paths resolve; `index.ts` also hands it to `ipc.ts`
+  so the file dialogs (`getFilePathDialog`, `saveAsDialog`) start there.
+  Chromium always uses the XDG portal on Linux, and portals older than version
+  4 (RHEL 9) ignore the start folder of *open* dialogs (save dialogs work), so
+  the header Load menu and the Select URIs modal also list that directory
+  in-app (`LaunchDirectoryMenu`, IPC `listLaunchDirectory`, which can only read
+  that directory).
 - **All** renderer→backend HTTP calls live in
   `frontend/src/renderer/utils/fetchData.ts`; response types come from
   `src/renderer/types/`. Adding a backend endpoint means touching that file plus

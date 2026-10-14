@@ -23,6 +23,7 @@ Thanks to this modal, you can retrieve URIs in different ways :
 **From a file (Upload local dataset):**
 
 Upload a file using the input from the file explorer, and then the list of URIs will appear in the table below.
+The folder button next to it lists the data entries of the directory IBEX was started from (netCDF files, and HDF5 entries in it or in one of its subdirectories): click one to add it.
 
 **From the input (Write/Paste a URI):**
 

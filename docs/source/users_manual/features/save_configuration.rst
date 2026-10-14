@@ -14,7 +14,8 @@ Two buttons save the current configuration, so that you can return to it later. 
 explorer opens so that you can choose the name and location of the file. After that, "Save" simply
 updates the same file, and is greyed out while there is nothing new to save.
 
-**Save as…** always opens the file explorer, starting in the folder of the current file, so that you
+**Save as…** always opens the file explorer, starting in the folder of the current file (or, for a
+configuration not saved yet, in the directory IBEX was started from), so that you
 can save the configuration to another file, for example to keep the previous version. The
 configuration is then linked to the new file: the next "Save" writes to it.
 
