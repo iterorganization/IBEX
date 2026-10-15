@@ -132,6 +132,23 @@ def interpolation_entry_path_directory(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
+def occurrences_entry_path(tmp_path_factory):
+    """One entry with two summary occurrences on different time vectors, as a fast and a slow acquisition."""
+    uri = f"imas:hdf5?path={tmp_path_factory.mktemp('occurrences_testdb')}/occurrences_db"
+
+    with imas.DBEntry(uri, mode="w") as entry:
+        for occurrence, time in enumerate([np.linspace(0.0, 1.0, 11), np.asarray([0.05, 0.5, 1.5])]):
+            summary = entry.factory.summary()
+            summary.ids_properties.homogeneous_time = 1
+            summary.time = time
+            summary.global_quantities.ip.value = 1e6 * (occurrence + 1) + time
+            summary.global_quantities.ip.value_error_upper = np.full(time.shape, 10.0 * (occurrence + 1))
+            entry.put(summary, occurrence)
+
+    return uri
+
+
+@pytest.fixture(scope="session")
 def entry_path(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("testdb")
 
