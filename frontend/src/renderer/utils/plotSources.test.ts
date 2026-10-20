@@ -10,6 +10,7 @@ const plots = (...nodeUris: string[]) =>
   nodeUris.map((nodeUri) => ({ nodeUri }) as DataPlotly);
 
 const IP = 'global_quantities/ip/value';
+const TE = 'profiles_1d[:]/electrons/temperature';
 
 describe('sourceOf', () => {
   it('reads an occurrence left out as occurrence 0', () => {
@@ -50,8 +51,44 @@ describe('getUrisToInterpolate', () => {
 
   it('counts an implicit and an explicit occurrence 0 as one source', () => {
     expect(
-      getUrisToInterpolate(`URI-1#summary/${IP}`, plots(`URI-1#summary:0/x`)),
+      getUrisToInterpolate(
+        `URI-1#summary/${IP}`,
+        plots(`URI-1#summary:0/global_quantities/tau_energy/value`),
+      ),
     ).to.deep.equal([]);
+  });
+
+  it('never takes the occurrence of another IDS of the same entry', () => {
+    expect(
+      getUrisToInterpolate(
+        `URI-1#core_profiles:0/${TE}`,
+        plots(`URI-1#summary:1/${IP}`),
+      ),
+    ).to.deep.equal([]);
+    expect(
+      getUrisToInterpolate(
+        `URI-1#summary:1/${IP}`,
+        plots(`URI-1#core_profiles:0/${TE}`),
+      ),
+    ).to.deep.equal([]);
+  });
+
+  it('keeps its own occurrence in an entry where its IDS is not drawn', () => {
+    expect(
+      getUrisToInterpolate(
+        `URI-0#core_profiles:2/${TE}`,
+        plots(`URI-1#summary:1/${IP}`),
+      ),
+    ).to.deep.equal([`URI-1#core_profiles:2/${TE}`]);
+  });
+
+  it('takes the occurrences of its IDS drawn from another entry', () => {
+    expect(
+      getUrisToInterpolate(
+        `URI-0#core_profiles:0/${TE}`,
+        plots(`URI-1#summary:1/${IP}`, `URI-1#core_profiles:2/${TE}`),
+      ),
+    ).to.deep.equal([`URI-1#core_profiles:2/${TE}`]);
   });
 
   it('builds the node of the trace itself in every other source', () => {
@@ -70,6 +107,15 @@ describe('commonCoordinatesChange', () => {
       commonCoordinatesChange(
         plots(`URI-1#summary:0/${IP}`),
         `URI-1#summary:1/${IP}`,
+      ),
+    ).to.equal(true);
+  });
+
+  it('is true when another IDS of an entry joins the grid', () => {
+    expect(
+      commonCoordinatesChange(
+        plots(`URI-1#summary:1/${IP}`),
+        `URI-1#core_profiles:0/${TE}`,
       ),
     ).to.equal(true);
   });

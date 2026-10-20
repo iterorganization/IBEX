@@ -9,6 +9,9 @@ import { normalizeIndices } from './uri';
  * vectors are independent. Keyed on the data entry alone, a grid holding
  * `summary:0` and `summary:1` of the same entry interpolated neither over the
  * other and drew both against the coordinates of only one of them.
+ *
+ * An occurrence only means something for its own IDS: `summary:1` and
+ * `core_profiles:0` may well be the only occurrences of their IDS in an entry.
  */
 interface NodeSource {
   entry: string;
@@ -31,13 +34,9 @@ export const sourceOf = (uri: string): NodeSource => {
   };
 };
 
-/**
- * The key a source is told apart by. Without the IDS name: traces of several
- * IDSs from one occurrence of an entry share its coordinates, as they did when
- * sources were data entries.
- */
-const sourceKey = ({ entry, occurrence }: NodeSource) =>
-  `${entry}#${occurrence}`;
+/** The key a source is told apart by. */
+const sourceKey = ({ entry, ids, occurrence }: NodeSource) =>
+  `${entry}#${ids}:${occurrence}`;
 
 /** The sources a grid's traces come from, by key. */
 const sourcesOf = (plots: DataPlotly[]) => {
@@ -65,9 +64,30 @@ export const getUrisToInterpolate = (uriToAdd: string, plots: DataPlotly[]) => {
   const own = sourceOf(uriToAdd);
   const ownKey = sourceKey(own);
   const node = own.path ? `/${own.path}` : '';
-  return [...sourcesOf(plots)]
+  const others = [...sourcesOf(plots)]
     .filter(([key]) => key !== ownKey)
-    .map(([, other]) => `${other.entry}#${own.ids}:${other.occurrence}${node}`);
+    .map(([, other]) => other);
+  // The back-end interpolates over the trace's own IDS only, so another IDS
+  // gives no occurrence to take: none in the trace's own entry, whose IDSs
+  // share their coordinates, and the trace's own one in an entry where its IDS
+  // is not drawn.
+  const entriesWithOwnIds = new Set(
+    others.filter((other) => other.ids === own.ids).map((other) => other.entry),
+  );
+  return [
+    ...new Set(
+      others.flatMap((other) => {
+        let occurrence = other.occurrence;
+        if (other.ids !== own.ids) {
+          if (other.entry === own.entry || entriesWithOwnIds.has(other.entry)) {
+            return [];
+          }
+          occurrence = own.occurrence;
+        }
+        return [`${other.entry}#${own.ids}:${occurrence}${node}`];
+      }),
+    ),
+  ];
 };
 
 /**

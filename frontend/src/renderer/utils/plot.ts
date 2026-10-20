@@ -248,7 +248,7 @@ export const handleNewPlot = async (
  * added or removed. In delete case, interpolate without the deleted one.
  *
  * The grid draws every trace against one set of coordinates: the union of the
- * coordinates of every source - data entry and IDS occurrence - it uses (see
+ * coordinates of every source - data entry, IDS and occurrence - it uses (see
  * `getUrisToInterpolate`). Only a source joining or leaving the grid changes
  * that union, so a trace added from - or removed from - a source other traces
  * still come from leaves the other traces as they are. Refetching only the traces sharing its path used to
