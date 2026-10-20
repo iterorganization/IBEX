@@ -3,6 +3,7 @@ import type { DataPlotly } from '../types';
 import {
   commonCoordinatesChange,
   getUrisToInterpolate,
+  plotTabLabels,
   sourceOf,
 } from './plotSources';
 
@@ -127,5 +128,67 @@ describe('commonCoordinatesChange', () => {
         'URI-1#summary:1/global_quantities/tau_energy/value',
       ),
     ).to.equal(false);
+  });
+});
+
+describe('plotTabLabels', () => {
+  const named = (...traces: [string, string, string][]) =>
+    traces.map(
+      ([nodeUri, labelUri, name]) =>
+        ({ nodeUri, labelUri, name }) as DataPlotly,
+    );
+
+  it('keeps a name no other trace shares', () => {
+    const labels = plotTabLabels(
+      named([`URI-0#summary:1/${IP}`, 'URI-0', 'ip_URI-0']),
+    );
+    expect(labels.get(`URI-0#summary:1/${IP}`)).to.equal('ip_URI-0');
+  });
+
+  it('tells traces of one entry apart by the end of their paths', () => {
+    const labels = plotTabLabels(
+      named(
+        ['URI-0#magnetics/ip/0/measured', 'URI-0', 'measured_URI-0'],
+        [
+          'URI-0#magnetics/diamagnetic_flux/0/measured',
+          'URI-0',
+          'measured_URI-0',
+        ],
+      ),
+    );
+    expect([...labels.values()]).to.deep.equal([
+      'ip/0/measured_URI-0',
+      'diamagnetic_flux/0/measured_URI-0',
+    ]);
+  });
+
+  it('tells the occurrences of one node apart by IDS and occurrence', () => {
+    const labels = plotTabLabels(
+      named(
+        [`URI-0#summary:1/${IP}`, 'URI-0', 'ip_URI-0'],
+        [`URI-1#summary:1/${IP}`, 'URI-1', 'ip_URI-1'],
+        [`URI-1#summary/${IP}`, 'URI-1', 'ip_URI-1'],
+      ),
+    );
+    expect([...labels.values()]).to.deep.equal([
+      'ip_URI-0',
+      'ip_URI-1#summary:1',
+      'ip_URI-1#summary:0',
+    ]);
+  });
+
+  it('qualifies only the traces their paths leave alike', () => {
+    const labels = plotTabLabels(
+      named(
+        ['URI-0#magnetics:0/ip/0/measured', 'URI-0', 'measured_URI-0'],
+        ['URI-0#magnetics:1/ip/0/measured', 'URI-0', 'measured_URI-0'],
+        ['URI-0#magnetics/flux_loop/0/measured', 'URI-0', 'measured_URI-0'],
+      ),
+    );
+    expect([...labels.values()]).to.deep.equal([
+      'ip/0/measured_URI-0#magnetics:0',
+      'ip/0/measured_URI-0#magnetics:1',
+      'flux_loop/0/measured_URI-0',
+    ]);
   });
 });

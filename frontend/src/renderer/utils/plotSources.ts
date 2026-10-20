@@ -98,3 +98,59 @@ export const getUrisToInterpolate = (uriToAdd: string, plots: DataPlotly[]) => {
  */
 export const commonCoordinatesChange = (plots: DataPlotly[], uri: string) =>
   !sourcesOf(plots).has(sourceKey(sourceOf(uri)));
+
+/**
+ * The label of each trace's tab, keyed by `nodeUri` (unique in a grid). A
+ * trace keeps its `name` unless another trace of the grid shares it - two
+ * `measured` nodes of the same entry are both `measured_URI-0` - then it gets
+ * the shortest end of its node path that tells them apart:
+ * `diamagnetic_flux/measured_URI-0` and `ip/measured_URI-0`. One node of an
+ * entry in several IDS occurrences only its IDS and occurrence tell apart:
+ * `ip_URI-0#summary:0` and `ip_URI-0#summary:1`.
+ */
+export const plotTabLabels = (plots: DataPlotly[]): Map<string, string> => {
+  const labels = new Map<string, string>();
+  const byName = new Map<string, DataPlotly[]>();
+  plots.forEach((plot) =>
+    byName.set(plot.name, [...(byName.get(plot.name) ?? []), plot]),
+  );
+
+  byName.forEach((group) => {
+    if (group.length === 1) {
+      labels.set(group[0].nodeUri, group[0].name);
+      return;
+    }
+    // The node path below `#ids:occurrence`, one entry per segment.
+    const segments = group.map((plot) => {
+      const fragment = plot.nodeUri.split('#')[1] ?? plot.nodeUri;
+      return fragment.split('/').slice(1);
+    });
+    const paths = new Set(segments.map((path) => path.join('/'))).size;
+    const longest = Math.max(...segments.map((path) => path.length));
+    const suffixesOf = (depth: number) =>
+      segments.map((path) => path.slice(-depth).join('/'));
+    let depth = 1;
+    while (depth < longest && new Set(suffixesOf(depth)).size !== paths) {
+      depth++;
+    }
+    // With a single path, the shared name says it better than its last segment.
+    const pathLabels =
+      paths === 1
+        ? group.map((plot) => plot.name)
+        : suffixesOf(depth).map(
+            (suffix, index) => `${suffix}_${group[index].labelUri}`,
+          );
+    const qualified = pathLabels.map((label, index) => {
+      if (pathLabels.indexOf(label) === pathLabels.lastIndexOf(label)) {
+        return label;
+      }
+      const { ids, occurrence } = sourceOf(group[index].nodeUri);
+      return `${label}#${ids}:${occurrence}`;
+    });
+    const distinct = new Set(qualified).size === group.length;
+    group.forEach((plot, index) =>
+      labels.set(plot.nodeUri, distinct ? qualified[index] : plot.nodeUri),
+    );
+  });
+  return labels;
+};
