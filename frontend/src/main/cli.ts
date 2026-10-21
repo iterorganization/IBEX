@@ -57,6 +57,56 @@ const LONG_OPTIONS: OptionName[] = [
 const TEMPLATE_SUFFIXES = ['', '.json', 'IbexState.json'];
 
 /**
+ * Edit distance between two strings, counting a swap of two adjacent
+ * characters as one edit.
+ */
+const editDistance = (a: string, b: string): number => {
+  const d = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : i)),
+  );
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost,
+      );
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[a.length][b.length];
+};
+
+/**
+ * The IBEX long option an unknown option name most likely meant to be
+ * (--conf, --uris, --tempalte, ...), or undefined when it looks like a
+ * Chromium/Electron switch instead.
+ * @param name Option name, without leading dashes nor value
+ */
+export const closestOption = (name: string): OptionName | undefined => {
+  const lowerName = name.toLowerCase();
+  let closest: OptionName | undefined;
+  let closestDistance = Infinity;
+  for (const option of LONG_OPTIONS) {
+    const distance = editDistance(lowerName, option);
+    const isMatch =
+      // Abbreviation, long enough not to catch Chromium's --v=1
+      (lowerName.length >= 3 && option.startsWith(lowerName)) ||
+      // Extra plural or suffix
+      (lowerName.startsWith(option) && lowerName.length - option.length <= 2) ||
+      distance <= (option.length <= 4 ? 1 : 2);
+    if (isMatch && distance < closestDistance) {
+      closest = option;
+      closestDistance = distance;
+    }
+  }
+  return closest;
+};
+
+/**
  * The --help text, ending with the templates installed with IBEX.
  * @param builtInTemplateDir The templates folder shipped with the app
  */
@@ -143,7 +193,8 @@ const resolveTemplate = (
  * Parse the command-line arguments given to IBEX.
  *
  * Unknown long options are Chromium/Electron switches (e.g.
- * --remote-debugging-port=9222) and are ignored.
+ * --remote-debugging-port=9222) and are ignored, except those that look like
+ * a mistyped IBEX option (see closestOption), which are reported.
  *
  * @param args Arguments, without the executable (and app path in dev)
  * @param cwd Directory relative paths are resolved against
@@ -178,13 +229,26 @@ export const parseCliArgs = (
         option = LONG_OPTIONS.find((value) => value === optionName);
         inlineValue = rest.length ? rest.join('=') : undefined;
         if (!option) {
+          const meant = closestOption(optionName);
+          if (meant) {
+            throw new CliError(
+              `unknown option '--${optionName}' (did you mean '--${meant}'?)`,
+            );
+          }
           // Chromium/Electron switch, not ours
           i++;
           continue;
         }
       } else if (arg.startsWith('-')) {
         option = SHORT_OPTIONS[arg];
-        if (!option) throw new CliError(`unknown option '${arg}'`);
+        if (!option) {
+          const meant =
+            arg.length > 2 ? closestOption(arg.slice(1)) : undefined;
+          throw new CliError(
+            `unknown option '${arg}'` +
+              (meant ? ` (did you mean '--${meant}'?)` : ''),
+          );
+        }
       } else {
         throw new CliError(`unexpected argument '${arg}'`);
       }
