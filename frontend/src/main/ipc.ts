@@ -2,10 +2,32 @@ import { app, ipcMain, dialog, BrowserWindow } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfigSync } from '../config';
-import { TestState } from 'src/renderer/types';
+import {
+  LaunchDirectoryKind,
+  LaunchDirectoryListing,
+  StartupRequest,
+  TestState,
+} from 'src/renderer/types';
+import { EMPTY_STARTUP_REQUEST } from './cli';
+import { listLaunchDirectory } from './launchDirectory';
+import { getResourcesPath } from './resources';
+
 export default {
-  initialize() {
+  initialize(
+    startupRequest: StartupRequest = EMPTY_STARTUP_REQUEST,
+    callerCwd?: string,
+  ) {
     const config = getConfigSync();
+
+    // File dialogs start in the directory IBEX was started from, unless it is
+    // gone (then the dialog picks its own default).
+    const getStartDir = async (): Promise<string | undefined> =>
+      callerCwd
+        ? fs
+            .stat(callerCwd)
+            .then((stats) => (stats.isDirectory() ? callerCwd : undefined))
+            .catch((): undefined => undefined)
+        : undefined;
 
     ipcMain.handle(
       'readFile',
@@ -42,7 +64,10 @@ export default {
       'getFilePathDialog',
       async (event: Electron.IpcMainInvokeEvent, type: string) => {
         const win = BrowserWindow.fromWebContents(event.sender);
+        // XDG portals older than version 4 (RHEL 9) ignore this and open on
+        // "Recent"; Chromium has no non-portal fallback any more.
         const result = await dialog.showOpenDialog(win, {
+          defaultPath: await getStartDir(),
           properties: ['openFile'],
           filters: [
             { name: `${type.toLocaleUpperCase()} File`, extensions: [type] },
@@ -88,6 +113,18 @@ export default {
       }
     });
 
+    // Only ever the launch directory: the renderer cannot ask for another one
+    ipcMain.handle(
+      'listLaunchDirectory',
+      async (
+        _event,
+        kind: LaunchDirectoryKind,
+      ): Promise<LaunchDirectoryListing | null> => {
+        const startDir = await getStartDir();
+        return startDir ? listLaunchDirectory(startDir, kind) : null;
+      },
+    );
+
     ipcMain.handle('saveAsDialog', async (event, name: string, ext: string) => {
       if (process.env.E2E_TEST === 'true') {
         // For E2E tests, we save to a temporary file
@@ -95,9 +132,11 @@ export default {
       }
 
       const win = BrowserWindow.fromWebContents(event.sender);
+      const startDir = await getStartDir();
       const result = await dialog.showSaveDialog(win, {
         title: 'Save As',
-        defaultPath: name,
+        // A full path (the current file's folder) wins over the start folder
+        defaultPath: startDir ? path.resolve(startDir, name) : name,
         filters: [{ name: `${ext} files`, extensions: [ext] }],
       });
       if (!result.canceled && result.filePath) {
@@ -144,12 +183,17 @@ export default {
       return app.getPath('home');
     });
 
-    ipcMain.handle('getPathFromRessources', (event, folderSteps: string[]) => {
-      const templatesPath =
-        process.env.NODE_ENV === 'development'
-          ? path.join(app.getAppPath(), '..', ...folderSteps) // root in dev
-          : path.join(process.resourcesPath, ...folderSteps); // resources/ in prod
-      return templatesPath;
+    ipcMain.handle('getPathFromRessources', (event, folderSteps: string[]) =>
+      getResourcesPath(...folderSteps),
+    );
+
+    // The request is handed out once: a reload of the window must not reopen
+    // what the command line asked for.
+    let pendingStartupRequest = startupRequest;
+    ipcMain.handle('getStartupRequest', () => {
+      const request = pendingStartupRequest;
+      pendingStartupRequest = EMPTY_STARTUP_REQUEST;
+      return request;
     });
   },
 };

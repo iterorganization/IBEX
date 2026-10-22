@@ -27,6 +27,28 @@ get_free_ports() {
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IBEX_BIN="$SCRIPT_DIR/frontend/out/ibex-linux-x64/ibex"
+
+# Directory the user started IBEX from: relative paths given as options
+# (-c FILE, -t FILE) are resolved against it, since this script changes
+# directory before starting the app.
+export IBEX_CALLER_CWD="$PWD"
+
+# True when the options only ask IBEX to print something (--help,
+# --version): no backend or set-up step is needed then.
+is_info_only() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help|-v|--version) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+if is_info_only "$@"; then
+  exec "$IBEX_BIN" "$@"
+fi
 
 echo "0. Load modules..."
 module purge
@@ -44,6 +66,9 @@ echo "Setting IBEX BACKEND PORT = ${found_ports[0]}"
 cd "$SCRIPT_DIR/backend"
 python -m ibex.cli -p ${found_ports[0]} &
 BACKEND_PID=$!
+# Stop the backend however the script ends, including when the app exits
+# with an error (e.g. an invalid command-line option)
+trap 'kill $BACKEND_PID 2>/dev/null' EXIT
 cd "$SCRIPT_DIR"
 
 echo "Setting IBEX_BACKEND_URL = http://127.0.0.1:${found_ports[0]}"
@@ -73,10 +98,10 @@ cat > ~/.config/ibex/config.json <<EOF
 EOF
 
 echo "3. Launch frontend server..."
-"$SCRIPT_DIR/frontend/out/ibex-linux-x64/ibex" &
+# Command-line options are passed on to IBEX (see `./launch.sh --help`)
+"$IBEX_BIN" "$@" &
 FRONTEND_PID=$!
 cd "$SCRIPT_DIR"
 
-# Wait for both processes to finish
+# Wait for the app to finish; the EXIT trap stops the backend
 wait $FRONTEND_PID
-kill $BACKEND_PID

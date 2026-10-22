@@ -9,6 +9,7 @@ import {
   Group,
   Image,
   Loader,
+  Menu,
   Select,
   Title,
   Tooltip,
@@ -16,12 +17,15 @@ import {
 import logoPath from '../../assets/imas_extra.png';
 import { Configuration } from 'src/renderer/types';
 import {
+  IconChevronDown,
   IconPlus,
   IconCircleFilled,
+  IconPencil,
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { LaunchDirectoryMenu } from '../launchDirectory';
 import {
   updateIbexConfig,
   fetchInfoVersion,
@@ -50,8 +54,10 @@ interface HeaderProps {
   configurations: ComboboxData;
   handleAddConfiguration: () => void;
   handleRemoveConfiguration: () => void;
+  handleRenameConfiguration: () => void;
   handleSaveConfiguration: () => void;
-  handleLoadConfiguration: () => void;
+  handleSaveConfigurationAs: () => void;
+  handleLoadConfiguration: (path?: string) => void;
   handleSelectConfiguration: (value: string) => void;
   handleAddTree: () => void;
   defaultConfigPath: string;
@@ -63,7 +69,9 @@ export const Header = ({
   configurations,
   handleAddConfiguration,
   handleRemoveConfiguration,
+  handleRenameConfiguration,
   handleSaveConfiguration,
+  handleSaveConfigurationAs,
   handleLoadConfiguration,
   handleSelectConfiguration,
   handleAddTree,
@@ -81,19 +89,41 @@ export const Header = ({
       >
         Add
       </Button>
-      <Button
-        onClick={() => handleLoadConfiguration()}
-        data-testid="header-load-configuration"
-        variant="outline"
+      <LaunchDirectoryMenu
+        kind="configs"
+        onSelect={handleLoadConfiguration}
+        testId="header-load-menu"
+        target={
+          <Button
+            data-testid="header-load-configuration"
+            variant="outline"
+            rightSection={<IconChevronDown size={16} />}
+          >
+            Load
+          </Button>
+        }
       >
-        Load
-      </Button>
+        <Menu.Item
+          onClick={() => handleLoadConfiguration()}
+          data-testid="header-load-browse"
+        >
+          Browse…
+        </Menu.Item>
+      </LaunchDirectoryMenu>
       <Button
         onClick={handleSaveConfiguration}
         disabled={configurations.length === 0 || active?.saved}
         data-testid="header-save-configuration"
       >
-        {active?.path ? 'Save' : 'Save as'}
+        Save
+      </Button>
+      <Button
+        onClick={handleSaveConfigurationAs}
+        disabled={!active}
+        variant="outline"
+        data-testid="header-save-as-configuration"
+      >
+        Save as…
       </Button>
       <Button
         onClick={handleRemoveConfiguration}
@@ -214,6 +244,18 @@ export const Header = ({
               </Tooltip>
             )}
           />
+          <Tooltip openDelay={300} label="Rename configuration">
+            <ActionIcon
+              mt="lg"
+              variant="subtle"
+              onClick={handleRenameConfiguration}
+              disabled={!active}
+              aria-label="Rename configuration"
+              data-testid="header-rename-configuration"
+            >
+              <IconPencil size={18} />
+            </ActionIcon>
+          </Tooltip>
           <BusyIndicator />
         </Group>
         <Group p={12}>
