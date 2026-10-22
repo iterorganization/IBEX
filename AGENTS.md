@@ -1,4 +1,8 @@
-# IBEX
+# AGENTS.md
+
+This file provides guidance to AI coding assistants when working with code in this repository.
+
+## Project overview
 
 IBEX (IMAS variaBles EXplorer) is a graphical tool for exploring IMAS structured
 data (IDS), plotting 1D/2D quantities. It has two independent projects in one repo:
@@ -10,9 +14,6 @@ data (IDS), plotting 1D/2D quantities. It has two independent projects in one re
 
 They are versioned/built together but have separate dependency managers,
 linters, and test suites — always `cd` into the relevant directory first.
-
-`.github/copilot-instructions.md` is a copy of this file's content; keep both in
-sync when changing repo guidance.
 
 ## How the two halves connect
 
@@ -32,8 +33,9 @@ This is the part that isn't obvious from either directory alone:
   reaches the renderer as a `StartupRequest` (`src/renderer/types/startup.ts`)
   through the one-shot `window.api.getStartupRequest()`, and `MainLayout` opens
   it instead of the default configuration. Unknown long options are Chromium or
-  Electron switches and are passed through, so never make the parser reject
-  them. The launch scripts forward `"$@"` unchanged and set `IBEX_CALLER_CWD`,
+  Electron switches and are passed through; only near-misses of IBEX options
+  (`--conf`, `--uris`, ...) are rejected with a hint (`closestOption`), so don't
+  widen that to reject arbitrary switches. The launch scripts forward `"$@"` unchanged and set `IBEX_CALLER_CWD`,
   against which relative paths resolve; `index.ts` also hands it to `ipc.ts`
   so the file dialogs (`getFilePathDialog`, `saveAsDialog`) start there.
   Chromium always uses the XDG portal on Linux, and portals older than version

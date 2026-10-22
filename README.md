@@ -67,7 +67,7 @@ ibex [-h] [-v] [-c FILE [FILE ...] | -u URI [URI ...] [-n NAME] [-t TEMPLATE]]
 `--config` and `--uri` cannot be used together, since a state file already lists its
 data entries. When either is given, the default configuration set in the preferences
 is not loaded. `--help` also lists the templates installed with IBEX, which
-`--template` takes by name.
+`--template` takes by name. 
 
 ```bash
 ./launch.sh -c runIbexState.json otherIbexState.json

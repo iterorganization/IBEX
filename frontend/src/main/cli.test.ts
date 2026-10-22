@@ -40,8 +40,39 @@ describe('parseCliArgs', () => {
 
   it('ignores Chromium and Electron switches', () => {
     expect(
-      requestOf('--remote-debugging-port=9222', '--disable-gpu'),
+      requestOf(
+        '--remote-debugging-port=9222',
+        '--disable-gpu',
+        '--no-watch',
+        '--no-sandbox',
+        '--v=1',
+        '--user-data-dir=/x',
+        '--lang=en',
+        '--inspect',
+        '--enable-logging',
+        '--headless',
+        '--test-type',
+      ),
     ).to.deep.equal({ configs: [], uris: [] });
+  });
+
+  it('rejects mistyped long options with a hint', () => {
+    const hints: [string[], string][] = [
+      [['--conf', 'a.json'], 'config'],
+      [['--configs', 'a.json'], 'config'],
+      [['--Config=a.json'], 'config'],
+      [['--uris', 'imas:a'], 'uri'],
+      [['--url', 'imas:a'], 'uri'],
+      [['-u', 'imas:a', '--names', 'n'], 'name'],
+      [['-u', 'imas:a', '-n', 'n', '--tempalte', 'T'], 'template'],
+      [['--hlep'], 'help'],
+      [['--verison'], 'version'],
+    ];
+    for (const [args, option] of hints) {
+      expect(errorOf(...args)).to.equal(
+        `unknown option '${args.find((arg) => arg.startsWith('--'))?.split('=')[0]}' (did you mean '--${option}'?)`,
+      );
+    }
   });
 
   it('answers help and version before anything else', () => {
@@ -116,7 +147,10 @@ describe('parseCliArgs', () => {
     expect(errorOf('-u', 'imas:a', '-n', 'my', 'name')).to.contain(
       "unexpected argument 'name'",
     );
-    expect(errorOf('-x')).to.contain("unknown option '-x'");
+    expect(errorOf('-x')).to.equal("unknown option '-x'");
+    expect(errorOf('-config', 'a.json')).to.equal(
+      "unknown option '-config' (did you mean '--config'?)",
+    );
   });
 });
 

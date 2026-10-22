@@ -196,6 +196,9 @@ Rules:
   started.
 * A wrong option, a missing configuration file or an unknown template is reported in the terminal,
   and IBEX exits without opening a window.
+* Other ``--`` switches are passed on to Electron/Chromium (e.g. ``--disable-gpu``), except those
+  that look like a mistyped IBEX option, such as ``--conf`` or ``--uris``: these are reported with
+  a suggestion (``did you mean '--config'?``).
 
 Examples:
 
