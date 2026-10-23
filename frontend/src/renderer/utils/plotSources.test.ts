@@ -11,7 +11,8 @@ const plots = (...nodeUris: string[]) =>
   nodeUris.map((nodeUri) => ({ nodeUri }) as DataPlotly);
 
 const IP = 'global_quantities/ip/value';
-const TE = 'profiles_1d[:]/electrons/temperature';
+const CP_IP = 'global_quantities/ip';
+const EQ_IP = 'time_slice[:]/global_quantities/ip';
 
 describe('sourceOf', () => {
   it('reads an occurrence left out as occurrence 0', () => {
@@ -59,37 +60,52 @@ describe('getUrisToInterpolate', () => {
     ).to.deep.equal([]);
   });
 
-  it('never takes the occurrence of another IDS of the same entry', () => {
+  it('takes the node drawn from another IDS of the same entry', () => {
     expect(
       getUrisToInterpolate(
-        `URI-1#core_profiles:0/${TE}`,
+        `URI-1#summary:0/${IP}`,
+        plots(`URI-1#core_profiles:0/${CP_IP}`, `URI-1#summary:0/${IP}`),
+      ),
+    ).to.deep.equal([`URI-1#core_profiles:0/${CP_IP}`]);
+    expect(
+      getUrisToInterpolate(
+        `URI-1#core_profiles:0/${CP_IP}`,
         plots(`URI-1#summary:1/${IP}`),
       ),
-    ).to.deep.equal([]);
-    expect(
-      getUrisToInterpolate(
-        `URI-1#summary:1/${IP}`,
-        plots(`URI-1#core_profiles:0/${TE}`),
-      ),
-    ).to.deep.equal([]);
+    ).to.deep.equal([`URI-1#summary:1/${IP}`]);
   });
 
-  it('keeps its own occurrence in an entry where its IDS is not drawn', () => {
+  it('takes the node of another IDS with its indices normalized', () => {
     expect(
       getUrisToInterpolate(
-        `URI-0#core_profiles:2/${TE}`,
-        plots(`URI-1#summary:1/${IP}`),
+        `URI-0#summary:0/${IP}`,
+        plots(`URI-0#equilibrium:0/time_slice[0]/global_quantities/ip`),
       ),
-    ).to.deep.equal([`URI-1#core_profiles:2/${TE}`]);
+    ).to.deep.equal([`URI-0#equilibrium:0/${EQ_IP}`]);
   });
 
-  it('takes the occurrences of its IDS drawn from another entry', () => {
+  it('takes a single node of a source of another IDS', () => {
     expect(
       getUrisToInterpolate(
-        `URI-0#core_profiles:0/${TE}`,
-        plots(`URI-1#summary:1/${IP}`, `URI-1#core_profiles:2/${TE}`),
+        `URI-0#summary:0/${IP}`,
+        plots(
+          `URI-0#core_profiles:0/${CP_IP}`,
+          'URI-0#core_profiles:0/global_quantities/v_loop',
+        ),
       ),
-    ).to.deep.equal([`URI-1#core_profiles:2/${TE}`]);
+    ).to.deep.equal([`URI-0#core_profiles:0/${CP_IP}`]);
+  });
+
+  it('takes its own node in the sources of its IDS only', () => {
+    expect(
+      getUrisToInterpolate(
+        `URI-0#core_profiles:0/${CP_IP}`,
+        plots(`URI-1#summary:1/${IP}`, `URI-1#core_profiles:2/${CP_IP}`),
+      ),
+    ).to.deep.equal([
+      `URI-1#summary:1/${IP}`,
+      `URI-1#core_profiles:2/${CP_IP}`,
+    ]);
   });
 
   it('builds the node of the trace itself in every other source', () => {
@@ -116,7 +132,7 @@ describe('commonCoordinatesChange', () => {
     expect(
       commonCoordinatesChange(
         plots(`URI-1#summary:1/${IP}`),
-        `URI-1#core_profiles:0/${TE}`,
+        `URI-1#core_profiles:0/${CP_IP}`,
       ),
     ).to.equal(true);
   });
