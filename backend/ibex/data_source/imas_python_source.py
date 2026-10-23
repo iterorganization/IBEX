@@ -1165,6 +1165,9 @@ class IMASPythonSource(DataSourceInterface):
                     return [convert_to_lists(d) for d in data]
                 elif isinstance(data, (np.ndarray, IDSNumericArray)):
                     return data.tolist()
+                elif isinstance(data, (IDSFloat0D, IDSInt0D)):
+                    # e.g. time_slice[:]/time of an IDS with heterogeneous time
+                    return data.value
                 else:
                     return data
 
@@ -1225,15 +1228,9 @@ class IMASPythonSource(DataSourceInterface):
 
                 for _uri in plot_data_query.interpolate_over:
                     _uri_obj = IMAS_URI(_uri)
-
-                    if _uri_obj.ids_name != ids or _uri_obj.node_path != node_path:
-                        if any(node_path == _uri_obj.node_path + m for m in ["_error_upper", "_error_lower"]):
-                            # it is allowed to interpolate _error node over data node e.g. ip_error_upper over ip
-                            ...
-                        else:
-                            raise InvalidParametersException(
-                                "IDS name and node path should be the same for source and target URI when interpolating data"
-                            )
+                    # Only the coordinates of the target node are used, so it may be any node of any IDS
+                    # (e.g. summary ip over core_profiles ip, each IDS on its own time vector): the checks
+                    # below reject targets whose coordinates differ in number or names.
 
                     interpolate_to = None
                     if store_other_signals_data:

@@ -523,12 +523,18 @@ export const handleExistingPlot = async (
       continue;
     }
 
+    // Interpolated over the grid's other sources, the trace is on their common
+    // coordinates even if its own come from another path: summary/time and
+    // core_profiles/time, say. The back-end has checked their names.
+    const xAxisPathMismatch =
+      urisToInterpolate.length === 0 && xAxis?.path !== xAxisResponsePath;
+
     // Check if the xAxisData matches the first coordinate
     if (xAxis && coordsResponse.length > 0) {
       if (
         xAxis.name !== coordsResponse[0].name ||
         xAxis.unit !== coordsResponse[0].unit ||
-        xAxis.path !== xAxisResponsePath
+        xAxisPathMismatch
       ) {
         showNotification({
           title: 'Plot',
@@ -549,7 +555,7 @@ export const handleExistingPlot = async (
         // Check if the xAxisData matches the first coordinate
         (xAxis.name !== coordsResponse[0].name ||
           xAxis.unit !== coordsResponse[0].unit ||
-          xAxis.path !== xAxisResponsePath));
+          xAxisPathMismatch));
 
     if (xAxisMissingOrMismatch) {
       showNotification({

@@ -38,25 +38,37 @@ export const sourceOf = (uri: string): NodeSource => {
 const sourceKey = ({ entry, ids, occurrence }: NodeSource) =>
   `${entry}#${ids}:${occurrence}`;
 
-/** The sources a grid's traces come from, by key. */
+/**
+ * The sources a grid's traces come from, by key, each with the normalized URI
+ * of the first of its traces.
+ */
 const sourcesOf = (plots: DataPlotly[]) => {
-  const sources = new Map<string, NodeSource>();
+  const sources = new Map<string, { source: NodeSource; uri: string }>();
   for (const plot of plots) {
     const source = sourceOf(plot.nodeUri);
-    sources.set(sourceKey(source), source);
+    const key = sourceKey(source);
+    if (!sources.has(key)) {
+      sources.set(key, { source, uri: normalizeIndices(plot.nodeUri) });
+    }
   }
   return sources;
 };
 
 /**
  * The URIs to interpolate a trace over, for the `interpolate_over` parameter of
- * `fetchDataPlot`: its own node in every other source of the grid.
+ * `fetchDataPlot`: one node of every other source of the grid.
  *
  * The back-end puts a trace on the union of its coordinates and those of the
- * nodes it is interpolated over, which must have its path. Over the nodes of
- * the grid sharing its path only, traces of two paths from the same entries -
- * ip and tau_energy, say - ended up on two different unions while the grid
- * draws them all against one.
+ * nodes it is interpolated over. In a source of its own IDS, that is its own
+ * node: over the nodes of the grid sharing its path only, traces of two paths
+ * from the same entries - ip and tau_energy, say - ended up on two different
+ * unions while the grid draws them all against one.
+ *
+ * Another IDS has its own coordinates, even in the same entry: core_profiles,
+ * summary and equilibrium each have their time vector. The trace's node may
+ * not exist there, so it is interpolated over a node drawn from that source,
+ * whose coordinates the grid shares; the back-end refuses it if their
+ * coordinates differ.
  * @param uriToAdd the trace's node URI
  * @param plots the grid's traces; the trace itself may be among them
  */
@@ -64,30 +76,13 @@ export const getUrisToInterpolate = (uriToAdd: string, plots: DataPlotly[]) => {
   const own = sourceOf(uriToAdd);
   const ownKey = sourceKey(own);
   const node = own.path ? `/${own.path}` : '';
-  const others = [...sourcesOf(plots)]
+  return [...sourcesOf(plots)]
     .filter(([key]) => key !== ownKey)
-    .map(([, other]) => other);
-  // The back-end interpolates over the trace's own IDS only, so another IDS
-  // gives no occurrence to take: none in the trace's own entry, whose IDSs
-  // share their coordinates, and the trace's own one in an entry where its IDS
-  // is not drawn.
-  const entriesWithOwnIds = new Set(
-    others.filter((other) => other.ids === own.ids).map((other) => other.entry),
-  );
-  return [
-    ...new Set(
-      others.flatMap((other) => {
-        let occurrence = other.occurrence;
-        if (other.ids !== own.ids) {
-          if (other.entry === own.entry || entriesWithOwnIds.has(other.entry)) {
-            return [];
-          }
-          occurrence = own.occurrence;
-        }
-        return [`${other.entry}#${own.ids}:${occurrence}${node}`];
-      }),
-    ),
-  ];
+    .map(([, { source, uri }]) =>
+      source.ids === own.ids
+        ? `${source.entry}#${own.ids}:${source.occurrence}${node}`
+        : uri,
+    );
 };
 
 /**
