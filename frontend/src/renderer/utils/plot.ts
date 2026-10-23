@@ -62,6 +62,13 @@ import {
   lineVector,
 } from '../derive/vectors';
 import { nextDefaultColor, withDefaultColors } from './plotColors';
+import {
+  commonCoordinatesChange,
+  getUrisToInterpolate,
+  plotTabLabels,
+} from './plotSources';
+
+export { getUrisToInterpolate, plotTabLabels };
 
 /**
  * @description Generates a new DataGridPlot with the provided coordinates, xAxis, and yAxis.
@@ -240,22 +247,15 @@ export const handleNewPlot = async (
   return updatedActive;
 };
 
-/** The data entry of a node URI, `<entry>#<ids>/<path>`. */
-const entryOf = (uri: string) => normalizeIndices(uri).split('#')[0];
-
-/** The data entries a grid's traces come from. */
-const entriesOf = (plots: DataPlotly[]) =>
-  new Set(plots.map((plot) => entryOf(plot.nodeUri)));
-
 /**
  * Refetch the traces of a grid whose common coordinates changed with the trace
  * added or removed. In delete case, interpolate without the deleted one.
  *
  * The grid draws every trace against one set of coordinates: the union of the
- * coordinates of every data entry it uses (see `getUrisToInterpolate`). Only a
- * data entry joining or leaving the grid changes that union, so a trace added
- * from - or removed from - an entry other traces still come from leaves the
- * other traces as they are. Refetching only the traces sharing its path used to
+ * coordinates of every source - data entry, IDS and occurrence - it uses (see
+ * `getUrisToInterpolate`). Only a source joining or leaving the grid changes
+ * that union, so a trace added from - or removed from - a source other traces
+ * still come from leaves the other traces as they are. Refetching only the traces sharing its path used to
  * move the coordinates under the others: with ip and tau_energy from 4 entries,
  * removing one tau_energy put the grid on the union of 3 entries while the 4 ip
  * kept values for the union of 4.
@@ -332,34 +332,6 @@ const updateInterpolatedPlots = async (
   return interpolatedDataPlot;
 };
 
-/**
- * The URIs to interpolate a trace over, for the `interpolate_over` parameter of
- * `fetchDataPlot`: its own node in every other data entry of the grid.
- *
- * The back-end puts a trace on the union of its coordinates and those of the
- * nodes it is interpolated over, which must have its path. Over the nodes of
- * the grid sharing its path only, traces of two paths from the same entries -
- * ip and tau_energy, say - ended up on two different unions while the grid
- * draws them all against one.
- * @param uriToAdd the trace's node URI
- * @param plots the grid's traces; the trace itself may be among them
- */
-export const getUrisToInterpolate = (uriToAdd: string, plots: DataPlotly[]) => {
-  const [entry, path = ''] = normalizeIndices(uriToAdd).split('#');
-  return [...entriesOf(plots)]
-    .filter((other) => other !== entry)
-    .map((other) => `${other}#${path}`);
-};
-
-/**
- * Whether adding or removing a trace changes the coordinates the grid shares:
- * only when its data entry joins or leaves the grid.
- * @param plots the grid's other traces
- * @param uri the trace added or removed
- */
-const commonCoordinatesChange = (plots: DataPlotly[], uri: string) =>
-  !entriesOf(plots).has(entryOf(uri));
-
 const updateCoordsAfterInterpolation = (
   oldCoords: Coordinates[],
   newCoords: Coordinates[],
@@ -422,7 +394,7 @@ export const handleExistingPlot = async (
       defaultUri,
       findDataPlot.plot,
     );
-    // A new data entry joining others moves every trace onto a new union.
+    // A new source joining others moves every trace onto a new union.
     const areCombinedCoordinates =
       urisToInterpolate.length > 0 &&
       commonCoordinatesChange(findDataPlot.plot, defaultUri);
@@ -790,7 +762,7 @@ const deleteExistingPlot = async (
   findDataPlot = interpolatedDataPlot;
 
   // Update all error bands when the deletion moved the combined coordinates:
-  // its data entry left a grid where others remain.
+  // its source left a grid where others remain.
   const areCombinedCoordinates =
     findDataPlot.plot.length > 0 &&
     commonCoordinatesChange(findDataPlot.plot, deletedPlot.nodeUri);
@@ -2913,49 +2885,3 @@ export function formatGeometriesToSave(
 
   return result;
 }
-
-/**
- * The label of each trace's tab, keyed by `nodeUri` (unique in a grid). A
- * trace keeps its `name` unless another trace of the grid shares it - two
- * `measured` nodes of the same entry are both `measured_URI-0` - then it gets
- * the shortest end of its node path that tells them apart:
- * `diamagnetic_flux/measured_URI-0` and `ip/measured_URI-0`.
- */
-export const plotTabLabels = (plots: DataPlotly[]): Map<string, string> => {
-  const labels = new Map<string, string>();
-  const byName = new Map<string, DataPlotly[]>();
-  plots.forEach((plot) =>
-    byName.set(plot.name, [...(byName.get(plot.name) ?? []), plot]),
-  );
-
-  byName.forEach((group) => {
-    if (group.length === 1) {
-      labels.set(group[0].nodeUri, group[0].name);
-      return;
-    }
-    // The node path below `#ids:occurrence`, one entry per segment.
-    const segments = group.map((plot) => {
-      const fragment = plot.nodeUri.split('#')[1] ?? plot.nodeUri;
-      return fragment.split('/').slice(1);
-    });
-    const longest = Math.max(...segments.map((path) => path.length));
-    const suffixesOf = (depth: number) =>
-      segments.map((path) => path.slice(-depth).join('/'));
-    let depth = 1;
-    while (
-      depth < longest &&
-      new Set(suffixesOf(depth)).size !== group.length
-    ) {
-      depth++;
-    }
-    const suffixes = suffixesOf(depth);
-    const distinct = new Set(suffixes).size === group.length;
-    group.forEach((plot, index) =>
-      labels.set(
-        plot.nodeUri,
-        distinct ? `${suffixes[index]}_${plot.labelUri}` : plot.nodeUri,
-      ),
-    );
-  });
-  return labels;
-};

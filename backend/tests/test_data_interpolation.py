@@ -177,3 +177,41 @@ def test_interpolation_codes(interpolation_entry_path_directory):
     assert response_over_filled.status_code == 200
     coordinates = [c["value"] for c in response.json()["data"]["coordinates"]]
     assert coordinates == [c["value"] for c in response_over_filled.json()["data"]["coordinates"]]
+
+
+@pytest.mark.parametrize("own, other", [(0, 1), (1, 0)])
+def test_interpolation_over_another_occurrence(occurrences_entry_path, own, other):
+    """
+    Two occurrences of one IDS in one entry are drawn on the union of their time vectors,
+    each value at its own time.
+    """
+    node = "global_quantities/ip/value"
+    times = {0: np.linspace(0.0, 1.0, 11), 1: np.asarray([0.05, 0.5, 1.5])}
+    parameters = {
+        "uri": f"{occurrences_entry_path}#summary:{own}/{node}",
+        "interpolate_over": [f"{occurrences_entry_path}#summary:{other}/{node}"],
+        "interpolation_method": "exact_value",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+
+    data = response.json()["data"]
+    union = np.union1d(times[0], times[1])
+    np.testing.assert_allclose(data["coordinates"][0]["value"], union)
+
+    value = np.asarray(data["value"], dtype=float)
+    own_times = np.isin(union, times[own])
+    np.testing.assert_allclose(value[own_times], 1e6 * (own + 1) + times[own])
+    assert np.isnan(value[~own_times]).all()
+
+
+def test_error_band_interpolation_over_another_occurrence(occurrences_entry_path):
+    node = "global_quantities/ip/value"
+    parameters = {
+        "uri": f"{occurrences_entry_path}#summary:1/{node}_error_upper",
+        "interpolate_over": [f"{occurrences_entry_path}#summary:0/{node}"],
+        "interpolation_method": "exact_value",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == 200
+    assert len(response.json()["data"]["value"]) == 13
