@@ -1,8 +1,9 @@
-import { app, ipcMain, dialog, BrowserWindow } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import fs from 'fs/promises';
 import path from 'path';
 import { getConfigSync } from '../config';
 import {
+  HelpLink,
   LaunchDirectoryKind,
   LaunchDirectoryListing,
   StartupRequest,
@@ -11,6 +12,14 @@ import {
 import { EMPTY_STARTUP_REQUEST } from './cli';
 import { listLaunchDirectory } from './launchDirectory';
 import { getResourcesPath } from './resources';
+
+declare const IBEX_VERSION: string;
+
+// The renderer names a link, it never passes a URL to open.
+const HELP_LINKS = new Map<HelpLink, string>([
+  ['docs', 'https://imas-ibex.readthedocs.io/'],
+  ['issues', 'https://github.com/iterorganization/IBEX/issues'],
+]);
 
 export default {
   initialize(
@@ -181,6 +190,13 @@ export default {
 
     ipcMain.handle('getHomePath', () => {
       return app.getPath('home');
+    });
+
+    ipcMain.handle('getAppVersion', () => IBEX_VERSION);
+
+    ipcMain.handle('openHelpLink', (_event, link: HelpLink) => {
+      const url = HELP_LINKS.get(link);
+      if (url) shell.openExternal(url);
     });
 
     ipcMain.handle('getPathFromRessources', (event, folderSteps: string[]) =>
