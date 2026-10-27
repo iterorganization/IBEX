@@ -69,6 +69,9 @@ Run the service:
 ./bin/run_ibex_service [-p PORT] [--host HOST]   # Uvicorn; docs at http://127.0.0.1:<port>/docs
 ```
 Default port is 0 (OS-assigned) — the Electron app always passes an explicit port.
+Console logging defaults to `warning`; `--log-level info|debug` (or the env var
+`IBEX_LOG_LEVEL`, which also reaches the backend spawned by `ibex`/`launch*.sh`) adds
+the Uvicorn access log, and at `debug` the endpoint timings.
 
 Test (must use `python -m pytest`, not bare `pytest`, or FastAPI packages won't be found):
 ```bash
@@ -103,6 +106,10 @@ Request flow: `endpoints/*` → `core/ibex_service.py` → `data_source/*`.
   `ids_info.py`, `info.py`) with request/response models in
   `ibex/endpoints/schemas/`. Endpoints stay thin: they validate and delegate to
   `ibex_service`.
+  Their `@ibex_service.measure_execution_time` decorator is not just timing:
+  its `async` wrapper makes FastAPI run the sync endpoints one at a time on the
+  event loop rather than concurrently in its threadpool. Don't drop it without
+  checking that concurrent `imas`/HDF5/MDSplus reads are safe.
 - `ibex/core/ibex_service.py` — the only layer that knows about a concrete data
   source: module-level `data_source = IMASPythonSource()`. This is the swap
   point for an alternative backend.
