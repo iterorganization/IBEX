@@ -10,6 +10,10 @@ The menu button at the right end of the header (☰) opens the user preferences 
 - **Documentation** and **Report an issue** open this documentation and the IBEX GitHub issues in your web browser;
 - the last line shows the IBEX version.
 
+.. image:: images/app_menu.png
+   :alt: Menu opened from the button at the right end of the header
+   :align: center
+
 IBEX has no menu bar. Two keyboard shortcuts are still available: :kbd:`F11` toggles full screen and :kbd:`Ctrl+Shift+I` opens the developer tools.
 
 .. image:: images/template_preferences.png

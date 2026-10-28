@@ -219,6 +219,12 @@ why they are accepted.
   on a double-click.
 - Tree labels are deliberately non-selectable (issue #135) — don't reintroduce
   `userSelect: 'text'` there.
+- A change to what the user sees (header, menus, modals, buttons, tree, plots)
+  also updates the screenshots that show it in
+  `docs/source/users_manual/features/images/`, and the text of the pages using
+  them (`grep -rn "image::" docs/source`). Take them from the app started with
+  `npm run start:e2e`; native dialogs, which E2E mode stubs, need the app in
+  normal mode and a capture of the screen.
 
 ## Repo-wide conventions
 
