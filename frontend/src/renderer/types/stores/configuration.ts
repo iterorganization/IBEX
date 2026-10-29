@@ -1,4 +1,5 @@
 import { Configuration } from '..';
+import { TestState } from './testState';
 
 export interface ConfigurationState {
   configurations: Configuration[];
@@ -7,7 +8,16 @@ export interface ConfigurationState {
   addConfiguration?: (configuration: Configuration) => void;
   updatedConfiguration?: (configuration: Configuration) => void;
   removeConfiguration?: (name: string) => void;
+  /** Rename a configuration; a no-op if `newName` is already taken. */
+  renameConfiguration?: (oldName: string, newName: string) => void;
   setActive?: (name: string) => void;
-  setState?: (state: Partial<ConfigurationState>) => void;
+  /** Move one coordinate's cursor; see `stores/configurationSlice.ts`. */
+  setCursor?: (
+    gridId: string,
+    coordinateName: string,
+    valueIndex: number,
+  ) => void;
+  /** The E2E bridge's way in; see `renderer/utils/testState.ts`. */
+  setState?: (state: Partial<TestState>) => void;
   getState?: () => ConfigurationState;
 }

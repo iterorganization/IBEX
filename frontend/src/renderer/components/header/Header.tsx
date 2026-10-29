@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Box,
   Button,
   Center,
   ComboboxData,
@@ -7,6 +8,8 @@ import {
   Divider,
   Group,
   Image,
+  Loader,
+  Menu,
   Select,
   Title,
   Tooltip,
@@ -14,27 +17,51 @@ import {
 import logoPath from '../../assets/imas_extra.png';
 import { Configuration } from 'src/renderer/types';
 import {
+  IconChevronDown,
   IconPlus,
   IconCircleFilled,
+  IconMenu2,
+  IconPencil,
   IconStar,
   IconStarFilled,
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { LaunchDirectoryMenu } from '../launchDirectory';
 import {
   updateIbexConfig,
   fetchInfoVersion,
   readIbexConfig,
+  useIsBusy,
 } from '../../utils';
+
+/**
+ * Spins while the app is waiting on something - a request, a configuration
+ * being loaded, a plot being built. Its box keeps its width when empty so the
+ * header does not shift as it comes and goes.
+ */
+function BusyIndicator() {
+  const busy = useIsBusy();
+  return (
+    <Box w={24} mt="lg">
+      {busy && (
+        <Loader size="sm" data-testid="busy-indicator" aria-label="Loading" />
+      )}
+    </Box>
+  );
+}
 
 interface HeaderProps {
   active: Configuration;
   configurations: ComboboxData;
   handleAddConfiguration: () => void;
   handleRemoveConfiguration: () => void;
+  handleRenameConfiguration: () => void;
   handleSaveConfiguration: () => void;
-  handleLoadConfiguration: () => void;
+  handleSaveConfigurationAs: () => void;
+  handleLoadConfiguration: (path?: string) => void;
   handleSelectConfiguration: (value: string) => void;
   handleAddTree: () => void;
+  handleOpenTemplateFolders: () => void;
   defaultConfigPath: string;
   setDefaultConfigPath: (value: string) => void;
 }
@@ -44,14 +71,18 @@ export const Header = ({
   configurations,
   handleAddConfiguration,
   handleRemoveConfiguration,
+  handleRenameConfiguration,
   handleSaveConfiguration,
+  handleSaveConfigurationAs,
   handleLoadConfiguration,
   handleSelectConfiguration,
   handleAddTree,
+  handleOpenTemplateFolders,
   defaultConfigPath,
   setDefaultConfigPath,
 }: HeaderProps) => {
   const [isServerResponding, setIsServerResponding] = useState(true);
+  const [appVersion, setAppVersion] = useState('');
 
   const configurationButtons = (
     <Group>
@@ -62,19 +93,41 @@ export const Header = ({
       >
         Add
       </Button>
-      <Button
-        onClick={() => handleLoadConfiguration()}
-        data-testid="header-load-configuration"
-        variant="outline"
+      <LaunchDirectoryMenu
+        kind="configs"
+        onSelect={handleLoadConfiguration}
+        testId="header-load-menu"
+        target={
+          <Button
+            data-testid="header-load-configuration"
+            variant="outline"
+            rightSection={<IconChevronDown size={16} />}
+          >
+            Load
+          </Button>
+        }
       >
-        Load
-      </Button>
+        <Menu.Item
+          onClick={() => handleLoadConfiguration()}
+          data-testid="header-load-browse"
+        >
+          Browse…
+        </Menu.Item>
+      </LaunchDirectoryMenu>
       <Button
         onClick={handleSaveConfiguration}
         disabled={configurations.length === 0 || active?.saved}
         data-testid="header-save-configuration"
       >
-        {active?.path ? 'Save' : 'Save as'}
+        Save
+      </Button>
+      <Button
+        onClick={handleSaveConfigurationAs}
+        disabled={!active}
+        variant="outline"
+        data-testid="header-save-as-configuration"
+      >
+        Save as…
       </Button>
       <Button
         onClick={handleRemoveConfiguration}
@@ -110,6 +163,43 @@ export const Header = ({
       </Tooltip>
     </Group>
   );
+
+  const appMenu = (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <ActionIcon
+          variant="subtle"
+          aria-label="Menu"
+          data-testid="header-app-menu"
+        >
+          <IconMenu2 size={20} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          onClick={handleOpenTemplateFolders}
+          data-testid="header-app-menu-template-folders"
+        >
+          Template folders…
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Item onClick={() => window.api.openHelpLink('docs')}>
+          Documentation
+        </Menu.Item>
+        <Menu.Item onClick={() => window.api.openHelpLink('issues')}>
+          Report an issue
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Label data-testid="header-app-menu-version">
+          IBEX {appVersion}
+        </Menu.Label>
+      </Menu.Dropdown>
+    </Menu>
+  );
+
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion);
+  }, []);
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -195,6 +285,19 @@ export const Header = ({
               </Tooltip>
             )}
           />
+          <Tooltip openDelay={300} label="Rename configuration">
+            <ActionIcon
+              mt="lg"
+              variant="subtle"
+              onClick={handleRenameConfiguration}
+              disabled={!active}
+              aria-label="Rename configuration"
+              data-testid="header-rename-configuration"
+            >
+              <IconPencil size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <BusyIndicator />
         </Group>
         <Group p={12}>
           {configurationButtons}
@@ -202,6 +305,7 @@ export const Header = ({
           {visualisationButtons}
           <Divider orientation="vertical" />
           {serverStatus}
+          {appMenu}
         </Group>
       </Group>
     </Container>

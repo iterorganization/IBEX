@@ -77,10 +77,16 @@ export const CustomizeGeometry = ({
     }
 
     const checkedNodeURI = structuredClone(active.checkedNodeURI);
+    // The panel's state is replaced, not written into - `fetchGeometries`
+    // pushes into `geometries`, so the copy gets its own list.
+    const updated: DataGridPlot = {
+      ...customizedDataGrid,
+      geometries: [...(customizedDataGrid.geometries ?? [])],
+    };
 
     if (!values.length) {
       // Remove all geometries
-      customizedDataGrid.geometries = [];
+      updated.geometries = [];
     } else {
       if (values.length < selectedGeometries.length) {
         // Remove selected geometry
@@ -92,7 +98,7 @@ export const CustomizeGeometry = ({
         )?.uri;
         const pathToRemove = '#' + selectUriToRemove.split('#')[1];
         const fullPathToRemove = uri + pathToRemove;
-        customizedDataGrid.geometries = customizedDataGrid.geometries.filter(
+        updated.geometries = updated.geometries.filter(
           (geoToRemove) =>
             !geoToRemove.geometry_node.includes(fullPathToRemove),
         );
@@ -111,7 +117,7 @@ export const CustomizeGeometry = ({
         // Get geometries
         const fetchedGeometrie = await fetchGeometries(
           selectedUri + added,
-          customizedDataGrid,
+          updated,
           checkedNodeURI,
           wantedGeometryInfos,
         );
@@ -126,12 +132,10 @@ export const CustomizeGeometry = ({
           return;
         }
 
-        customizedDataGrid.geometries = fetchedGeometrie.geometries;
+        updated.geometries = fetchedGeometrie.geometries;
       }
     }
-    setCustomizedDataGrid({
-      ...customizedDataGrid,
-    });
+    setCustomizedDataGrid(updated);
 
     setSelectedGeometries(...[values]);
   };

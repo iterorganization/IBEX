@@ -10,6 +10,7 @@ Description of features
 
    features/first_window
    features/add_configuration
+   features/rename_configuration
    features/add_uri
    features/load_configuration
    features/tree

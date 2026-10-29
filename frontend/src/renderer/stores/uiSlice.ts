@@ -1,0 +1,103 @@
+import { StateCreator } from 'zustand';
+import {
+  Configuration,
+  ibexState,
+  TreeViewState,
+  UiState,
+} from 'src/renderer/types';
+
+/**
+ * Drops the ui ids that no longer name a grid of the active configuration.
+ *
+ * These ids used to live on the configuration itself, so switching or clearing
+ * it took them with it. Now that they are session state they outlive it, and a
+ * stale `customizing` is not harmless: `TreeLibrary.handleDisableTree` disables
+ * the whole node tree whenever a panel is open, so an id left behind by a
+ * configuration that is gone leaves the tree dead with no panel on screen to
+ * explain why.
+ */
+export const pruneUiState = (
+  ui: UiState,
+  active: Configuration | null,
+): Pick<UiState, 'editingGridId' | 'metadataGridId' | 'customizing'> => {
+  const resolves = (id?: string | null) =>
+    Boolean(id) && Boolean(active?.dataPlot?.some((grid) => grid.i === id));
+
+  return {
+    editingGridId: resolves(ui.editingGridId) ? ui.editingGridId : null,
+    metadataGridId: resolves(ui.metadataGridId) ? ui.metadataGridId : null,
+    customizing: resolves(ui.customizing?.id) ? ui.customizing : null,
+  };
+};
+
+const EMPTY_TREE_VIEW: TreeViewState = { openUris: [], expanded: {} };
+
+/** Writes the tree view of one configuration, leaving the others untouched. */
+const withTreeView = (
+  state: ibexState,
+  configuration: string,
+  update: (view: TreeViewState) => TreeViewState,
+): Partial<ibexState> => {
+  const current = state.treeView[configuration] ?? EMPTY_TREE_VIEW;
+  const next = update(current);
+  if (next === current) return state;
+  return { treeView: { ...state.treeView, [configuration]: next } };
+};
+
+export const uiSlice: StateCreator<ibexState, [], [], UiState> = (set) => ({
+  editingGridId: null,
+  metadataGridId: null,
+  customizing: null,
+  treeView: {},
+
+  setEditingGrid: (id) =>
+    set((state) =>
+      state.editingGridId === id ? state : { ...state, editingGridId: id },
+    ),
+
+  setMetadataGrid: (id) =>
+    set((state) =>
+      state.metadataGridId === id ? state : { ...state, metadataGridId: id },
+    ),
+
+  setCustomizing: (customizing) => set((state) => ({ ...state, customizing })),
+
+  setTreeNodeExpanded: (configuration, uri, nodeValue, expanded) =>
+    set((state) =>
+      withTreeView(state, configuration, (view) => {
+        const nodes = view.expanded[uri] ?? [];
+        if (nodes.includes(nodeValue) === expanded) return view;
+        return {
+          ...view,
+          expanded: {
+            ...view.expanded,
+            [uri]: expanded
+              ? [...nodes, nodeValue]
+              : nodes.filter((node) => node !== nodeValue),
+          },
+        };
+      }),
+    ),
+
+  revealTreeNodes: (configuration, uri, nodeValues) =>
+    set((state) =>
+      withTreeView(state, configuration, (view) => {
+        const nodes = view.expanded[uri] ?? [];
+        const added = nodeValues.filter((node) => !nodes.includes(node));
+        const opened = view.openUris.includes(uri);
+        if (added.length === 0 && opened) return view;
+        return {
+          openUris: opened ? view.openUris : [...view.openUris, uri],
+          expanded: { ...view.expanded, [uri]: [...nodes, ...added] },
+        };
+      }),
+    ),
+
+  setOpenUris: (configuration, uris) =>
+    set((state) =>
+      withTreeView(state, configuration, (view) => ({
+        ...view,
+        openUris: uris,
+      })),
+    ),
+});

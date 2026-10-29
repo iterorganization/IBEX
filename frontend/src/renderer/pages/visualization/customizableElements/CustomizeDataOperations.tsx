@@ -12,17 +12,16 @@ import {
   fetchDataPlot,
   formatOperations,
   formatSignalOperations,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getOperationKind,
   getOperationMethods,
   getSignalOperationMethods,
   getUrisToInterpolate,
-  getVectorData,
   isNotifiedError,
   isSignalOperation,
   normalizeIndices,
   reapplyAxisOrder,
+  cloneGridStructure,
   resolveYAxisForUnit,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
@@ -106,7 +105,7 @@ export const CustomizeDataOperations = ({
    */
   const updateOperations = (next: DataOperation[]) => {
     if (!selectedPlot) return;
-    const updated = structuredClone(customizedDataGrid) as DataGridPlot;
+    const updated = cloneGridStructure(customizedDataGrid);
     const plot = updated.plot.find((p) => p.nodeUri === selectedPlot.nodeUri);
     if (plot) {
       plot.operations = next;
@@ -206,9 +205,7 @@ export const CustomizeDataOperations = ({
     if (!selectedPlot) return;
     try {
       setLoadingAction(action);
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       const plot = updatedDataPlot.plot.find(
         (p) => p.nodeUri === selectedPlot.nodeUri,
@@ -239,6 +236,8 @@ export const CustomizeDataOperations = ({
           dataPlotOperated.data.coordinates[coordinateIndex].downsampled_shape;
         coordinate.data =
           dataPlotOperated.data.coordinates[coordinateIndex].value;
+        coordinate.dataRef =
+          dataPlotOperated.data.coordinates[coordinateIndex].valueRef;
         coordinateIndex++;
         coordinate.range = [
           0,
@@ -256,9 +255,8 @@ export const CustomizeDataOperations = ({
 
       // Update only the selected plot with the new data
       plot.shape = dataPlotOperated.data.downsampled_shape;
-      plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotOperated.data.value;
-      plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
+      plot.yDataRef = dataPlotOperated.data.valueRef;
       // A multiplication or a division between signals changes the unit, which
       // may require moving the plot to the secondary y axis
       const newUnit = dataPlotOperated.data.unit;

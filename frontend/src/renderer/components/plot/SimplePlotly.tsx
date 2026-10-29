@@ -1,5 +1,5 @@
 import { Center, Grid, Group, Select, Text } from '@mantine/core';
-import { Layout, AxisType } from 'plotly.js';
+import { Layout } from 'plotly.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Plot from 'react-plotly.js';
 import { Configuration, Coordinates, DataGridPlot } from 'src/renderer/types';
@@ -7,19 +7,31 @@ import { VerticalSlider } from '../verticalSlider';
 import { useIbexStore } from '../../stores';
 import {
   compareByAxeIndex,
+  emptyUserRelayout,
   getArrayValueFromDependance,
-  getErrorsAreaToPlot,
-  initPlotColors,
+  buildTraces,
   isMatrixPlottable,
+  mergeAxisRelayout,
+  normalizeIndices,
   removeSuffix,
   swapAxis,
+  UserRelayout,
 } from '../../utils';
+import { axisVector, lineVector } from '../../derive/vectors';
 import classes from './SimplePlotly.module.css';
+import { countRedraw, countRender } from '../../utils/perf';
+import { getPlotConfig } from './plotConfig';
 import { NoDataForURI } from '../plot';
 import { usePlotLayout } from './hooks/usePlotLayout';
 import { IconLink } from '@tabler/icons-react';
 interface SimplePlotlyProps {
   itemDataGrid: DataGridPlot;
+  /**
+   * Whether this grid is the one being edited. Optional because the
+   * customization and metadata previews render a detached copy of a grid and
+   * must not write back to the store.
+   */
+  isEditing?: boolean;
   width: number;
   height: number;
   showSliders: boolean;
@@ -32,128 +44,77 @@ interface SimplePlotlyProps {
 
 export const SimplePlotly = ({
   itemDataGrid,
+  isEditing = false,
   height,
   width,
   showSliders,
   is3DView,
   handleUpdateCoordinate,
 }: SimplePlotlyProps) => {
-  const dataToPlotWithErrorBands = useMemo(() => {
-    return getErrorsAreaToPlot(
-      structuredClone(itemDataGrid.plot),
-      structuredClone(itemDataGrid.coordinates),
-    );
-  }, [itemDataGrid.plot, itemDataGrid.coordinates]);
+  countRender(`SimplePlotly:${itemDataGrid.i}`);
+  const handleAfterPlot = useCallback(
+    () => countRedraw(itemDataGrid.i),
+    [itemDataGrid.i],
+  );
+
+  // The traces Plotly draws, derived from the payloads and the cursor. Plotly
+  // compares `data` by reference and mutates what it is handed, so this has to
+  // be one memo producing objects the store does not own - and the vectors in
+  // them are derived rather than copied out of the store, because the store no
+  // longer holds them.
+  const dataToPlotWithErrorBands = useMemo(
+    () => buildTraces(itemDataGrid.plot, itemDataGrid.coordinates),
+    [itemDataGrid.plot, itemDataGrid.coordinates],
+  );
+
+  /** The drawn row of each trace, for the checks that decide what to show. */
+  const drawnRows = useMemo(
+    () =>
+      itemDataGrid.plot.map((plot) =>
+        lineVector(plot.yData, itemDataGrid.coordinates),
+      ),
+    [itemDataGrid.plot, itemDataGrid.coordinates],
+  );
+  const drawnX = useMemo(
+    () => axisVector(itemDataGrid.coordinates, 0),
+    [itemDataGrid.coordinates],
+  );
   const coordsUsedInAxes: 1 | 2 = 1;
-  const { active, updatedConfiguration } = useIbexStore();
   const SELECT_AXIS_HEIGHT = 40; // Height of the select axis component
-  const [layoutPlot, setLayoutPlot] = useState<Partial<Layout>>({
-    xaxis: {
-      scaleanchor: null,
-      scaleratio: null,
-      title: {
-        font: {
-          family: 'Courier New, monospace',
-          size: 16,
-          color: '#7f7f7f',
-        },
-      },
-      rangemode: 'normal',
-      showline: true,
-      zeroline: false,
-      type:
-        (itemDataGrid?.xAxisData?.type as AxisType) ||
-        (itemDataGrid.plot.length > 0 && itemDataGrid.plot[0].x?.length > 0)
-          ? typeof itemDataGrid.plot[0]?.x[0] === 'string'
-            ? 'category'
-            : 'linear'
-          : 'linear',
-      exponentformat: 'power',
-      showexponent: 'all',
-      separatethousands: true,
-      showgrid: itemDataGrid.displayGrid,
-    },
-    yaxis: {
-      title: {
-        font: {
-          family: 'Courier New, monospace',
-          size: 16,
-          color: '#7f7f7f',
-        },
-      },
-      rangemode: 'normal',
-      showline: true,
-      zeroline: false,
-      type: (itemDataGrid?.yAxisData?.type as AxisType) || 'linear',
-      exponentformat: 'power',
-      showexponent: 'all',
-      separatethousands: true,
-      showgrid: itemDataGrid.displayGrid,
-    },
-    yaxis2: {
-      type: (itemDataGrid?.y2AxisData?.type as AxisType) || 'linear',
-      exponentformat: 'power',
-      showexponent: 'all',
-      separatethousands: true,
-      showgrid: itemDataGrid.displayGrid,
-    },
-    modebar: {
-      orientation: 'v',
-    },
-    legend: {
-      x: 1.1,
-      y: 1,
-      orientation: 'v',
-      traceorder: 'normal',
-    },
-    plot_bgcolor: '#c7c7c7',
-    dragmode: 'zoom',
-  });
-  // Custom hook used for trigger some useEffects to update the layout
-  usePlotLayout({
-    itemDataGrid,
-    setLayoutPlot,
-  });
+  // Plotly compares `layout` by reference, so the layout is derived in one
+  // memo instead of being assembled by a dozen effects that each produced a new
+  // identity - and so a new redraw - on mount and on every change.
+  const axisLayout = usePlotLayout({ itemDataGrid });
   const [title, setTitle] = useState(itemDataGrid.title);
-  const [dataEntries, setDataEntries] = useState<string[]>([]);
-  const plotDivRef = useRef<HTMLDivElement>(null);
+  // What the user did with the mode bar (zoom, pan, autorange). It cannot be
+  // derived, and it is merged last so rebuilding the layout never undoes it.
+  const [userRelayout, setUserRelayout] =
+    useState<UserRelayout>(emptyUserRelayout);
+  // State, not a ref: the div only mounts once there is data to draw, and the
+  // legend observer below must attach then.
+  const [plotDiv, setPlotDiv] = useState<HTMLDivElement | null>(null);
   const layoutPlotWidth = showSliders
     ? width * (itemDataGrid.coordinates?.length > 1 ? 0.8 : 1)
     : width;
   const customContainerRef = useRef<HTMLDivElement>(null);
 
+  const handleRelayout = useCallback((relayout: Partial<Layout>) => {
+    setUserRelayout((previous) => mergeAxisRelayout(previous, relayout));
+  }, []);
+
+  // A zoom belongs to the nodes it was made on: indices are normalised away so
+  // that stepping a coordinate slider - which rewrites every `nodeUri` - keeps
+  // it, while pointing the panel at other data drops it.
+  const plottedNodes = itemDataGrid.plot
+    .map((plot) => normalizeIndices(plot.nodeUri))
+    .join('|');
   useEffect(() => {
-    // Check data entries to update axes titles when needed
-    const newDataEntries = [
-      ...new Set(itemDataGrid.plot.map((plot) => plot.nodeUri.split('#')[0])),
-    ];
-    if (JSON.stringify(newDataEntries) !== JSON.stringify(dataEntries)) {
-      setDataEntries(newDataEntries);
-    }
-  }, [itemDataGrid.plot]);
-
-  const handleRelayout = (relayout: Partial<Layout>) => {
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      ...relayout, // update the layout with new values
-    }));
-  };
-
-  const isPlotInY2 = useCallback(
-    (plotName: string) => {
-      const y2Unit = itemDataGrid?.y2AxisData?.unit;
-      if (!y2Unit) return false;
-
-      const selectedPlot = itemDataGrid.plot.find(
-        (plot) => plot.name === plotName,
-      );
-      return selectedPlot?.unit === y2Unit;
-    },
-    [itemDataGrid?.y2AxisData?.unit, itemDataGrid?.plot],
-  );
+    setUserRelayout((previous) =>
+      previous === emptyUserRelayout ? previous : emptyUserRelayout,
+    );
+  }, [plottedNodes]);
 
   useEffect(() => {
-    const plotDiv = plotDivRef.current;
     if (!plotDiv) return;
 
     const applyLegendStyles = () => {
@@ -161,9 +122,13 @@ export const SimplePlotly = ({
         plotDiv.querySelectorAll<SVGTextElement>('.legendtext');
 
       legendTexts.forEach((el) => {
-        const name = el.textContent || '';
-
-        const isInY2 = isPlotInY2(name);
+        // The axis of the trace Plotly drew for this entry, bound by d3 to its
+        // `g.traces` group. Not looked up by the legend text: two curves can
+        // share a name (`measured_URI-0`) and sit on different axes.
+        const entry = el.closest('g.traces') as
+          | (Element & { __data__?: [{ trace?: { yaxis?: string } }] })
+          | null;
+        const isInY2 = entry?.__data__?.[0]?.trace?.yaxis === 'y2';
         const newColor = isInY2 ? 'rgb(148, 103, 189)' : 'rgb(68, 68, 68)';
 
         if (el.style.fill !== newColor) {
@@ -187,28 +152,25 @@ export const SimplePlotly = ({
 
     // cleanup
     return () => observer.disconnect();
-  }, [isPlotInY2]);
+  }, [plotDiv]);
 
   /**
-   * Update the layout title & dataPlot configuration when editing title
+   * Persist an edited title on the grid. The layout picks the title up from the
+   * `title` state below, so nothing here touches the layout.
    */
   useEffect(() => {
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      title: { text: title },
-    }));
-
-    if (!itemDataGrid.isEditing || title === itemDataGrid.title) {
+    if (!isEditing || title === itemDataGrid.title) {
       return;
     }
 
-    // Update title only if is editing
-    const updatedDataPlot: DataGridPlot[] = structuredClone(active.dataPlot);
-    for (const dataPlot of updatedDataPlot) {
-      if (dataPlot.i === itemDataGrid.i) {
-        dataPlot.title = title;
-      }
-    }
+    // Update title only if is editing. The store is read here rather than
+    // subscribed to: this component only ever writes to it, and subscribing
+    // would re-render - and so redraw Plotly - on every unrelated change.
+    const { active, updatedConfiguration } = useIbexStore.getState();
+
+    const updatedDataPlot: DataGridPlot[] = active.dataPlot.map((dataPlot) =>
+      dataPlot.i === itemDataGrid.i ? { ...dataPlot, title } : dataPlot,
+    );
 
     const newActive: Configuration = {
       ...active,
@@ -220,29 +182,13 @@ export const SimplePlotly = ({
   }, [title]);
 
   /**
-   * Update the layout height
+   * The whole Plotly layout, derived in one go.
+   *
+   * Axis titles are built from the plot names and the axis descriptors; the
+   * axis types and the grid come from `usePlotLayout`; what the user changed
+   * with the mode bar is merged last so a rebuild never discards their zoom.
    */
-  useEffect(() => {
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      height: height,
-    }));
-  }, [height]);
-
-  /**
-   * Update the layout width
-   */
-  useEffect(() => {
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      width: layoutPlotWidth - 75,
-    }));
-  }, [width]);
-
-  /**
-   * Update the layout yAxis
-   */
-  useEffect(() => {
+  const layoutPlot = useMemo<Partial<Layout>>(() => {
     const coordsYNames = [
       ...new Set(
         itemDataGrid.plot
@@ -253,41 +199,11 @@ export const SimplePlotly = ({
     const YTitle = itemDataGrid.yAxisData?.name
       ? `${coordsYNames.length > 1 ? coordsYNames[0] + ', ...' : coordsYNames[0]} ${(itemDataGrid.yAxisData?.unit && '[' + itemDataGrid.yAxisData.unit + ']') || ''}`
       : '';
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      yaxis: {
-        ...prevLayout.yaxis,
-        title: {
-          ...prevLayout.yaxis.title,
-          text: YTitle,
-        },
-      },
-    }));
-  }, [itemDataGrid.yAxisData, dataEntries]);
 
-  /**
-   * Update the layout xAxis
-   */
-  useEffect(() => {
     const XTitle = itemDataGrid.xAxisData?.name
       ? `${itemDataGrid.xAxisData?.name} ${(itemDataGrid.xAxisData?.unit && '[' + itemDataGrid.xAxisData.unit + ']') || ''}`
       : '';
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      xaxis: {
-        ...prevLayout.xaxis,
-        title: {
-          ...prevLayout.xaxis.title,
-          text: XTitle,
-        },
-      },
-    }));
-  }, [itemDataGrid.xAxisData, dataEntries]);
 
-  /**
-   * Update the layout y2Axis
-   */
-  useEffect(() => {
     const coordsY2Names = [
       ...new Set(
         itemDataGrid.plot
@@ -298,47 +214,102 @@ export const SimplePlotly = ({
     const Y2Title = itemDataGrid.y2AxisData?.name
       ? `${coordsY2Names.length > 1 ? coordsY2Names[0] + ', ...' : coordsY2Names[0]} ${(itemDataGrid.y2AxisData?.unit && '[' + itemDataGrid.y2AxisData.unit + ']') || ''}`
       : '';
-    setLayoutPlot((prevLayout) => ({
-      ...prevLayout,
-      yaxis2:
-        itemDataGrid.y2AxisData && itemDataGrid.y2AxisData !== undefined
-          ? {
-              ...prevLayout.yaxis2,
-              title: {
-                text: Y2Title,
-                font: {
-                  family: 'Courier New, monospace',
-                  size: 16,
-                  color: 'rgb(148, 103, 189)',
-                },
+
+    return {
+      title: { text: title },
+      height: height,
+      width: layoutPlotWidth - 75,
+      xaxis: {
+        scaleanchor: null,
+        scaleratio: null,
+        title: {
+          font: {
+            family: 'Courier New, monospace',
+            size: 16,
+            color: '#7f7f7f',
+          },
+          text: XTitle,
+        },
+        rangemode: 'normal',
+        showline: true,
+        zeroline: false,
+        exponentformat: 'power',
+        showexponent: 'all',
+        separatethousands: true,
+        ...axisLayout.xaxis,
+        ...userRelayout.axes.xaxis,
+      },
+      yaxis: {
+        title: {
+          font: {
+            family: 'Courier New, monospace',
+            size: 16,
+            color: '#7f7f7f',
+          },
+          text: YTitle,
+        },
+        rangemode: 'normal',
+        showline: true,
+        zeroline: false,
+        exponentformat: 'power',
+        showexponent: 'all',
+        separatethousands: true,
+        ...axisLayout.yaxis,
+        ...userRelayout.axes.yaxis,
+      },
+      yaxis2: itemDataGrid.y2AxisData
+        ? {
+            exponentformat: 'power',
+            showexponent: 'all',
+            separatethousands: true,
+            ...axisLayout.yaxis2,
+            title: {
+              text: Y2Title,
+              font: {
+                family: 'Courier New, monospace',
+                size: 16,
+                color: 'rgb(148, 103, 189)',
               },
-              tickfont: { color: 'rgb(148, 103, 189)' },
-              overlaying: 'y',
-              side: 'right',
-              rangemode: 'normal',
-              showline: false,
-              zeroline: false,
-              showgrid: false,
-            }
-          : {},
-    }));
-  }, [itemDataGrid.y2AxisData, dataEntries]);
+            },
+            tickfont: { color: 'rgb(148, 103, 189)' },
+            overlaying: 'y',
+            side: 'right',
+            rangemode: 'normal',
+            showline: false,
+            zeroline: false,
+            showgrid: false,
+            ...userRelayout.axes.yaxis2,
+          }
+        : {},
+      modebar: {
+        orientation: 'v',
+      },
+      legend: {
+        x: 1.1,
+        y: 1,
+        orientation: 'v',
+        traceorder: 'normal',
+      },
+      plot_bgcolor: '#c7c7c7',
+      dragmode: 'zoom',
+      ...userRelayout.layout,
+    };
+  }, [
+    title,
+    height,
+    layoutPlotWidth,
+    axisLayout,
+    itemDataGrid.plot,
+    itemDataGrid.xAxisData,
+    itemDataGrid.yAxisData,
+    itemDataGrid.y2AxisData,
+    userRelayout,
+  ]);
 
   useEffect(() => {
     // Update title when itemDataGrid.title change (when selecting a plot with original plot title)
     setTitle(itemDataGrid.title);
   }, [itemDataGrid.title]);
-
-  const handleInitPlotColor = async (
-    customContainerRef: React.MutableRefObject<HTMLDivElement>,
-    itemDataGrid: DataGridPlot,
-  ) => {
-    await initPlotColors(itemDataGrid, customContainerRef);
-  };
-
-  useEffect(() => {
-    handleInitPlotColor(customContainerRef, itemDataGrid);
-  }, [customContainerRef.current, itemDataGrid.plot.length]);
 
   return (
     <Grid
@@ -383,12 +354,12 @@ export const SimplePlotly = ({
                     ).axeIndex,
                     0, // axeIndex of x is always 0
                     false,
-                    active,
-                    updatedConfiguration,
+                    useIbexStore.getState().active,
+                    useIbexStore.getState().updatedConfiguration,
                   )
                 }
                 size="xs"
-                disabled={!itemDataGrid.isEditing}
+                disabled={!isEditing}
               />
             </Group>
 
@@ -429,7 +400,7 @@ export const SimplePlotly = ({
                             ? height - 80
                             : height - 80 - SELECT_AXIS_HEIGHT
                         }
-                        disabled={!itemDataGrid.isEditing}
+                        disabled={!isEditing}
                       />
                     ),
                 )}
@@ -451,9 +422,7 @@ export const SimplePlotly = ({
           </Grid.Col>
         )}
 
-      {itemDataGrid.plot.some((plot) =>
-        [plot.x, plot.y].every(isMatrixPlottable),
-      ) ? (
+      {drawnRows.some((row) => [drawnX, row].every(isMatrixPlottable)) ? (
         <Grid.Col
           span="auto"
           pos="relative"
@@ -465,27 +434,21 @@ export const SimplePlotly = ({
             flexDirection: 'column',
           }}
         >
-          <div ref={plotDivRef}>
+          <div ref={setPlotDiv}>
             <Plot
               className={classes.simplePlot}
               data={dataToPlotWithErrorBands}
-              config={{
-                autosizable: false,
-                staticPlot: !itemDataGrid.static,
-                scrollZoom: true,
-                displayModeBar: true,
-                showTips: true,
-                displaylogo: false,
-                modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-              }}
+              config={getPlotConfig(isEditing)}
               layout={layoutPlot}
               onRelayout={handleRelayout}
+              onAfterPlot={handleAfterPlot}
               useResizeHandler={false}
             />
           </div>
         </Grid.Col>
       ) : itemDataGrid.plot.some(
-          (plot) => ![plot.x, plot.y, plot.yData].some(isMatrixPlottable),
+          (plot, index) =>
+            ![drawnX, drawnRows[index], plot.yData].some(isMatrixPlottable),
         ) ? (
         <Grid.Col
           span="auto"

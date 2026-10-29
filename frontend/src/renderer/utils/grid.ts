@@ -38,8 +38,6 @@ export const generateNewGrid = (
     forceXyRatio: false,
     synchronizedGrids: { color: '', list: [] },
     i: generateUuid(),
-    isEditing: true,
-    static: true,
     plot: [],
     x: 0,
     y: findNextAvailableY(existingPlots),

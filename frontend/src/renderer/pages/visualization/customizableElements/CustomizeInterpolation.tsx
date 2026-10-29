@@ -1,15 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DataGridPlot } from '../../../types';
 import {
   fetchDataPlot,
   fetchErrorBands,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
-  getVectorData,
   normalizeIndices,
   getInterpolationMethods,
   getUrisToInterpolate,
   reapplyAxisOrder,
+  cloneGridStructure,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Group, Loader, Select, Stack } from '@mantine/core';
@@ -32,16 +31,19 @@ export const CustomizeInterpolation = ({
     customizedDataGrid.interpolated_method,
   );
   const [loading, { open, close }] = useDisclosure();
+  // Identifies the request in flight. A method selected while an earlier one is
+  // still running used to leave both writing to the grid, last response wins.
+  const currentRequest = useRef(0);
 
   /**
    * Update configuration with interpolated data (changes coordinates, plots & error bands)
    */
   const getInterpolatedData = async () => {
+    const requestId = currentRequest.current + 1;
+    currentRequest.current = requestId;
     try {
       open();
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
@@ -82,6 +84,8 @@ export const CustomizeInterpolation = ({
             // Apply new data
             coordinate.data =
               dataPlotInterpolated.data.coordinates[coordinateIndex].value;
+            coordinate.dataRef =
+              dataPlotInterpolated.data.coordinates[coordinateIndex].valueRef;
             coordinateIndex++;
             // Apply new range
             coordinate.range = [
@@ -106,15 +110,8 @@ export const CustomizeInterpolation = ({
 
         // Update plot with interpolated data
         plot.shape = dataPlotInterpolated.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotInterpolated.data.value;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
+        plot.yDataRef = dataPlotInterpolated.data.valueRef;
 
         plotIndex++;
       }
@@ -126,7 +123,11 @@ export const CustomizeInterpolation = ({
       );
       await reapplyAxisOrder(updatedDataPlot, wantedAxeIndexOrder);
 
-      // Save new configuration with interpolated data
+      // Save new configuration with interpolated data, unless another method
+      // was selected while this one was in flight.
+      if (currentRequest.current !== requestId) {
+        return;
+      }
       setCustomizedDataGrid({
         ...customizedDataGrid,
         coordinates: updatedDataPlot.coordinates,
@@ -141,7 +142,9 @@ export const CustomizeInterpolation = ({
         color: 'red',
       });
     } finally {
-      close();
+      if (currentRequest.current === requestId) {
+        close();
+      }
     }
   };
 
@@ -172,6 +175,9 @@ export const CustomizeInterpolation = ({
           value={selectedInterpolation}
           data={interpolationMethods.map((meth) => meth.value)}
           rightSection={loading ? <Loader size={16} /> : null}
+          // Selecting another method mid-flight refetched every plot in the
+          // grid a second time; the two results then raced.
+          disabled={loading}
           onChange={(selectedMethod) => {
             if (selectedMethod !== selectedInterpolation) {
               setSelectedInterpolation(selectedMethod || selectedInterpolation);

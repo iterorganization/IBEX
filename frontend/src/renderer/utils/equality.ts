@@ -1,0 +1,106 @@
+// Relative, not the `src/*` alias: this module is covered by `npm run test:unit`,
+// and ts-node does not resolve that alias without `tsconfig-paths/register`.
+import type { AxisData } from '../types';
+import type { PayloadKey } from '../stores/payloadRegistry';
+
+/**
+ * @description Deep equality for coordinate or axis data, with an early exit on the first
+ * difference. Replaces `JSON.stringify(a) === JSON.stringify(b)`, which allocated a full
+ * serialization of both arrays - megabytes, on every slider tick, for every grid - before
+ * comparing them.
+ *
+ * Matches the semantics of the comparison it replaces: NaN equals NaN, and null equals
+ * undefined, because JSON.stringify writes both as `null` inside an array.
+ * @param a First value.
+ * @param b Second value.
+ * @returns Whether the two hold the same values.
+ */
+export function isSameAxisData(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a == null && b == null;
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let index = 0; index < a.length; index++) {
+      if (!isSameAxisData(a[index], b[index])) return false;
+    }
+    return true;
+  }
+
+  if (typeof a === 'number' && typeof b === 'number') {
+    // JSON.stringify writes NaN as null, so the old comparison saw two NaNs as equal.
+    return Number.isNaN(a) && Number.isNaN(b);
+  }
+
+  if (typeof a === 'object' && typeof b === 'object') {
+    // Complex values, stored as { r, i } pairs.
+    const keysOfA = Object.keys(a);
+    const keysOfB = Object.keys(b);
+    return (
+      keysOfA.length === keysOfB.length &&
+      keysOfA.every((key) =>
+        isSameAxisData(
+          (a as Record<string, unknown>)[key],
+          (b as Record<string, unknown>)[key],
+        ),
+      )
+    );
+  }
+
+  return false;
+}
+
+/** Pairs of payload keys already compared, and the answer. */
+const compared = new Map<string, boolean>();
+const REMEMBERED = 256;
+/** Separates the two keys of a pair; a key cannot contain it. */
+const PAIR = '\0';
+
+/**
+ * @description Whether two coordinates hold the same values, remembering the answer for
+ * the pair of payloads it was asked about.
+ *
+ * Synchronizing two grids is the user's declaration that they move together; this decides
+ * which of the declared grids a given slider actually applies to, and that question is
+ * about the numbers. Two grids plotting different nodes of one IDS share a time
+ * coordinate, but each fetched it inside its own node's response, so the two arrays are
+ * equal under two different payload keys - comparing the keys alone unlinks them.
+ *
+ * The walk is the same one `isSameAxisData` has always done. What changed is how often it
+ * runs: a payload key is stable while a cursor moves, so the walk happens once per pair of
+ * payloads and every later tick is a Map lookup. An entry cannot go stale, because a key
+ * names the request that produced it and the same request yields the same bytes. Without a
+ * key on both sides there is nothing to remember and the walk simply runs.
+ * @param a First coordinate's values.
+ * @param aRef The payload key naming `a`, when it has one.
+ * @param b Second coordinate's values.
+ * @param bRef The payload key naming `b`, when it has one.
+ * @returns Whether the two hold the same values.
+ */
+export function isSameAxisPayload(
+  a: AxisData,
+  aRef: PayloadKey | undefined,
+  b: AxisData,
+  bRef: PayloadKey | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!aRef || !bRef) return isSameAxisData(a, b);
+  if (aRef === bRef) return true;
+
+  // One name per unordered pair: the question is symmetric.
+  const key = aRef < bRef ? `${aRef}${PAIR}${bRef}` : `${bRef}${PAIR}${aRef}`;
+  const remembered = compared.get(key);
+  if (remembered !== undefined) return remembered;
+
+  const answer = isSameAxisData(a, b);
+  if (compared.size >= REMEMBERED) {
+    compared.delete(compared.keys().next().value as string);
+  }
+  compared.set(key, answer);
+  return answer;
+}
+
+/** Forgets every remembered comparison. For tests. */
+export const clearComparisons = (): void => compared.clear();

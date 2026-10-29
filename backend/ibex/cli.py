@@ -4,6 +4,8 @@
 """Command-line interface for IBEX backend service."""
 
 import argparse
+import logging
+import os
 import sys
 import time
 import threading
@@ -12,15 +14,18 @@ import uvicorn
 
 from ibex.main import app
 
+LOG_LEVELS = ["debug", "info", "warning", "error"]
+
 
 def parse_arguments():
     """
     Parse command-line arguments.
 
     Returns:
-        tuple: (api_host, api_port)
+        tuple: (api_host, api_port, log_level)
             - api_host (str): Host address provided by the user. 127.0.0.1 otherwise.
             - api_port (int): The port provided by the user. 0 otherwise.
+            - log_level (str): Log level provided by the user, else $IBEX_LOG_LEVEL, else warning.
     """
     parser = argparse.ArgumentParser(description="Start IBEX backend service")
     parser.add_argument(
@@ -36,7 +41,18 @@ def parse_arguments():
         default="127.0.0.1",
         help="Specify host of backend server. Default: 127.0.0.1",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str.lower,
+        choices=LOG_LEVELS,
+        default=os.environ.get("IBEX_LOG_LEVEL", "warning").lower(),
+        help="Console log level: info adds the access log, debug also the endpoint timings. "
+        "Default: $IBEX_LOG_LEVEL, else warning",
+    )
     args = parser.parse_args()
+    # argparse doesn't check a default against choices, so check one coming from $IBEX_LOG_LEVEL
+    if args.log_level not in LOG_LEVELS:
+        parser.error(f"IBEX_LOG_LEVEL={args.log_level!r}: choose from {', '.join(LOG_LEVELS)}")
 
     api_port = args.port
     api_host = args.host
@@ -48,14 +64,15 @@ def parse_arguments():
         )
         sys.exit(-1)
 
-    return api_host, api_port
+    return api_host, api_port, args.log_level
 
 
 def main():
     """Entry point for the run_ibex_service command."""
-    host, port = parse_arguments()
+    host, port, log_level = parse_arguments()
 
-    config = uvicorn.Config(app, host=host, port=port)
+    logging.getLogger("ibex").setLevel(log_level.upper())
+    config = uvicorn.Config(app, host=host, port=port, log_level=log_level)
     server = uvicorn.Server(config)
 
     # Start the server in a background thread

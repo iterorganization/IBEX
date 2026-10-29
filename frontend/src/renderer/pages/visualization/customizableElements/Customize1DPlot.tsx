@@ -8,72 +8,73 @@ import {
 } from '@mantine/core';
 import { DataGridPlot, DataPlotly } from '../../../types';
 import { useEffect, useState } from 'react';
-import { initPlotColors } from '../../../utils';
+import { initPlotColors, withDefaultColors } from '../../../utils';
 
 interface Customize1DPlotProps {
   customizedDataGrid: DataGridPlot;
   selectedPlot: DataPlotly | null;
-  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
 }
 export const Customize1DPlot = ({
   customizedDataGrid,
   selectedPlot,
-  customContainerRef,
   setCustomizedDataGrid,
 }: Customize1DPlotProps) => {
   const [colorPlot, setColorPlot] = useState(selectedPlot?.line?.color || '');
 
+  /**
+   * The grid's traces with the selected one replaced by `update(it)`. Only the
+   * edited trace is a new object; the others, and every payload, are shared -
+   * a colour change used to deep-copy every matrix in the grid.
+   */
+  const updateSelectedPlot = (update: (plot: DataPlotly) => DataPlotly) =>
+    customizedDataGrid.plot.map((plot) =>
+      plot.nodeUri === selectedPlot.nodeUri ? update(plot) : plot,
+    );
+
   const updatePlotColor = (newColor: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    const updatedLine = selectedPlot?.line || {};
-    updatedLine.color = newColor;
-    updatedDataPlot.plot.find((plot) => plot.name === selectedPlot.name).line =
-      updatedLine;
-
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: updateSelectedPlot(
+        (plot) =>
+          ({ ...plot, line: { ...plot.line, color: newColor } }) as DataPlotly,
+      ),
     });
     setColorPlot(newColor);
   };
 
   const resetPlotColors = () => {
-    const updatedPlots = structuredClone(customizedDataGrid.plot);
-    for (const plot of updatedPlots) {
-      if (plot?.line?.color) {
-        delete plot.line.color;
-      }
-    }
+    // Every trace back to the palette, in trace order, so no two share a colour.
+    const updatedPlots = withDefaultColors(
+      customizedDataGrid.plot.map(
+        (plot) =>
+          ({ ...plot, line: { ...plot.line, color: undefined } }) as DataPlotly,
+      ),
+    );
 
-    setColorPlot('');
+    setColorPlot(
+      updatedPlots.find((plot) => plot.nodeUri === selectedPlot?.nodeUri)?.line
+        ?.color || '',
+    );
     setCustomizedDataGrid({ ...customizedDataGrid, plot: updatedPlots });
   };
 
   const updatePlotMode = (newMode: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    updatedDataPlot.plot.find((plot) => plot.name === selectedPlot.name).mode =
-      newMode;
-
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: updateSelectedPlot(
+        (plot) => ({ ...plot, mode: newMode }) as DataPlotly,
+      ),
     });
   };
 
   const updatePlotShape = (newShape: string) => {
-    const updatedDataPlot = structuredClone(customizedDataGrid) as DataGridPlot;
-
-    const plotToUpdate = updatedDataPlot.plot.find(
-      (plot) => plot.name === selectedPlot.name,
-    );
-    plotToUpdate.line = { ...plotToUpdate?.line, shape: newShape };
-
     setCustomizedDataGrid({
       ...customizedDataGrid,
-      plot: updatedDataPlot.plot,
+      plot: updateSelectedPlot(
+        (plot) =>
+          ({ ...plot, line: { ...plot.line, shape: newShape } }) as DataPlotly,
+      ),
     });
   };
 
@@ -82,11 +83,7 @@ export const Customize1DPlot = ({
       // Init color plot in component
       setColorPlot(selectedPlot.line.color);
     } else {
-      initPlotColors(
-        customizedDataGrid,
-        customContainerRef,
-        setCustomizedDataGrid,
-      );
+      initPlotColors(customizedDataGrid, setCustomizedDataGrid);
     }
   }, [selectedPlot?.line]);
 
@@ -98,11 +95,16 @@ export const Customize1DPlot = ({
           description="Customize the plot color"
           placeholder="Customize the plot color"
           format="rgb"
+          data-testid="plot-color-input"
           value={colorPlot}
           onChange={(value) => updatePlotColor(value)}
         />
         <Tooltip label="Reset color of each plot" position="bottom-start">
-          <Button variant="outline" onClick={resetPlotColors}>
+          <Button
+            variant="outline"
+            data-testid="plot-colors-reset-button"
+            onClick={resetPlotColors}
+          >
             Reset plot colors
           </Button>
         </Tooltip>

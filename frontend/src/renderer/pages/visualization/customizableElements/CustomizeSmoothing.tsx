@@ -13,14 +13,13 @@ import {
   formatOperations,
   formatSignalOperations,
   GAUSSIAN_FILTER,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getSmoothingMethods,
   getUrisToInterpolate,
-  getVectorData,
   MIN_GAUSSIAN_SMOOTHING_SIGMA,
   normalizeIndices,
   reapplyAxisOrder,
+  cloneGridStructure,
   SAVGOL_FILTER,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
@@ -65,8 +64,8 @@ export const CustomizeSmoothing = ({
    */
   const updateSmoothing = (next: SmoothingParams | undefined) => {
     if (!selectedPlot) return;
-    const updated = structuredClone(customizedDataGrid) as DataGridPlot;
-    const plot = updated.plot.find((p) => p.name === selectedPlot.name);
+    const updated = cloneGridStructure(customizedDataGrid);
+    const plot = updated.plot.find((p) => p.nodeUri === selectedPlot.nodeUri);
     if (plot) {
       plot.smoothing = next;
     }
@@ -98,12 +97,10 @@ export const CustomizeSmoothing = ({
     if (!selectedPlot) return;
     try {
       setLoadingAction(action);
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       const plot = updatedDataPlot.plot.find(
-        (p) => p.name === selectedPlot.name,
+        (p) => p.nodeUri === selectedPlot.nodeUri,
       );
       if (!plot) return;
 
@@ -131,6 +128,8 @@ export const CustomizeSmoothing = ({
           dataPlotSmoothed.data.coordinates[coordinateIndex].downsampled_shape;
         coordinate.data =
           dataPlotSmoothed.data.coordinates[coordinateIndex].value;
+        coordinate.dataRef =
+          dataPlotSmoothed.data.coordinates[coordinateIndex].valueRef;
         coordinateIndex++;
         coordinate.range = [
           0,
@@ -148,9 +147,8 @@ export const CustomizeSmoothing = ({
 
       // Update only the selected plot with the new data
       plot.shape = dataPlotSmoothed.data.downsampled_shape;
-      plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
       plot.yData = dataPlotSmoothed.data.value;
-      plot.y = getVectorData(updatedDataPlot.coordinates, plot.yData);
+      plot.yDataRef = dataPlotSmoothed.data.valueRef;
       if (action === 'restore') {
         plot.smoothing = undefined;
       }

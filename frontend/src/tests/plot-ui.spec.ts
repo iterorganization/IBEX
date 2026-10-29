@@ -16,6 +16,9 @@ import {
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
+  openTreeFolder,
+  openUriAccordion,
+  closeUriAccordion,
 } from './utils';
 // import { expect } from 'chai';
 import '../config/bridge';
@@ -113,21 +116,11 @@ describe('UI Tests for plotted data', function () {
     // Building the tree of both datasets takes a while, the biggest one weighs
     // more than 170 MB
     await ensureCssElementIsDisplayed(`uriAccordion-${dataPath1}`, 600, 100);
-    await findCssElementAndClickIt(`uriAccordion-${dataPath1}`, 200, 100);
-    await findCssElementAndClickIt(
-      `folder-${dataPath1}#equilibrium:0/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      `folder-${dataPath1}#equilibrium:0/time_slice[:]/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
+    await openUriAccordion(dataPath1);
+    await openTreeFolder(`folder-${dataPath1}#equilibrium:0/`);
+    await openTreeFolder(`folder-${dataPath1}#equilibrium:0/time_slice[:]/`);
+    await openTreeFolder(
       `folder-${dataPath1}#equilibrium:0/time_slice[:]/profiles_1d/`,
-      200,
-      100,
     );
 
     ///
@@ -227,25 +220,15 @@ describe('UI Tests for plotted data', function () {
       (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected),
     );
     // Navigate to URI 2 psi to plot
-    await findCssElementAndClickIt(`uriAccordion-${dataPath1}`, 200, 100);
+    await closeUriAccordion(dataPath1);
     await getDriver().sleep(2000);
     await ensureCssElementIsDisplayed(`uriAccordion-${dataPath2}`, 200, 100);
-    await findCssElementAndClickIt(`uriAccordion-${dataPath2}`, 200, 100);
+    await openUriAccordion(dataPath2);
     await getDriver().sleep(2000);
-    await findCssElementAndClickIt(
-      `folder-${dataPath2}#equilibrium:0/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      `folder-${dataPath2}#equilibrium:0/time_slice[:]/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
+    await openTreeFolder(`folder-${dataPath2}#equilibrium:0/`);
+    await openTreeFolder(`folder-${dataPath2}#equilibrium:0/time_slice[:]/`);
+    await openTreeFolder(
       `folder-${dataPath2}#equilibrium:0/time_slice[:]/profiles_1d/`,
-      200,
-      100,
     );
     // Click on psi checkbox to display a new plot
     await findCssElementAndClickIt(
@@ -312,17 +295,9 @@ describe('UI Tests for plotted data', function () {
       300,
     );
     await ensureCssElementIsDisplayed(`uriAccordion-${dataPath}`, 200, 100);
-    await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#core_profiles:0/`,
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      `folder-${dataPath}#core_profiles:0/profiles_1d[:]/`,
-      200,
-      100,
-    );
+    await openUriAccordion(dataPath);
+    await openTreeFolder(`folder-${dataPath}#core_profiles:0/`);
+    await openTreeFolder(`folder-${dataPath}#core_profiles:0/profiles_1d[:]/`);
 
     ///
     /// The accordion node tree is now unfold, check that the plot are correctly added into the active configuration
@@ -758,26 +733,10 @@ describe('UI Tests for plotted data', function () {
       200,
       100,
     );
-    await findCssElementAndClickIt(
-      'uriAccordion-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3#ece:0/',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3#ece:0/channel[:]/',
-      200,
-      100,
-    );
-    await findCssElementAndClickIt(
-      'folder-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3#ece:0/channel[:]/t_e/',
-      200,
-      100,
-    );
+    await openUriAccordion('imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3');
+    await openTreeFolder('folder-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3#ece:0/');
+    await openTreeFolder('folder-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3#ece:0/channel[:]/');
+    await openTreeFolder('folder-imas:hdf5?user=imbeauf;pulse=58089;run=4;database=west;version=3#ece:0/channel[:]/t_e/');
 
     ///
     /// The accordion node tree is now unfold, check that the plot are correctly added into the active configuration
