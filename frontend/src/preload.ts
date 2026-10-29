@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import {
+  HelpLink,
   LaunchDirectoryKind,
   LaunchDirectoryListing,
   StartupRequest,
@@ -82,11 +83,9 @@ export const API = {
       await ipcRenderer.invoke('getPathFromRessources', ['e2e_datasets']),
   },
 
-  preferences: {
-    onOpenTemplateModal: (callback: () => void) => {
-      ipcRenderer.on('openTemplateModal', callback);
-    },
-  },
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('getAppVersion'),
+
+  openHelpLink: (link: HelpLink) => ipcRenderer.invoke('openHelpLink', link),
 
   getConfig: () => ipcRenderer.invoke('getConfig'),
 

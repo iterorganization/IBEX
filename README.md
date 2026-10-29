@@ -75,6 +75,14 @@ is not loaded. `--help` also lists the templates installed with IBEX, which
 ./launch.sh -u "imas:hdf5?path=/path/to/entry" -n kinetic -t PlotKineticProfiles
 ```
 
+The backend prints only warnings and errors to the console. To debug it, set
+`IBEX_LOG_LEVEL=info` to add the HTTP access log, or `IBEX_LOG_LEVEL=debug` to also log
+how long each endpoint takes:
+
+```bash
+IBEX_LOG_LEVEL=debug ./launch.sh
+```
+
 ## Developer Installation
 
 ### installation on SDCC

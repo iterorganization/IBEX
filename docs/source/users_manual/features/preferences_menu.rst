@@ -4,7 +4,17 @@
 Preferences menu
 ===================
 
-The user preferences menu includes template folder management. This allows you to define the location of template folders.
+The menu button at the right end of the header (☰) opens the user preferences and help:
+
+- **Template folders…** sets the location of the folders that contain your templates;
+- **Documentation** and **Report an issue** open this documentation and the IBEX GitHub issues in your web browser;
+- the last line shows the IBEX version.
+
+.. image:: images/app_menu.png
+   :alt: Menu opened from the button at the right end of the header
+   :align: center
+
+IBEX has no menu bar. Two keyboard shortcuts are still available: :kbd:`F11` toggles full screen and :kbd:`Ctrl+Shift+I` opens the developer tools.
 
 .. image:: images/template_preferences.png
    :alt: Modal to select folders containing templates

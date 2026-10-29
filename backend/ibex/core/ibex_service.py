@@ -1,5 +1,6 @@
 """Logic between endpoint and data sources"""
 
+import logging
 import time
 from pathlib import Path
 from functools import wraps  # for measure_execution_time()
@@ -10,9 +11,13 @@ from ibex.data_source.exception import CannotGenerateUriException
 from ibex.core.utils import IMAS_URI
 from ibex.endpoints.schemas.request_data_schemas import PlotDataRequestModel
 
+logger = logging.getLogger(__name__)
 
-# helper decorator used during development
-# TODO to be deleted before release
+
+# Logs the execution time of an endpoint at debug level (run_ibex_service --log-level debug).
+# Keep it on the endpoints: its async wrapper makes FastAPI run the sync endpoints one at a time
+# on the event loop instead of concurrently in its threadpool, and concurrent imas/HDF5/MDSplus
+# reads are not known to be thread-safe.
 def measure_execution_time(func: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -20,7 +25,7 @@ def measure_execution_time(func: Callable[..., Any]) -> Callable[..., Any]:
         response = func(*args, **kwargs)
         end_time = time.perf_counter()
         execution_time = end_time - start_time
-        print(f"==========> Endpoint '{func.__name__}' executed in {execution_time:.4f} seconds")
+        logger.debug("Endpoint '%s' executed in %.4f seconds", func.__name__, execution_time)
         return response
 
     return wrapper
