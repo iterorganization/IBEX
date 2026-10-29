@@ -16,7 +16,7 @@ The buttons at the top right, before the separator, allow you to manage your con
 
 To the right of the separator, you can add new URIs (see :doc:`Add uri <add_uri>`).
 
-On the far right, a dot indicates the server status.
+On the far right, a dot indicates the server status, and the menu button (☰) opens the :doc:`Preferences <preferences_menu>` and help.
 
 .. tip::
 

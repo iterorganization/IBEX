@@ -20,6 +20,7 @@ import {
   IconChevronDown,
   IconPlus,
   IconCircleFilled,
+  IconMenu2,
   IconPencil,
   IconStar,
   IconStarFilled,
@@ -60,6 +61,7 @@ interface HeaderProps {
   handleLoadConfiguration: (path?: string) => void;
   handleSelectConfiguration: (value: string) => void;
   handleAddTree: () => void;
+  handleOpenTemplateFolders: () => void;
   defaultConfigPath: string;
   setDefaultConfigPath: (value: string) => void;
 }
@@ -75,10 +77,12 @@ export const Header = ({
   handleLoadConfiguration,
   handleSelectConfiguration,
   handleAddTree,
+  handleOpenTemplateFolders,
   defaultConfigPath,
   setDefaultConfigPath,
 }: HeaderProps) => {
   const [isServerResponding, setIsServerResponding] = useState(true);
+  const [appVersion, setAppVersion] = useState('');
 
   const configurationButtons = (
     <Group>
@@ -159,6 +163,43 @@ export const Header = ({
       </Tooltip>
     </Group>
   );
+
+  const appMenu = (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <ActionIcon
+          variant="subtle"
+          aria-label="Menu"
+          data-testid="header-app-menu"
+        >
+          <IconMenu2 size={20} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item
+          onClick={handleOpenTemplateFolders}
+          data-testid="header-app-menu-template-folders"
+        >
+          Template folders…
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Item onClick={() => window.api.openHelpLink('docs')}>
+          Documentation
+        </Menu.Item>
+        <Menu.Item onClick={() => window.api.openHelpLink('issues')}>
+          Report an issue
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Label data-testid="header-app-menu-version">
+          IBEX {appVersion}
+        </Menu.Label>
+      </Menu.Dropdown>
+    </Menu>
+  );
+
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion);
+  }, []);
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -264,6 +305,7 @@ export const Header = ({
           {visualisationButtons}
           <Divider orientation="vertical" />
           {serverStatus}
+          {appMenu}
         </Group>
       </Group>
     </Container>

@@ -286,4 +286,22 @@ describe('UI Tests for Header Component', function () {
       );
     }
   });
+
+  it('Should open the template folders from the header menu', async () => {
+    await findCssElementAndClickIt('header-app-menu');
+    const version = await getCssElementFromDataTestId(
+      'header-app-menu-version',
+    );
+    await getDriver().wait(until.elementTextMatches(version, /^IBEX \S+/));
+
+    await findCssElementAndClickIt('header-app-menu-template-folders');
+    const modal = await getDriver().wait(
+      until.elementLocated(By.css('.mantine-Modal-content')),
+      10000,
+    );
+    const title = await modal.findElement(By.css('.mantine-Modal-title'));
+    expect(await title.getText()).to.equal('Template folders');
+    await modal.findElement(By.css('button.mantine-Modal-close')).click();
+    await getDriver().wait(until.stalenessOf(modal), 10000);
+  });
 });

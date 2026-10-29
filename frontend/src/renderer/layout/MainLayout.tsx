@@ -384,9 +384,6 @@ export function MainLayout() {
   };
 
   useEffect(() => {
-    // Listener to open template modal when triggered
-    window.api.preferences.onOpenTemplateModal(() => openTemplateCreateModal());
-
     // Used to load configuration once in dev mode
     if (w.__didInit) return;
     w.__didInit = true;
@@ -474,6 +471,7 @@ export function MainLayout() {
           handleLoadConfiguration={handleLoadConfiguration}
           handleSelectConfiguration={handleSelectConfiguration}
           handleAddTree={openAddTreeModal}
+          handleOpenTemplateFolders={openTemplateCreateModal}
           defaultConfigPath={defaultConfigPath}
           setDefaultConfigPath={setDefaultConfigPath}
         />

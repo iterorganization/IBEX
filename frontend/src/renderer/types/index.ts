@@ -10,3 +10,4 @@ export * from './uri';
 export * from './userPreferences';
 export * from './startup';
 export * from './launchDirectory';
+export * from './help';

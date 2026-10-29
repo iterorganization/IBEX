@@ -7,7 +7,7 @@ Load configuration
 To load an existing local configuration, you can use the “Load” menu. It lists the “.json” files of the directory IBEX was started from, so that one click loads one of them; “Browse…” opens the file explorer to find a file anywhere else. This configuration reflects the state of your application at the time of the last save.
 
 .. image:: images/load_configuration.png
-   :alt: Modal to load a configuration
+   :alt: Load menu listing the configuration files of the launch directory
    :align: center
 
 Make sure to save your configuration by clicking the “Save” button so that you can load it later and pick up right where you left off. 
