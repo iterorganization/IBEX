@@ -1,13 +1,13 @@
-.. _`Metadatas`:
+.. _`Metadata`:
 
-===================
-Metadatas
-===================
+========
+Metadata
+========
 
 You can view all the data related to this chart.
 
-.. image:: images/metadatas.png
-   :alt: Metadatas window
+.. image:: images/metadata.png
+   :alt: Metadata window
    :align: center
 
 The metadata includes all available information related to the various nodes displayed on the chart.

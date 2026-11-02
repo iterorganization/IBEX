@@ -29,7 +29,7 @@ Allows you to select how you want the data to be displayed. In 1D, it will be re
 
 **Inspect Metadata:**
 
-This opens a ":doc:`Metadata <metadatas>`" component that displays various information related to all nodes (path, min, max, average, value, coordinates, etc.). This gives the user a broader overview of the data.
+This opens a ":doc:`Metadata <metadata>`" component that displays various information related to all nodes (path, min, max, average, value, coordinates, etc.). This gives the user a broader overview of the data.
 
 **Data manipulation:**
 

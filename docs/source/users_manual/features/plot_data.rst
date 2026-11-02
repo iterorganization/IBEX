@@ -32,7 +32,7 @@ Some data has error bands reprented by "_error_upper" & "_error_lower". These er
    :alt: Plot data with error bands
    :align: center
 
-Some data cannot be plotted and are not visually visible in graph form. They are therefore displayed as ":doc:`Metadata <metadatas>`".
+Some data cannot be plotted and are not visually visible in graph form. They are therefore displayed as ":doc:`Metadata <metadata>`".
 
 .. image:: images/plot_metadata.png
    :alt: Show metadata according to the unplottable data

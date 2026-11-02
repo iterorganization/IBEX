@@ -412,6 +412,30 @@ def pad_to_rectangular(lst):
     return arr
 
 
+# Largest common grid a node is resampled onto. Two nodes whose coordinates barely overlap (e.g. psi on
+# 299x299 and 65x129 poloidal grids, over 200 and 2027 time slices) have a union of hundreds of millions
+# of points: gigabytes of JSON, which the frontend cannot even parse.
+MAX_INTERPOLATED_VALUES = 20_000_000
+
+
+def check_common_grid_size(names: list[str], common_coords: list[list]):
+    """
+    Refuse to resample onto a common grid with more than ``MAX_INTERPOLATED_VALUES`` points.
+
+    :param names: Names of the coordinates, in the order of ``common_coords``.
+    :param common_coords: Values of each common coordinate.
+    """
+    sizes = [len(values) for values in common_coords]
+    total = reduce(_op.mul, sizes, 1)
+    if total > MAX_INTERPOLATED_VALUES:
+        dimensions = " x ".join(f"{size} {name}" for size, name in zip(sizes, names))
+        raise InvalidParametersException(
+            f"Cannot combine these nodes: their common coordinates ({dimensions}) hold {total:,} values, "
+            f"more than the {MAX_INTERPOLATED_VALUES:,} allowed. Their coordinates differ too much: "
+            "plot them in separate figures."
+        )
+
+
 def resample_data_with_interpolation(
     original_coords: list, data: list, target_coords: list, interpolation_method: str | None = None
 ):

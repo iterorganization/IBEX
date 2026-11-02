@@ -303,3 +303,20 @@ def test_interpolation_over_another_ids_coordinates_mismatch(ids_time_bases_entr
     }
     response = pytest.test_client.get("/data/plot_data", params=parameters)
     assert response.status_code == 466
+
+
+@pytest.mark.parametrize("limit, status_code", [(12, 466), (13, 200)])
+def test_interpolation_common_grid_size_limit(ids_time_bases_entry_path, monkeypatch, limit, status_code):
+    """A common grid larger than MAX_INTERPOLATED_VALUES is refused instead of being sent to the frontend."""
+    # summary (11 times) and core_profiles (3 times, one of them shared) have 13 common times
+    monkeypatch.setattr("ibex.data_source.imas_python_source_utils.MAX_INTERPOLATED_VALUES", limit)
+    parameters = {
+        "uri": f"{ids_time_bases_entry_path}#summary/global_quantities/ip/value",
+        "interpolate_over": [f"{ids_time_bases_entry_path}#core_profiles/global_quantities/ip"],
+        "interpolation_method": "exact_value",
+    }
+    response = pytest.test_client.get("/data/plot_data", params=parameters)
+    assert response.status_code == status_code
+    if status_code == 466:
+        assert "13 time" in response.json()["message"]
+        assert "plot them in separate figures" in response.json()["message"]

@@ -24,7 +24,7 @@ export interface TabItem {
 interface TabsListCustomProps {
   data: TabItem[];
   value: string | null;
-  usedFor: 'metadatas' | 'personalization';
+  usedFor: 'metadata' | 'personalization';
   closeWithoutSaving: () => void;
   saveAndClose?: () => void;
 }
@@ -48,10 +48,10 @@ export const TabsListCustom = ({
 
   return (
     <Group mt={2} ref={barRef}>
-      {usedFor === 'metadatas' ? (
+      {usedFor === 'metadata' ? (
         <ActionIcon
           variant="filled"
-          aria-label="Metadatas"
+          aria-label="Back"
           onClick={() => closeWithoutSaving()}
         >
           <IconArrowLeft style={{ width: '70%', height: '70%' }} stroke={1.5} />
@@ -62,7 +62,7 @@ export const TabsListCustom = ({
             <Tooltip label="Save customization and close">
               <ActionIcon
                 variant="filled"
-                aria-label="Metadatas"
+                aria-label="Save customization"
                 data-testid="customization-save-button"
                 color="yellow"
                 onClick={() => saveAndClose()}
@@ -77,7 +77,7 @@ export const TabsListCustom = ({
           <Tooltip label="Cancel customization">
             <ActionIcon
               variant="filled"
-              aria-label="Metadatas"
+              aria-label="Cancel customization"
               color="red"
               onClick={() => closeWithoutSaving()}
             >
@@ -92,7 +92,7 @@ export const TabsListCustom = ({
         scrollbarSize={6}
         offsetScrollbars
         maw={
-          usedFor === 'metadatas'
+          usedFor === 'metadata'
             ? barRef.current?.offsetWidth - 50
             : barRef.current?.offsetWidth - 100
         }
