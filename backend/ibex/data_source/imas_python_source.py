@@ -43,6 +43,7 @@ from ibex.core.utils import IMAS_URI
 from ibex.data_source.imas_python_source_utils import (
     path_in_filled_paths,
     convert_ids_data_into_numpy_array,
+    check_common_grid_size,
     resample_data_with_interpolation,
     resample_data_without_interpolation,
     pad_to_rectangular,
@@ -1277,6 +1278,7 @@ class IMASPythonSource(DataSourceInterface):
 
                 # reverse coordinates list so it matches data dimensions
                 common_coords_values = [c["value"] for c in reversed(coordinates_to_be_returned)]
+                check_common_grid_size([c["name"] for c in reversed(coordinates_to_be_returned)], common_coords_values)
                 # =================== INTERPOLATE ===================
 
                 # === make data vector rectangular ===
