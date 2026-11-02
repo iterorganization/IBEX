@@ -220,7 +220,7 @@ export const MetaDataInfos = ({
   return (
     <Stack gap={0}>
       <Title ta={'center'} order={3} pt={10}>
-        Metadatas
+        Metadata
       </Title>
       <ScrollArea h={height || '79vh'}>
         <Table py="md">
@@ -352,7 +352,7 @@ export const VisualizationMetaData = () => {
         <TabsListCustom
           data={tabItems}
           value={tabsValue}
-          usedFor="metadatas"
+          usedFor="metadata"
           closeWithoutSaving={closeWithoutSaving}
         />
 

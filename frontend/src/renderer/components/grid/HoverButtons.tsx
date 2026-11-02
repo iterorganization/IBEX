@@ -320,10 +320,10 @@ export const HoverButtons = React.memo(
               )}
 
               {data.coordinates.length && !shouldDisplayMetadata && (
-                <Tooltip label="Inspect metadatas information">
+                <Tooltip label="Inspect metadata">
                   <ActionIcon
                     variant="filled"
-                    aria-label="Metadatas"
+                    aria-label="Metadata"
                     onClick={() => handleInspectMetadata(data.i)}
                     className={classes.actionButton}
                     // Disable when no names in plots (case when add template with bad URIs in first URIs selection)
