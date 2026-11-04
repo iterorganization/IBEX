@@ -13,7 +13,7 @@ import { useForm } from '@mantine/form';
 import { showNotification } from '@mantine/notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { ConfigForm } from 'src/renderer/types';
-import { readIbexConfig } from '../../utils';
+import { configurationNameError, readIbexConfig } from '../../utils';
 
 type SelectTemplateData = { group: string; items: SelectDataItems }[];
 type SelectDataItems = { value: string; label: string }[];
@@ -46,12 +46,7 @@ export function ConfigCreateModal({
       name: '',
     },
     validate: {
-      name: (value) =>
-        value.length < 1
-          ? 'This field is required'
-          : configurationsNames.some((name) => name === value)
-            ? 'This name is already taken'
-            : null,
+      name: (value) => configurationNameError(value, configurationsNames),
     },
   });
 

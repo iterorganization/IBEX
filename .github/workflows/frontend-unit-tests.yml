@@ -1,0 +1,30 @@
+name: frontend-unit-tests
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  unit:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout frontend sources
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # --ignore-scripts skips the electron / electron-chromedriver postinstall
+      # downloads (~150 MB). These tests are pure functions over plain data:
+      # no Electron, no renderer, no backend. The e2e suite is what exercises
+      # the app, and it has its own workflow.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts
+
+      - name: Run unit tests
+        working-directory: frontend
+        run: npm run test:unit

@@ -28,6 +28,23 @@ get_free_ports() {
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Directory the user started IBEX from: relative paths given as options
+# (-c FILE, -t FILE) are resolved against it, since this script changes
+# directory before starting the app.
+export IBEX_CALLER_CWD="$PWD"
+
+# True when the options only ask IBEX to print something (--help,
+# --version): no backend or set-up step is needed then.
+is_info_only() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help|-v|--version) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 # Recreate the venv if it was created with a different Python (major.minor)
 # version than the one currently loaded, to avoid stale-interpreter failures
 # when the user switches Python versions (e.g. module load) between runs.
@@ -70,6 +87,12 @@ if [ "${#missing_modules[@]}" -ne 0 ]; then
   exit 1
 fi
 
+if is_info_only "$@"; then
+  cd "$SCRIPT_DIR/frontend"
+  [ -d node_modules ] || npm install
+  exec npm run --silent start -- "$@"
+fi
+
 echo "2. Setting up Python virtual environment..."
 mkdir -p ~/.config/ibex
 cd ~/.config/ibex
@@ -91,6 +114,9 @@ echo "Setting IBEX BACKEND PORT = ${found_ports[0]}"
 
 run_ibex_service -p ${found_ports[0]} &
 BACKEND_PID=$!
+# Stop the backend however the script ends, including when the app exits
+# with an error (e.g. an invalid command-line option)
+trap 'kill $BACKEND_PID 2>/dev/null' EXIT
 
 export IBEX_BACKEND_URL="http://127.0.0.1:${found_ports[0]}"
 echo "Setting IBEX_BACKEND_URL = $IBEX_BACKEND_URL"
@@ -123,10 +149,10 @@ EOF
 npm install
 
 echo "6. Launch frontend server..."
-npm run start &
+# Command-line options are passed on to IBEX (see `./launch-dev.sh --help`)
+npm run start -- "$@" &
 FRONTEND_PID=$!
 cd "$SCRIPT_DIR"
 
-# Wait for both processes to finish
+# Wait for the app to finish; the EXIT trap stops the backend
 wait $FRONTEND_PID
-kill $BACKEND_PID

@@ -4,12 +4,11 @@ import {
   fetchDataPlot,
   fetchDownsamplingMethods,
   fetchErrorBands,
-  getArrayValueFromDependance,
   getFirstArrayValueFromShape,
   getUrisToInterpolate,
-  getVectorData,
   normalizeIndices,
   reapplyAxisOrder,
+  cloneGridStructure,
 } from '../../../utils';
 import { showNotification } from '@mantine/notifications';
 import { Button, Group, NumberInput, Select, Stack } from '@mantine/core';
@@ -40,9 +39,7 @@ export const CustomizeDownsampling = ({
   const getDownSampledData = async () => {
     try {
       open();
-      const updatedDataPlot = structuredClone(
-        customizedDataGrid,
-      ) as DataGridPlot;
+      const updatedDataPlot = cloneGridStructure(customizedDataGrid);
 
       let plotIndex = 0;
       for (const plot of updatedDataPlot.plot) {
@@ -82,6 +79,8 @@ export const CustomizeDownsampling = ({
             // Apply new data
             coordinate.data =
               dataPlotDownsampled.data.coordinates[coordinateIndex].value;
+            coordinate.dataRef =
+              dataPlotDownsampled.data.coordinates[coordinateIndex].valueRef;
             coordinateIndex++;
             // Apply new range
             coordinate.range = [
@@ -106,15 +105,8 @@ export const CustomizeDownsampling = ({
 
         // Update plot with downsampled data
         plot.shape = dataPlotDownsampled.data.downsampled_shape;
-        // Get x axis switch coordinates dependances
-        plot.x = getArrayValueFromDependance(updatedDataPlot.coordinates, 0);
         plot.yData = dataPlotDownsampled.data.value;
-        // Get y axis
-        const vectorData = getVectorData(
-          updatedDataPlot.coordinates,
-          plot.yData,
-        );
-        plot.y = vectorData;
+        plot.yDataRef = dataPlotDownsampled.data.valueRef;
 
         plotIndex++;
       }

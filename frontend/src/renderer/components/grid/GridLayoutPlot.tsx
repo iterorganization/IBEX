@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import {
-  Axis,
   Configuration,
   Coordinates,
   CustomizedGridType,
@@ -13,24 +12,34 @@ import {
 import { Center, Container, Text } from '@mantine/core';
 import { SimplePlotly, Heatmap2D } from '../plot';
 import { useIbexStore } from '../../stores';
-import {
-  getArrayValueFromDependance,
-  getErrorYVectors,
-  getLastIndexedField,
-  getVectorData,
-  limitSlidersToMaxLength,
-  normalizeIndices,
-  updateIndexFieldName,
-} from '../../utils';
+import { countRender } from '../../utils/perf';
+import { normalizeIndices } from '../../utils';
+import { lineVector } from '../../derive/vectors';
 import { MetaDataInfos } from '../../pages/visualization/VisualizationMetaData';
 import { HoverButtons } from './HoverButtons';
 
-export const GridLayoutPlot = ({
+/**
+ * One plot panel.
+ *
+ * Memoized on its props: `data` keeps its identity while that grid is
+ * unchanged (the store writers preserve untouched grids), and the other two are
+ * numbers. Without this, a store write anywhere re-renders every panel through
+ * the parent's children array, and each re-render hands Plotly new props.
+ */
+export const GridLayoutPlot = memo(function GridLayoutPlot({
   data,
   colWidth,
   rowHeight,
-}: GridLayoutPlotProps) => {
-  const { active, updatedConfiguration } = useIbexStore();
+}: GridLayoutPlotProps) {
+  // Only `dataURI.length` is read while rendering; everything else is read at
+  // call time inside the handlers. Subscribing to the whole store here made
+  // every panel re-render - and redraw - on any change anywhere.
+  const hasDataURI = useIbexStore((state) => state.active.dataURI.length > 0);
+  // A boolean selector, so entering edit mode re-renders the two panels whose
+  // flag changed and no others. `isEditing` used to be a field on every grid,
+  // which meant the write had to rebuild the grids it cleared it on.
+  const isEditing = useIbexStore((state) => state.editingGridId === data.i);
+  countRender(`GridLayoutPlot:${data.i}`);
   const [heightGrid, setHeightGrid] = useState(
     data.h * rowHeight + (23 * (data.h * rowHeight)) / 100,
   );
@@ -47,140 +56,19 @@ export const GridLayoutPlot = ({
   const [shouldDisplayMetadata, setShouldDisplayMetadata] = useState(false);
 
   /**
-   * updateslider coordinate value
+   * Move a coordinate's cursor.
+   *
+   * One store action writing integers and labels. What is drawn is derived from
+   * the payload and those integers at render time, so this no longer rebuilds
+   * every trace of this grid and of every grid synchronized with it - which is
+   * why its cost no longer depends on how big the payload is.
    */
-  const handleUpdateCoordinate = async (
-    coordinate: Coordinates,
-    valueIndex: number,
-  ) => {
-    // Check if the coordinate has a target
-    const lastTargetLastName = getLastIndexedField(coordinate.target);
-    if (!lastTargetLastName)
-      return console.warn('No indexed field found in target');
-
-    const updatedActive: Configuration = {
-      ...active,
-      dataPlot: active.dataPlot.map((item: DataGridPlot) => {
-        const mainDataGrid = item.i === data.i;
-        const isSynchronized = data.synchronizedGrids.list.includes(item.i);
-        const coordWithSameName = item.coordinates.find(
-          (ic) => ic.name === coordinate.name,
-        );
-        const sameCoordinate =
-          coordWithSameName &&
-          JSON.stringify(coordinate.data) ===
-            JSON.stringify(coordWithSameName.data);
-
-        if (mainDataGrid || (isSynchronized && sameCoordinate)) {
-          // Update main slider with new valueIndex & update synchronized ones matching with the same coordinate
-          const updatedCoordinatesValue = item.coordinates.map((coordItem) => {
-            const updatedPath = updateIndexFieldName(
-              coordItem.path,
-              lastTargetLastName,
-              valueIndex,
-            );
-            const updatedTarget = updateIndexFieldName(
-              coordItem.target,
-              lastTargetLastName,
-              valueIndex,
-            );
-
-            return {
-              ...coordItem,
-              path: updatedPath,
-              target: updatedTarget,
-              valueIndex:
-                coordItem.name === coordinate.name
-                  ? valueIndex
-                  : coordItem.valueIndex,
-            };
-          }) as Coordinates[];
-          limitSlidersToMaxLength(updatedCoordinatesValue);
-
-          const updatedXAxisData: Axis = {
-            ...item.xAxisData,
-            path: updateIndexFieldName(
-              item.xAxisData?.path || '',
-              lastTargetLastName,
-              valueIndex,
-            ),
-          };
-
-          // Get x values switch x dependances
-          const newXData = getArrayValueFromDependance(
-            updatedCoordinatesValue,
-            0,
-          );
-
-          const updatedPlot = item.plot.map((plotItem) => {
-            const updatedNodeUri = updateIndexFieldName(
-              plotItem.nodeUri,
-              lastTargetLastName,
-              valueIndex,
-            );
-
-            const updatedPath = updateIndexFieldName(
-              plotItem.path || '',
-              lastTargetLastName,
-              valueIndex,
-            );
-
-            const newYData = getVectorData(
-              updatedCoordinatesValue,
-              plotItem.yData,
-            );
-
-            if (plotItem?.error_bands?.length) {
-              const updated_error_bands = getErrorYVectors(
-                plotItem,
-                updatedCoordinatesValue,
-              );
-              let customdata;
-              if (plotItem.error_bands.length === 2) {
-                customdata = plotItem.error_bands[0].array.map((v, i) => [
-                  plotItem.error_bands[0].array[i],
-                  plotItem.error_bands[1].array[i],
-                ]);
-              } else {
-                customdata = plotItem.error_bands[0].array.map((v, i) => [
-                  plotItem.error_bands[0].array[i],
-                ]);
-              }
-
-              return {
-                ...plotItem,
-                x: [...newXData],
-                y: [...newYData],
-                customdata: customdata,
-                error_bands: updated_error_bands,
-                nodeUri: updatedNodeUri,
-                path: updatedPath,
-              };
-            } else {
-              return {
-                ...plotItem,
-                x: [...newXData],
-                y: [...newYData],
-                nodeUri: updatedNodeUri,
-                path: updatedPath,
-              };
-            }
-          });
-
-          return {
-            ...item,
-            coordinates: updatedCoordinatesValue,
-            plot: updatedPlot,
-            xAxisData: updatedXAxisData,
-          };
-        }
-
-        return item;
-      }) as DataGridPlot[],
-    };
-
-    updatedConfiguration(updatedActive);
-  };
+  const handleUpdateCoordinate = useCallback(
+    async (coordinate: Coordinates, valueIndex: number) => {
+      useIbexStore.getState().setCursor(data.i, coordinate.name, valueIndex);
+    },
+    [data.i],
+  );
 
   useEffect(() => {
     let forceToDisplayMetadata = false;
@@ -188,11 +76,9 @@ export const GridLayoutPlot = ({
     // Rule to force to show metadata when y data is of type string
     let isYDataString = false;
     for (const plot of data.plot) {
-      if (plot.y) {
-        const typeOfYData = typeof plot.y[0];
-        if (typeOfYData === 'string') {
-          isYDataString = true;
-        }
+      const drawn = lineVector(plot.yData, data.coordinates);
+      if (drawn && typeof drawn[0] === 'string') {
+        isYDataString = true;
       }
     }
 
@@ -240,13 +126,17 @@ export const GridLayoutPlot = ({
    * Handle the delete grid event
    */
   const handleDeleteGrid = useCallback((id: string) => {
-    const { active, updatedConfiguration } = useIbexStore.getState();
+    const { active, updatedConfiguration, editingGridId, setEditingGrid } =
+      useIbexStore.getState();
     const newDataPlot: DataGridPlot[] = active.dataPlot.filter(
       (item: DataGridPlot) => item.i !== id,
     );
-    const checkedNodeURI = newDataPlot.find((dataPlot) => dataPlot.isEditing)
-      ? active.checkedNodeURI
-      : [];
+    // Deleting the grid being edited leaves edit mode; deleting another one
+    // leaves the tree selection alone. The panels keyed on this grid close
+    // with it - `updatedConfiguration` below prunes them.
+    const stillEditing = newDataPlot.some((item) => item.i === editingGridId);
+    if (!stillEditing) setEditingGrid(null);
+    const checkedNodeURI = stillEditing ? active.checkedNodeURI : [];
     const newActive: Configuration = {
       ...active,
       saved: false,
@@ -280,122 +170,111 @@ export const GridLayoutPlot = ({
   /**
    * Handle edit grid event
    */
-  const handleEditGrid = useCallback(
-    (id: string) => {
-      const { active, updatedConfiguration } = useIbexStore.getState();
+  const handleEditGrid = useCallback((id: string) => {
+    const { active, updatedConfiguration, editingGridId, setEditingGrid } =
+      useIbexStore.getState();
 
-      const findPlot = active.dataPlot.find((item) => item.i === id);
-      if (!findPlot) return;
+    const findPlot = active.dataPlot.find((item) => item.i === id);
+    if (!findPlot) return;
 
-      const updatedDataPlot = active.dataPlot.map((item) =>
-        item.i === id
-          ? { ...item, isEditing: !item.isEditing, static: !item.isEditing }
-          : { ...item, isEditing: false, static: false },
-      );
+    // Edit mode is a single id, so leaving it touches no grid object at all -
+    // it used to clear a flag on every other grid, and the grids it rebuilt to
+    // do so were what made editing one panel re-render the rest.
+    const wasEditing = editingGridId === id;
+    setEditingGrid(wasEditing ? null : id);
 
-      // Check from tree selected plots (all plots used in dataGrid)
-      const checkedNodeURI: URITreeNodeData[] = !findPlot.isEditing
-        ? findPlot.plot.map((item) => ({
-            uri: normalizeIndices(item.nodeUri),
-            name: item.labelUri,
+    // Check from tree selected plots (all plots used in dataGrid)
+    const checkedNodeURI: URITreeNodeData[] = !wasEditing
+      ? findPlot.plot.map((item) => ({
+          uri: normalizeIndices(item.nodeUri),
+          name: item.labelUri,
+          type: findPlot.dataType,
+          is_geometry_node: findPlot.is_geometry_node,
+        }))
+      : [];
+
+    if (checkedNodeURI.length) {
+      for (const plot of findPlot.plot) {
+        if (!plot.error_bands) {
+          continue;
+        }
+
+        for (const error_band of plot.error_bands) {
+          const newCheckedNode = {
+            name: plot.labelUri,
+            uri: normalizeIndices(error_band.path),
             type: findPlot.dataType,
             is_geometry_node: findPlot.is_geometry_node,
-          }))
-        : [];
-
-      if (checkedNodeURI.length) {
-        for (const plot of findPlot.plot) {
-          if (!plot.error_bands) {
-            continue;
+          };
+          const exists = checkedNodeURI.some(
+            (node) =>
+              node.name === newCheckedNode.name &&
+              node.uri === newCheckedNode.uri,
+          );
+          if (!exists) {
+            // Check from tree selected error bands to plot
+            checkedNodeURI.push(newCheckedNode);
           }
+        }
+      }
 
-          for (const error_band of plot.error_bands) {
+      if (findPlot?.geometries) {
+        // Check geometries in tree
+        for (const geometry of findPlot.geometries) {
+          for (const uriOfGeo of geometry.nodeUris) {
             const newCheckedNode = {
-              name: plot.labelUri,
-              uri: normalizeIndices(error_band.path),
-              type: findPlot.dataType,
-              is_geometry_node: findPlot.is_geometry_node,
-            };
+              name: findPlot.plot[0].labelUri,
+              uri: normalizeIndices(uriOfGeo),
+              type: NodeInfoTypeEnum.FLOAT,
+              is_geometry_node: true,
+            } as URITreeNodeData;
             const exists = checkedNodeURI.some(
               (node) =>
                 node.name === newCheckedNode.name &&
                 node.uri === newCheckedNode.uri,
             );
             if (!exists) {
-              // Check from tree selected error bands to plot
               checkedNodeURI.push(newCheckedNode);
             }
           }
         }
-
-        if (findPlot?.geometries) {
-          // Check geometries in tree
-          for (const geometry of findPlot.geometries) {
-            for (const uriOfGeo of geometry.nodeUris) {
-              const newCheckedNode = {
-                name: findPlot.plot[0].labelUri,
-                uri: normalizeIndices(uriOfGeo),
-                type: NodeInfoTypeEnum.FLOAT,
-                is_geometry_node: true,
-              } as URITreeNodeData;
-              const exists = checkedNodeURI.some(
-                (node) =>
-                  node.name === newCheckedNode.name &&
-                  node.uri === newCheckedNode.uri,
-              );
-              if (!exists) {
-                checkedNodeURI.push(newCheckedNode);
-              }
-            }
-          }
-        }
       }
+    }
 
-      const updatedActive: Configuration = {
-        ...active,
-        saved: false,
-        dataPlot: updatedDataPlot,
-        checkedNodeURI: checkedNodeURI,
-      };
+    const updatedActive: Configuration = {
+      ...active,
+      saved: false,
+      checkedNodeURI: checkedNodeURI,
+    };
 
-      updatedConfiguration(updatedActive);
-    },
-    [active],
-  );
+    updatedConfiguration(updatedActive);
+  }, []);
 
   /**
    * Inspect metadata of plot
    */
-  const handleInspectMetadata = useCallback(
-    (id: string) => {
-      const updatedActive: Configuration = {
-        ...active,
-        metadataGridLayout: id,
-      };
-      updatedConfiguration(updatedActive);
-    },
-    [active],
-  );
+  const handleInspectMetadata = useCallback((id: string) => {
+    // Which panel is open is not part of the saved configuration, so opening
+    // one no longer replaces it.
+    useIbexStore.getState().setMetadataGrid(id);
+  }, []);
 
   /**
    * Customize plot
    */
   const handleCustomization = useCallback(
     (id: string, typeOfEdition: CustomizedGridType) => {
-      const updatedActive: Configuration = {
-        ...active,
-        customizedGridLayout: { id: id, type: typeOfEdition },
-      };
-      updatedConfiguration(updatedActive);
+      useIbexStore.getState().setCustomizing({ id, type: typeOfEdition });
     },
-    [active],
+    [],
   );
 
   return (
     <Container fluid w={widthGrid} p={0}>
-      {active.dataURI.length > 0 && (
+      {hasDataURI && (
         <HoverButtons
           data={data}
+          isEditing={isEditing}
           shouldDisplayMetadata={shouldDisplayMetadata}
           handleEditGrid={handleEditGrid}
           handleInspectMetadata={handleInspectMetadata}
@@ -407,7 +286,7 @@ export const GridLayoutPlot = ({
         />
       )}
 
-      {!(active.dataURI.length > 0) ? (
+      {!hasDataURI ? (
         // Control when loading a template without selecting URIs
         <Center h={heightGrid}>
           <Text>Current configuration has no data. Please, select URIs.</Text>
@@ -421,6 +300,7 @@ export const GridLayoutPlot = ({
                   key={`metadata_${data.i}`}
                   gridLayoutKey={data.i}
                   data={plot}
+                  gridCoordinates={data.coordinates}
                   yAxis={plot.yaxis !== '' ? data.y2AxisData : data.yAxisData}
                   height={(heightGrid - 72).toString()} // 72px is equivalent to paddings (40px from top + 2rem for y padding)
                   tabsSelected={plot.path}
@@ -433,6 +313,7 @@ export const GridLayoutPlot = ({
         // Show heatmap
         <Heatmap2D
           itemDataGrid={data}
+          isEditing={isEditing}
           width={widthGrid}
           height={heightGrid}
           plotIndex={active3DTab}
@@ -443,6 +324,7 @@ export const GridLayoutPlot = ({
         // Show simple plot
         <SimplePlotly
           itemDataGrid={data}
+          isEditing={isEditing}
           width={widthGrid}
           height={heightGrid}
           showSliders={true}
@@ -452,4 +334,4 @@ export const GridLayoutPlot = ({
       )}
     </Container>
   );
-};
+});

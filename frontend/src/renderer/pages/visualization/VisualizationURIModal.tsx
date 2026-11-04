@@ -17,7 +17,12 @@ import {
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
 import { useEffect, useMemo, useState } from 'react';
-import { IconAlertSquareRounded, IconX, IconPlus } from '@tabler/icons-react';
+import {
+  IconAlertSquareRounded,
+  IconFolderOpen,
+  IconX,
+  IconPlus,
+} from '@tabler/icons-react';
 import { Configuration, FormDbEntries, URISelectionData } from '../../types';
 import { showNotification } from '@mantine/notifications';
 import { useForm } from '@mantine/form';
@@ -30,7 +35,7 @@ import {
   plotNodeUriLoaded,
   updateCustomDataTree,
 } from '../../utils';
-import { ConfirmModal } from '../../components';
+import { ConfirmModal, LaunchDirectoryMenu } from '../../components';
 
 interface VisualizationSelectIDSModalProps {
   opened: boolean;
@@ -211,7 +216,7 @@ export const VisualizationURIModal = ({
       setLocalFile(file);
 
       if (file) {
-        fetchDataIDSFromFile();
+        fetchDataIDSFromFile(localDatasetPath);
       }
     };
     loadFile();
@@ -462,13 +467,14 @@ export const VisualizationURIModal = ({
 
   /**
    * Fetch IDS data from file
+   * @param path - data file (or HDF5 master file) of the data entry
    * @returns {Promise<void>}
    * Return data uri with name and occurrences
    */
-  async function fetchDataIDSFromFile() {
+  async function fetchDataIDSFromFile(path: string) {
     try {
       setIsLoading(true);
-      const responseURIExists = await fetchURIFromPath(localDatasetPath);
+      const responseURIExists = await fetchURIFromPath(path);
 
       await URIVerification(responseURIExists.uri, setLocalFileError);
     } catch (error) {
@@ -554,28 +560,57 @@ export const VisualizationURIModal = ({
       })}
     >
       <Group justify="space-between" mb={10}>
-        <FileInput
-          clearable
-          label="Upload local dataset"
-          placeholder="Select local imas file"
-          value={localFile}
-          error={localFileError}
-          onClick={handleLoadLocalFile}
-          onChange={(value) => {
-            if (value === null) {
-              setLocalFile(null);
+        <Group w="calc(50% - 30px)" gap={8} align="flex-end" wrap="nowrap">
+          <FileInput
+            clearable
+            label="Upload local dataset"
+            placeholder="Select local imas file"
+            value={localFile}
+            error={localFileError}
+            onClick={handleLoadLocalFile}
+            onChange={(value) => {
+              if (value === null) {
+                setLocalFile(null);
+                setLocalFileError('');
+              }
+            }}
+            style={{ flex: 1 }}
+            styles={{
+              input: {
+                //green if success else default
+                borderColor: fromFileisSuccess ? '#00FF00' : '',
+              },
+            }}
+            disabled={isLoading || isLoadingDbEntries}
+          />
+          <LaunchDirectoryMenu
+            kind="dataEntries"
+            onSelect={(path) => {
               setLocalFileError('');
+              fetchDataIDSFromFile(path);
+            }}
+            testId="config-uri-selection-modal-launch-dir-menu"
+            target={
+              <Tooltip
+                label="Data entries in the directory IBEX was started from"
+                openDelay={300}
+              >
+                <ActionIcon
+                  variant="outline"
+                  size="input-sm"
+                  aria-label="Data entries in the launch directory"
+                  data-testid="config-uri-selection-modal-launch-dir-button"
+                  disabled={isLoading || isLoadingDbEntries}
+                >
+                  <IconFolderOpen
+                    style={{ width: '70%', height: '70%' }}
+                    stroke={1.5}
+                  />
+                </ActionIcon>
+              </Tooltip>
             }
-          }}
-          w="calc(50% - 30px)"
-          styles={{
-            input: {
-              //green if success else default
-              borderColor: fromFileisSuccess ? '#00FF00' : '',
-            },
-          }}
-          disabled={isLoading || isLoadingDbEntries}
-        />
+          />
+        </Group>
 
         <form
           onSubmit={formURI.onSubmit(() => {

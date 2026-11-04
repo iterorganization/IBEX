@@ -72,3 +72,67 @@ export const is3DMatrix = (shape: number[]): boolean => {
   // A 3D matrix has a shape with at least 2 dimensions
   return shape.length >= 2;
 };
+
+/**
+ * @description Retrieves vector data from a plot item based on the provided URI and coordinates.
+ * @param uri The URI to retrieve the vector data from.
+ * @param coordinates The coordinates to use for retrieving the vector data.
+ * @param plotItem The plot item containing the yData to extract the vector from.
+ * @returns The vector data as an array of numbers, or undefined if the indices are invalid
+ */
+export function getVectorData(coordinates: Coordinates[], yData: AxisData) {
+  const coordinatesLength: number = coordinates.length;
+
+  // Extract only matrix indexes.
+  // Only `axeIndex` and `valueIndex` are read, so project onto those two
+  // numbers before sorting: cloning the coordinates would deep-copy every
+  // coordinate's full `data` array, and this runs on every slider tick and on
+  // the render path of every plot.
+  const matrixIndexes = coordinates
+    .map((coord: Coordinates) => ({
+      axeIndex: coord.axeIndex,
+      valueIndex: coord.valueIndex,
+    }))
+    .sort(compareByAxeIndex)
+    .reverse()
+    .filter((coord) => coord.axeIndex !== 0)
+    .map((coord) => coord.valueIndex);
+
+  // Retrieve vector to plot
+  /* eslint-disable  @typescript-eslint/no-explicit-any */
+  let result: any = yData;
+  let shapeIndex = 0;
+  for (const index of matrixIndexes) {
+    if (shapeIndex < coordinatesLength && index < result.length) {
+      result = result[index];
+      shapeIndex++;
+    } else {
+      if (!(shapeIndex < coordinatesLength)) {
+        break;
+      } else {
+        console.warn('Impossible to plot: invalid index or incorrect length');
+        return undefined;
+      }
+    }
+  }
+  const vectorData: number[] = result;
+  return vectorData;
+}
+
+/**
+ * @description Compares two Coordinates objects by their axeIndex.
+ * @param a The first Coordinates object.
+ * @param b The second Coordinates object.
+ * @returns A negative number if a's axeIndex is less than b's, a positive number if greater, or 0 if equal.
+ */
+export function compareByAxeIndex(
+  a: { axeIndex: number },
+  b: { axeIndex: number },
+) {
+  if (a.axeIndex < b.axeIndex) {
+    return -1;
+  } else if (a.axeIndex > b.axeIndex) {
+    return 1;
+  }
+  return 0;
+}

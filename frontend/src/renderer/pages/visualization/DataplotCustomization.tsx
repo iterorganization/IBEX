@@ -11,7 +11,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useIbexStore } from '../../stores';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SimplePlotly, Heatmap2D, TabsListCustom } from '../../components';
 import {
   Configuration,
@@ -33,7 +33,8 @@ import {
   CustomizeGeometry,
 } from './customizableElements';
 import { IconGeometry, IconLink } from '@tabler/icons-react';
-import { initPlotColors } from '../../utils';
+import { cloneGridStructure, initPlotColors, plotTabLabels } from '../../utils';
+import { keysOf, pin, unpin } from '../../stores/payloadRegistry';
 
 export const DataplotCustomization = () => {
   const customContainerRef = useRef<HTMLDivElement>(null);
@@ -41,6 +42,7 @@ export const DataplotCustomization = () => {
   const WIDTH_PLOT = Math.floor(containerWidth * (6 / 12));
   const HEIGHT_PLOT = 390;
   const { active, updatedConfiguration } = useIbexStore();
+  const customizing = useIbexStore((state) => state.customizing);
   const [tabsValue, setTabsValue] = useState<string | null>();
   const [customizedDataGrid, setCustomizedDataGrid] =
     useState<DataGridPlot | null>(null);
@@ -68,7 +70,7 @@ export const DataplotCustomization = () => {
       } as DataGridPlot;
       setDataGridLayout(updatedDataGridLayout);
       setSelectedPlot(
-        updatedDataGridLayout.plot.find((data) => data.name === tabsValue),
+        updatedDataGridLayout.plot.find((data) => data.nodeUri === tabsValue),
       );
     }
   }, [customizedDataGrid]);
@@ -77,27 +79,40 @@ export const DataplotCustomization = () => {
    * Handle find grid layout corresponding to the selected tab
    */
   useEffect(() => {
-    if (active?.customizedGridLayout) {
-      const data = structuredClone(
-        active.dataPlot.find(
-          (item: DataGridPlot) => item.i === active.customizedGridLayout.id,
-        ),
+    if (customizing) {
+      // The panel edits a copy of the grid, but only of its structure: every
+      // edit assigns fields, and a deep copy here cost a copy of every matrix
+      // the grid holds before the panel could even draw.
+      const grid = active.dataPlot.find(
+        (item: DataGridPlot) => item.i === customizing.id,
       );
+      const data = grid && cloneGridStructure(grid);
       if (data) {
         setDataGridLayout(data);
         setCustomizedDataGrid(data);
-        setTabsValue(data.plot[0]?.name || null);
+        setTabsValue(data.plot[0]?.nodeUri || null);
       }
     }
   }, []);
 
+  // The copy is invisible to the store, so the sweep cannot tell its payloads
+  // are in use: a payload fetched here (downsampled, smoothed...) would be
+  // freed with the next store write, and the next range applied in the panel
+  // would have no base to cut from. Pinned while the panel holds them.
   useEffect(() => {
-    initPlotColors(
-      customizedDataGrid,
-      customContainerRef,
-      setCustomizedDataGrid,
-    );
-  }, [customContainerRef.current]);
+    if (!customizedDataGrid) return;
+    const keys = keysOf({
+      dataPlot: [customizedDataGrid],
+    } as Configuration);
+    keys.forEach(pin);
+    return () => keys.forEach(unpin);
+  }, [customizedDataGrid]);
+
+  useEffect(() => {
+    // Null until the customized grid is picked from the configuration.
+    if (!customizedDataGrid) return;
+    initPlotColors(customizedDataGrid, setCustomizedDataGrid);
+  }, [customizedDataGrid?.plot]);
 
   /**
    * Handle the resizing of the width
@@ -119,38 +134,34 @@ export const DataplotCustomization = () => {
    * Handle close of customization
    */
   const closeWithoutSaving = useCallback(() => {
-    const updatedActive: Configuration = structuredClone(
-      active,
-    ) as Configuration;
-    updatedActive.customizedGridLayout = null;
-    updatedConfiguration(updatedActive);
-  }, [active]);
+    // Closing the panel is UI state; the configuration is untouched.
+    useIbexStore.getState().setCustomizing(null);
+  }, []);
 
   /**
    * Handle save & close of customization
    */
   const saveAndClose = useCallback(() => {
+    useIbexStore.getState().setCustomizing(null);
+    // The grids whose links change are replaced, never written into: they
+    // are the store's own objects.
+    const dataPlot = [...active.dataPlot];
+    const setSynchronizedGrids = (index: number, list: synchronizedList) => {
+      dataPlot[index] = { ...dataPlot[index], synchronizedGrids: list };
+    };
     const updatedActive: Configuration = {
       ...active,
-      customizedGridLayout: null,
       saved: false,
+      dataPlot,
     };
     const oldDataGrid = updatedActive.dataPlot.find(
-      (dp) => dp.i === active.customizedGridLayout.id,
+      (dp) => dp.i === customizing.id,
     );
-    const updatedDataPlot: DataGridPlot[] = [
-      ...updatedActive.dataPlot.filter(
-        (dp) => dp.i !== active.customizedGridLayout.id,
-      ),
-      customizedDataGrid,
-    ];
 
     // Update synchronized grids dependencies
     if (
-      structuredClone(oldDataGrid.synchronizedGrids.list).sort().toString() !==
-      structuredClone(customizedDataGrid.synchronizedGrids.list)
-        .sort()
-        .toString()
+      [...oldDataGrid.synchronizedGrids.list].sort().toString() !==
+      [...customizedDataGrid.synchronizedGrids.list].sort().toString()
     ) {
       for (const [
         index,
@@ -187,15 +198,15 @@ export const DataplotCustomization = () => {
                   updatedActive.dataPlot[indexDPProbablyDesync].i,
                 )
               ) {
-                updatedActive.dataPlot[
-                  indexDPProbablyDesync
-                ].synchronizedGrids = { color: '', list: [] };
+                setSynchronizedGrids(indexDPProbablyDesync, {
+                  color: '',
+                  list: [],
+                });
               }
             }
 
             // Add in other grid the synchronized list and include the customized grid
-            updatedActive.dataPlot[index].synchronizedGrids =
-              newSynchronizedList;
+            setSynchronizedGrids(index, newSynchronizedList);
           } else if (
             oldDataGrid.synchronizedGrids.list.includes(dataPlotDependency.i) &&
             !customizedDataGrid.synchronizedGrids.list.includes(
@@ -203,17 +214,17 @@ export const DataplotCustomization = () => {
             )
           ) {
             // Remove synchronization for deleted dependencies
-            updatedActive.dataPlot[index].synchronizedGrids = {
+            setSynchronizedGrids(index, {
               color: '',
               list: [],
-            };
+            });
           } else if (
             customizedDataGrid.synchronizedGrids.list.includes(
               dataPlotDependency.i,
             )
           ) {
             // Update relations of unchanged dataGrids
-            updatedActive.dataPlot[index].synchronizedGrids = {
+            setSynchronizedGrids(index, {
               color: customizedDataGrid.synchronizedGrids.color,
               list: [
                 customizedDataGrid.i,
@@ -221,12 +232,16 @@ export const DataplotCustomization = () => {
                   (i) => i !== dataPlotDependency.i,
                 ),
               ],
-            };
+            });
           }
         }
       }
     }
 
+    const updatedDataPlot: DataGridPlot[] = [
+      ...dataPlot.filter((dp) => dp.i !== customizing.id),
+      customizedDataGrid,
+    ];
     updatedConfiguration({ ...updatedActive, dataPlot: updatedDataPlot });
   }, [active, customizedDataGrid]);
 
@@ -237,7 +252,9 @@ export const DataplotCustomization = () => {
     (value: string | null) => {
       setTabsValue(value);
       if (dataGridLayout) {
-        const plotTab = dataGridLayout.plot.find((item) => item.name === value);
+        const plotTab = dataGridLayout.plot.find(
+          (item) => item.nodeUri === value,
+        );
         if (plotTab) {
           setSelectedPlot(plotTab);
         }
@@ -246,17 +263,23 @@ export const DataplotCustomization = () => {
     [dataGridLayout, setCustomizedDataGrid],
   );
 
+  // One tab per trace, keyed by its node: two traces can share a name.
+  const tabItems = useMemo(() => {
+    const plots = (customizedDataGrid?.plot ?? []).filter((plot) => plot?.name);
+    const labels = plotTabLabels(plots);
+    return plots.map((plot) => ({
+      value: plot.nodeUri,
+      label: labels.get(plot.nodeUri),
+      color: plot.line?.color,
+      title: plot.nodeUri,
+    }));
+  }, [customizedDataGrid?.plot]);
+
   return (
     <Container fluid pb={10}>
       <Tabs value={tabsValue} onChange={(value) => handleSelectedTab(value)}>
         <TabsListCustom
-          data={
-            dataGridLayout
-              ? dataGridLayout.plot
-                  .map((item) => item?.name || '')
-                  .filter((item) => item)
-              : []
-          }
+          data={tabItems}
           value={tabsValue}
           usedFor="personalization"
           closeWithoutSaving={closeWithoutSaving}
@@ -264,17 +287,11 @@ export const DataplotCustomization = () => {
         />
 
         {dataGridLayout &&
-          dataGridLayout.plot.map((item: DataPlotly, index) => {
-            // force to have only one axis in metadata plot
-            const itemWithoutY2axis = structuredClone(item);
-            if (item.yaxis != '') {
-              delete itemWithoutY2axis.yaxis;
-            }
-
+          dataGridLayout.plot.map((item: DataPlotly) => {
             return (
               item?.name && (
-                <Tabs.Panel key={index} value={item.name}>
-                  {tabsValue === item.name && (
+                <Tabs.Panel key={item.nodeUri} value={item.nodeUri}>
+                  {tabsValue === item.nodeUri && (
                     <Grid type="container" ref={customContainerRef}>
                       <Grid.Col span={6}>
                         {selectedAccordion === 'Heatmap' ||
@@ -284,7 +301,9 @@ export const DataplotCustomization = () => {
                             width={WIDTH_PLOT}
                             height={HEIGHT_PLOT}
                             plotIndex={customizedDataGrid.plot
-                              .findIndex((data) => data.name === item.name)
+                              .findIndex(
+                                (data) => data.nodeUri === item.nodeUri,
+                              )
                               .toString()}
                             showSliders={false}
                             forcedPlotType={
@@ -305,11 +324,10 @@ export const DataplotCustomization = () => {
                       <Grid.Col span={6}>
                         <Customization
                           customizedDataGrid={customizedDataGrid}
-                          customizedType={active.customizedGridLayout.type}
+                          customizedType={customizing.type}
                           selectedAccordion={selectedAccordion}
                           selectedPlot={selectedPlot}
                           applyToAllHeatmap={applyToAllHeatmap}
-                          customContainerRef={customContainerRef}
                           setCustomizedDataGrid={setCustomizedDataGrid}
                           setSelectedAccordion={setSelectedAccordion}
                           setApplyToAllHeatmap={setApplyToAllHeatmap}
@@ -332,7 +350,6 @@ interface CustomizationProps {
   selectedAccordion: string | null;
   selectedPlot: DataPlotly | null;
   applyToAllHeatmap: boolean;
-  customContainerRef: React.MutableRefObject<HTMLDivElement>;
   setCustomizedDataGrid: React.Dispatch<React.SetStateAction<DataGridPlot>>;
   setSelectedAccordion: React.Dispatch<React.SetStateAction<string | null>>;
   setApplyToAllHeatmap: React.Dispatch<React.SetStateAction<boolean>>;
@@ -343,7 +360,6 @@ const Customization = ({
   selectedAccordion,
   selectedPlot,
   applyToAllHeatmap,
-  customContainerRef,
   setCustomizedDataGrid,
   setSelectedAccordion,
   setApplyToAllHeatmap,
@@ -371,7 +387,6 @@ const Customization = ({
         <Customize1DPlot
           customizedDataGrid={customizedDataGrid}
           selectedPlot={selectedPlot}
-          customContainerRef={customContainerRef}
           setCustomizedDataGrid={setCustomizedDataGrid}
         />
       ),

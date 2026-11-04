@@ -8,3 +8,4 @@ export * from './tabs';
 export * from './tree';
 export * from './plot';
 export * from './verticalSlider';
+export * from './launchDirectory';

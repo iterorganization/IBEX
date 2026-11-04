@@ -10,6 +10,8 @@ import {
   waitForElementToDisappear,
   waitForValue,
   writeTextInCssElement,
+  openTreeFolder,
+  openUriAccordion,
 } from './testToolBox';
 
 /**
@@ -59,6 +61,17 @@ export interface GridHandle {
  * failing test would also intercept every following click.
  */
 export async function resetAppState() {
+  // The request cache lives for the lifetime of the app, which the specs share.
+  // Clearing it keeps each spec independent: otherwise an earlier spec warms
+  // the cache and a later one silently exercises a different code path.
+  await getDriver().executeScript(() => {
+    (
+      window as Window & {
+        __ibexPerf?: { clearRequestCache: () => void };
+      }
+    ).__ibexPerf?.clearRequestCache();
+  });
+
   const closeButtons = await getDriver().findElements(
     By.css('button.mantine-Modal-close'),
   );
@@ -70,6 +83,22 @@ export async function resetAppState() {
     }
   }
 
+  // Dismiss notifications left by the previous test. They expire on their own
+  // after a few seconds, so the suite used to rely on being slow enough for
+  // that to happen between tests - which stops being true as the app gets
+  // faster, and makes a test that counts notifications see the previous one's.
+  await getDriver().executeScript(() => {
+    document
+      .querySelectorAll<HTMLElement>('.mantine-Notification-closeButton')
+      .forEach((button) => button.click());
+  });
+  await getDriver().wait(async () => {
+    const remaining = await getDriver().executeScript(
+      () => document.querySelectorAll('.mantine-Notification-root').length,
+    );
+    return remaining === 0;
+  }, 10000);
+
   const isEmpty = async () => {
     const state = await getTestState();
     return (state?.configurations?.length ?? 0) === 0 && !state?.active;
@@ -79,7 +108,8 @@ export async function resetAppState() {
    * Clears the store and checks it stays cleared.
    */
   const clearAndConfirm = async (steadyMs: number) => {
-    await setTestState({ configurations: [], active: null });
+    // The tree view is kept per configuration name, and the specs reuse names.
+    await setTestState({ configurations: [], active: null, treeView: {} });
     const deadline = Date.now() + steadyMs;
     while (Date.now() < deadline) {
       if (!(await isEmpty())) return false;
@@ -191,9 +221,9 @@ export async function setupGrid(setup: GridSetup): Promise<GridHandle> {
 
   // Unfold the tree down to the leaves
   await ensureCssElementIsDisplayed(`uriAccordion-${dataPath}`, 200, 100);
-  await findCssElementAndClickIt(`uriAccordion-${dataPath}`, 200, 100);
+  await openUriAccordion(dataPath);
   for (const folder of folders) {
-    await findCssElementAndClickIt(`folder-${dataPath}#${folder}`, 200, 100);
+    await openTreeFolder(`folder-${dataPath}#${folder}`);
   }
 
   // Check the leaves one by one, waiting for each plot to be added
@@ -236,17 +266,15 @@ export async function openCustomization(
   const accordionSelector = By.css(`[data-testid="${accordionTestId}"]`);
   const applyButtonSelector = By.css(`[data-testid="${sectionContentTestId}"]`);
 
-  const isPanelOpen = async () =>
-    Boolean((await getTestState()).active?.customizedGridLayout);
+  const isPanelOpen = async () => Boolean((await getTestState()).customizing);
 
   /** Closes the panel through the store, to mount it again from scratch. */
   const closePanel = async () => {
     const state = await getTestState();
     if (state.active) {
-      await setTestState({
-        configurations: state.configurations,
-        active: { ...state.active, customizedGridLayout: null },
-      });
+      // Which panel is open is UI state, so this writes one field instead of
+      // round-tripping the whole configuration.
+      await setTestState({ customizing: null });
       // The renderer applies the message after `setTestState` has resolved
       await waitForValue(
         'Customization panel closed through the store',
@@ -367,7 +395,7 @@ export async function saveCustomization() {
   await findCssElementAndClickIt('customization-save-button', 200, 100);
   await waitForValue(
     'Customization panel closed',
-    async () => (await getTestState()).active.customizedGridLayout,
+    async () => (await getTestState()).customizing,
     null,
     (actual, expected) => actual == expected,
     100,

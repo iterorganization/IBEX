@@ -1,5 +1,4 @@
 import { ConfigurationState } from './configuration';
+import { UiState } from './ui';
 
-export interface ibexState extends ConfigurationState {
-  _placeholder?: never;
-}
+export type ibexState = ConfigurationState & UiState;

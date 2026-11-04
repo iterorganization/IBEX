@@ -4,9 +4,11 @@ import {
   ensureCssElementIsDisplayed,
   findCssElementAndClickIt,
   mockConfigurationState,
+  getCssElementFromDataTestId,
   waitForValue,
   writeTextInCssElement,
 } from './utils';
+import { TestState } from 'src/renderer/types';
 import {
   startApp,
   getDriver,
@@ -66,6 +68,27 @@ describe('UI Tests for Header Component', function () {
       console.warn('Element did not disappear within timeout');
     }
   }
+
+  async function closeModal(modal: WebElement) {
+    await modal.findElement(By.css('button.mantine-Modal-close')).click();
+    await waitForElementToDisappear(modal);
+  }
+
+  // The mock configurations, the first one active and already saved to a file
+  const savedFilePath = '/some/folder/Test Configuration 1IbexState.json';
+  const savedConfigurationState: Partial<TestState> = {
+    configurations: mockConfigurationState.configurations.map(
+      (configuration, index) =>
+        index === 0
+          ? { ...configuration, path: savedFilePath, saved: true }
+          : configuration,
+    ),
+    active: {
+      ...mockConfigurationState.active,
+      path: savedFilePath,
+      saved: true,
+    },
+  };
 
   it('Should create new configuration from header', async () => {
     await findCssElementAndClickIt('header-add-configuration');
@@ -148,10 +171,137 @@ describe('UI Tests for Header Component', function () {
       0,
     );
     await findCssElementAndClickIt('header-load-configuration');
+    // The menu lists the launch directory below "Browse…"
+    await ensureCssElementIsDisplayed('header-load-menu');
+    await findCssElementAndClickIt('header-load-browse');
     await waitForValue(
       'Load configuration length',
       async () => (await getTestState()).configurations.length,
       1,
     );
+  });
+
+  it('Should rename the active configuration from header', async () => {
+    await setTestState(savedConfigurationState);
+    await findCssElementAndClickIt('header-rename-configuration');
+    const renameModal = await ensureCssElementIsDisplayed(
+      'config-rename-modal',
+    );
+
+    // The field starts with the current name
+    await waitForValue(
+      'Rename field value',
+      async () =>
+        (
+          await getCssElementFromDataTestId('config-rename-name-input')
+        ).getAttribute('value'),
+      'Test Configuration 1',
+    );
+
+    await writeTextInCssElement(
+      'config-rename-name-input',
+      'Renamed Config',
+      true,
+    );
+    await findCssElementAndClickIt('config-rename-submit-button');
+    await waitForElementToDisappear(renameModal);
+
+    await waitForValue(
+      'Renamed active name',
+      async () => (await getTestState()).active.name,
+      'Renamed Config',
+    );
+    const state = await getTestState();
+    expect(state.configurations.map((c) => c.name)).to.deep.equal([
+      'Renamed Config',
+      'Test Configuration 2',
+    ]);
+    // Unsaved, but still bound to its file so that Save writes the new name
+    expect(state.active.saved).to.equal(false);
+    expect(state.active.path).to.equal(savedFilePath);
+  });
+
+  it('Should refuse to rename a configuration to a name in use', async () => {
+    await setTestState(mockConfigurationState);
+    await findCssElementAndClickIt('header-rename-configuration');
+    const renameModal = await ensureCssElementIsDisplayed(
+      'config-rename-modal',
+    );
+
+    await writeTextInCssElement(
+      'config-rename-name-input',
+      'Test Configuration 2',
+      true,
+    );
+    await findCssElementAndClickIt('config-rename-submit-button');
+
+    await waitForValue(
+      'Rename error',
+      async () =>
+        renameModal
+          .findElement(By.css('.mantine-TextInput-error'))
+          .then((error) => error.getText())
+          .catch((): string => null),
+      'This name is already taken',
+    );
+    expect(await renameModal.isDisplayed()).to.equal(true);
+    expect((await getTestState()).active.name).to.equal('Test Configuration 1');
+
+    await closeModal(renameModal);
+  });
+
+  it('Should save a saved configuration to another file from header', async () => {
+    await setTestState(savedConfigurationState);
+
+    // Save has nothing to do, Save as is still offered
+    await waitForValue(
+      'Save button enabled',
+      async () =>
+        (
+          await getCssElementFromDataTestId('header-save-configuration')
+        ).isEnabled(),
+      false,
+    );
+    await findCssElementAndClickIt('header-save-as-configuration');
+
+    // The E2E stub of the save dialog always picks this file
+    await waitForValue(
+      'Save as path',
+      async () => (await getTestState()).active.path,
+      '/stub/path/for/configuration.json',
+    );
+    expect((await getTestState()).active.saved).to.equal(true);
+  });
+
+  it('Should not offer rename or save as without a configuration', async () => {
+    await setTestState({ configurations: [], active: null });
+    for (const testId of [
+      'header-rename-configuration',
+      'header-save-as-configuration',
+    ]) {
+      await waitForValue(
+        `${testId} enabled`,
+        async () => (await getCssElementFromDataTestId(testId)).isEnabled(),
+        false,
+      );
+    }
+  });
+
+  it('Should open the template folders from the header menu', async () => {
+    await findCssElementAndClickIt('header-app-menu');
+    const version = await getCssElementFromDataTestId(
+      'header-app-menu-version',
+    );
+    await getDriver().wait(until.elementTextMatches(version, /^IBEX \S+/));
+
+    await findCssElementAndClickIt('header-app-menu-template-folders');
+    const modal = await getDriver().wait(
+      until.elementLocated(By.css('.mantine-Modal-content')),
+      10000,
+    );
+    const title = await modal.findElement(By.css('.mantine-Modal-title'));
+    expect(await title.getText()).to.equal('Template folders');
+    await modal.findElement(By.css('button.mantine-Modal-close')).click();
+    await getDriver().wait(until.stalenessOf(modal), 10000);
   });
 });

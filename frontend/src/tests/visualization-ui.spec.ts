@@ -50,14 +50,14 @@ describe('UI Tests for Visualization Component', function () {
     await stopApp();
   });
 
-  it('Should show "No configurations available" text if configurations is empty', async () => {
+  it('Should show "No configuration loaded" text if configurations is empty', async () => {
     // Empty state
     await setTestState(mockemptyConfigurationsState);
 
     // Wait for and locate the "no configurations" message
     const noConfigText = await driver.wait(
       until.elementLocated(
-        By.xpath("//*[contains(text(), 'No configurations available')]"),
+        By.xpath("//*[contains(text(), 'No configuration loaded')]"),
       ),
       10000,
     );

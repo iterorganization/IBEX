@@ -1,5 +1,6 @@
 import { Group, Select, Stack, Switch, TextInput } from '@mantine/core';
 import { DataGridPlot } from '../../../types';
+import { axisVector, lineVector } from '../../../derive/vectors';
 
 interface CustomizeGlobalProps {
   customizedDataGrid: DataGridPlot;
@@ -9,15 +10,20 @@ export const CustomizeGlobal = ({
   customizedDataGrid,
   setCustomizedDataGrid,
 }: CustomizeGlobalProps) => {
-  const typeOfXData = typeof customizedDataGrid.plot[0].x[0] as
+  // Which axis types are offered follows what is actually drawn, so the types
+  // are read off the derived vectors rather than off the grid.
+  const coordinates = customizedDataGrid.coordinates ?? [];
+  const typeOfXData = typeof axisVector(coordinates, 0)?.[0] as
     | 'string'
     | 'number';
-  const typeOfYData = typeof customizedDataGrid.plot[0].y[0] as
-    | 'string'
-    | 'number';
-  const typeOfY2Data = typeof customizedDataGrid.plot.find(
-    (p) => p.yaxis === 'y2',
-  )?.y[0] as 'string' | 'number';
+  const typeOfYData = typeof lineVector(
+    customizedDataGrid.plot[0]?.yData,
+    coordinates,
+  )?.[0] as 'string' | 'number';
+  const typeOfY2Data = typeof lineVector(
+    customizedDataGrid.plot.find((p) => p.yaxis === 'y2')?.yData,
+    coordinates,
+  )?.[0] as 'string' | 'number';
 
   const checkTypesToDisable = (
     typeOfData: 'string' | 'number',

@@ -22,20 +22,30 @@ import {
   URIExistsResponse,
   URIFromPathResponse,
 } from '../types';
-import { getTensorizedMatrix, transformComplexData } from './plot';
+import { transformComplexData } from './plot';
+import { getTensorizedMatrix } from './tensor';
 import { replaceNullsWithNaN } from './functions';
 import { normalizeIndices } from './uri';
 import { OptionWithTooltip } from '../types/components/select';
+import { cachedRequest, requestCacheKey } from './requestCache';
+import { trackBusy } from './busy';
+import { payloadKey, registerPayload } from '../stores/payloadRegistry';
 
 /**
  * Retrieves the API configuration.
  */
+let configPromise: ReturnType<typeof window.api.getConfig> | null = null;
+
 const getConfig = async () => {
   try {
-    const config = await window.api.getConfig();
+    // The config is fixed for the lifetime of the session, so resolve it once
+    // instead of crossing the Electron IPC boundary on every request.
+    configPromise ??= window.api.getConfig();
+    const config = await configPromise;
     if (!config) throw new Error('Failed to load configuration');
     return config;
   } catch (error) {
+    configPromise = null; // allow a retry
     console.error('Error fetching config:', error);
     throw error;
   }
@@ -50,6 +60,9 @@ type NotifiedError = Error & { notified?: boolean };
  * Tells whether the user has already been notified of this error, so that
  * callers can skip their own generic notification.
  */
+/** An `Error` carrying the HTTP status of the response that produced it. */
+type HttpError = Error & { status?: number };
+
 export const isNotifiedError = (error: unknown): boolean =>
   Boolean((error as NotifiedError)?.notified);
 
@@ -75,15 +88,22 @@ const handleError = (error: unknown, context: string, code?: number) => {
     }
 
     // Notify the user in case of an error including an error message if it is not a 500 error.
-    showNotification({
-      title: !code ? 'Unable to contact the server' : `Error ${code}`,
-      message:
-        !code || (code >= 400 && code < 500) ? error.message : 'Internal error',
-      color: 'red',
-    });
-    // Flag the error so that callers do not stack a second, generic notification
-    // on top of the detailed message coming from the server.
-    (error as NotifiedError).notified = true;
+    // Only once per error object: concurrent callers that share one in-flight
+    // request also share its rejection, and the user must not be told twice
+    // about a single failure.
+    if (!isNotifiedError(error)) {
+      showNotification({
+        title: !code ? 'Unable to contact the server' : `Error ${code}`,
+        message:
+          !code || (code >= 400 && code < 500)
+            ? error.message
+            : 'Internal error',
+        color: 'red',
+      });
+      // Flag the error so that callers do not stack a second, generic
+      // notification on top of the detailed message coming from the server.
+      (error as NotifiedError).notified = true;
+    }
   }
   console.error(`Error in ${context}:`, error);
   throw error;
@@ -107,12 +127,61 @@ async function fetchWithTimeout(
   }
 }
 
+/** How `fetchFromApi` finishes a response and hands it out. */
+interface FetchOptions<T> {
+  timeout?: number;
+  /**
+   * `false` for probes such as `/info/version`, which must stay live. Those
+   * are still de-duplicated while in flight.
+   */
+  cacheable?: boolean;
+  /**
+   * Post-processing run once per request, on the freshly parsed response,
+   * before it is retained. It may modify its argument freely: nothing else
+   * holds it yet.
+   */
+  finish?: (parsed: T) => T | Promise<T>;
+  /**
+   * Names a second way of finishing the same request, so the two are retained
+   * separately - complex data is finished differently from real data.
+   */
+  variant?: string;
+  /**
+   * Makes the caller's copy of the retained response. Every caller gets one,
+   * because callers assign on what they receive and the retained value is
+   * shared by all of them. Defaults to a deep copy, which is right for the
+   * small metadata responses; payload responses override it to share their
+   * arrays.
+   */
+  share?: (retained: T) => T;
+  /**
+   * `false` keeps the request off the header's busy spinner - for background
+   * polls the user did not ask for.
+   */
+  track?: boolean;
+}
+
 /**
- * Generic GET request to the API.
+ * Generic GET request to the API, shown as ongoing work in the header unless
+ * `track` is `false`.
  */
-const fetchFromApi = async <T>(
+const fetchFromApi = <T>(
   endpoint: string,
-  timeout?: number,
+  options: FetchOptions<T> = {},
+): Promise<T> =>
+  options.track === false
+    ? fetchFromApiUntracked(endpoint, options)
+    : trackBusy(() => fetchFromApiUntracked(endpoint, options));
+
+const fetchFromApiUntracked = async <T>(
+  endpoint: string,
+  {
+    timeout,
+    cacheable = true,
+    finish,
+    variant,
+    share = structuredClone,
+  }: FetchOptions<T> = {},
 ): Promise<T> => {
   let responseStatus: number;
   try {
@@ -136,25 +205,49 @@ const fetchFromApi = async <T>(
         });
       }
     };
-    const response = await fetchFn();
+    const key = requestCacheKey(url) + (variant ? `#${variant}` : '');
+    const retained = await cachedRequest<T>(
+      key,
+      async () => {
+        const response = await fetchFn();
 
-    if (!response.ok) {
-      if (response?.status) {
-        responseStatus = response.status;
-      }
-      const errorData = await response.json();
-      throw new Error(
-        errorData.message || errorData.detail || 'Failed to fetch data',
-      );
-    }
+        if (!response.ok) {
+          if (response?.status) {
+            responseStatus = response.status;
+          }
+          const errorData = await response.json();
+          const error: HttpError = new Error(
+            errorData.message || errorData.detail || 'Failed to fetch data',
+          );
+          // Carry the status on the error itself. A caller that joined an
+          // in-flight request never runs this function, so a status kept only
+          // in the closure above would reach it as undefined - and the rules
+          // that suppress expected 404/464 error-band failures would not fire.
+          error.status = response.status;
+          throw error;
+        }
 
-    return response.json();
+        const body = await response.text();
+        const parsed = JSON.parse(body) as T;
+        return {
+          value: finish ? await finish(parsed) : parsed,
+          bytes: body.length,
+        };
+      },
+      cacheable,
+    );
+
+    return share(retained);
   } catch (error) {
     if (error.name === 'AbortError') {
       console.error(`Timeout after ${timeout}ms: fetchFromApi(${endpoint}).`);
       throw error;
     } else {
-      handleError(error, `fetchFromApi(${endpoint})`, responseStatus);
+      handleError(
+        error,
+        `fetchFromApi(${endpoint})`,
+        (error as HttpError)?.status ?? responseStatus,
+      );
     }
   }
 };
@@ -443,18 +536,32 @@ export const fetchDataPlot = async (
     }
   }
 
+  // The endpoint actually used, which is the payload's identity. It is not
+  // always the one first asked for: the branch below can fall back to M4
+  // downsampling on a timeout, and the fallback returns different bytes.
+  let endpoint: string;
+
+  const fetchPlotData = (timeout?: number) =>
+    fetchFromApi<PlotDataResponse>(endpoint, {
+      timeout,
+      finish: (parsed) =>
+        normalizeDataPlotResponse(parsed, type, {
+          downsampledMethod: firstDownsampledMethod || downsamplingMethod,
+          interpolationMethod,
+        }),
+      variant: type === 'CPX' ? 'cpx' : undefined,
+      share: shareDataPlotResponse,
+    });
+
   if (downsamplingMethod) {
     // Get downsampled data plot
-    response = await fetchFromApi<PlotDataResponse>(
-      `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
-    );
+    endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
+    response = await fetchPlotData();
   } else {
     try {
       // Try to fetch data without downsampling in according timeout
-      response = await fetchFromApi<PlotDataResponse>(
-        `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
-        5000,
-      );
+      endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
+      response = await fetchPlotData(5000);
     } catch (error) {
       if (error.name === 'AbortError' || error.name === 'SyntaxError') {
         // "SyntaxError" can be triggered when too heavy (eof error)
@@ -476,9 +583,8 @@ export const fetchDataPlot = async (
           downsampledMethods?.downsampling_methods.find(
             (meth) => meth.name === 'M4',
           )?.name || downsampledMethods?.downsampling_methods.slice(0)[1].name;
-        response = await fetchFromApi<PlotDataResponse>(
-          `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`,
-        );
+        endpoint = `/data/plot_data?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(firstDownsampledMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}${encodedInterpolateOver}${encodedSmoothing}${encodedOperations}${encodedSignalOperations}`;
+        response = await fetchPlotData();
       } else {
         // Any other error (e.g. a 466 raised when a signal operation cannot be
         // applied) has already been notified by handleError: propagate it
@@ -488,6 +594,40 @@ export const fetchDataPlot = async (
     }
   }
 
+  // Registered on every hand-out, not once per request: the registry sweeps
+  // what no grid references while the cache keeps the response, so a later
+  // hit may be the only thing that can bring the payload back. Registering an
+  // array already held is a lookup.
+  //
+  // With the shape of the array sent, `downsampled_shape`: `shape` is the
+  // node's shape before downsampling, and a range restored against it asks
+  // for more points than the array has.
+  const member = type === 'CPX' ? 'value:cpx' : 'value';
+  response.data.valueRef = registerPayload(
+    payloadKey(endpoint, member),
+    response.data.value,
+    response.data.downsampled_shape,
+  );
+  for (const coord of response.data.coordinates) {
+    coord.valueRef = registerPayload(
+      payloadKey(endpoint, `coord:${coord.name}`),
+      coord.value,
+      coord.downsampled_shape,
+    );
+  }
+
+  return response;
+};
+
+/**
+ * Finishes a parsed `plot_data` response. Runs once per request, before the
+ * response is retained, so nothing here has to be idempotent.
+ */
+const normalizeDataPlotResponse = async (
+  response: PlotDataResponse,
+  type: NodeInfoTypeEnum | undefined,
+  methods: { downsampledMethod?: string; interpolationMethod?: string },
+): Promise<PlotDataResponse> => {
   // Rule to rename data when "value" or "data":
   if (response.data.name == 'data' || response.data.name == 'value') {
     const targetStringList = response.data.path.split('/');
@@ -505,17 +645,11 @@ export const fetchDataPlot = async (
   }
 
   // Return used methods
-  response.data.downsampled_method =
-    firstDownsampledMethod || downsamplingMethod;
-  response.data.interpolated_method = interpolationMethod;
+  response.data.downsampled_method = methods.downsampledMethod;
+  response.data.interpolated_method = methods.interpolationMethod;
 
   if (response.data.shape === 'irregular') {
-    // Alert when getting irregular shape
-    showNotification({
-      title: 'Warning',
-      message: 'Data are incomplete.',
-      color: 'yellow',
-    });
+    incompleteResponses.add(response.data);
 
     for (const coord of response.data.coordinates) {
       // Fill incomplete coordinates with NaN to be a matrix format
@@ -538,7 +672,49 @@ export const fetchDataPlot = async (
   }
 
   response.data.value = replaceNullsWithNaN(response.data.value);
+
   return response;
+};
+
+/**
+ * Responses the backend sent with an irregular shape. The shape is gone once
+ * they are tensorised, and the user is warned on every hand-out, not only on
+ * the request that fetched them.
+ */
+const incompleteResponses = new WeakSet<PlotDataResponse['data']>();
+
+const copyShape = <S extends number[] | 'irregular' | undefined>(shape: S) =>
+  (Array.isArray(shape) ? [...shape] : shape) as S;
+
+/**
+ * A caller's copy of a retained `plot_data` response: every object and shape
+ * is its own, the `value` arrays are the retained ones.
+ */
+const shareDataPlotResponse = (
+  retained: PlotDataResponse,
+): PlotDataResponse => {
+  if (incompleteResponses.has(retained.data)) {
+    // Alert when getting irregular shape
+    showNotification({
+      title: 'Warning',
+      message: 'Data are incomplete.',
+      color: 'yellow',
+    });
+  }
+  return {
+    ...retained,
+    data: {
+      ...retained.data,
+      shape: copyShape(retained.data.shape),
+      downsampled_shape: copyShape(retained.data.downsampled_shape),
+      coordinates: retained.data.coordinates.map((coord) => ({
+        ...coord,
+        shape: copyShape(coord.shape),
+        downsampled_shape: copyShape(coord.downsampled_shape),
+        coordinates: coord.coordinates && [...coord.coordinates],
+      })),
+    },
+  };
 };
 
 /**
@@ -551,23 +727,26 @@ export const fetchFieldValue = async (
   type?: NodeInfoTypeEnum,
 ) => {
   const downsampled_size = downsamplingSize || 1000;
-  let response: FieldValueResponse;
-  if (downsamplingMethod) {
-    response = await fetchFromApi<FieldValueResponse>(
-      `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`,
-    );
-  } else {
-    response = await fetchFromApi<FieldValueResponse>(
-      `/data/field_value?uri=${encodeURIComponent(uri)}`,
-    );
-  }
+  const endpoint = downsamplingMethod
+    ? `/data/field_value?uri=${encodeURIComponent(uri)}&downsampling_method=${encodeURIComponent(downsamplingMethod)}&downsampled_size=${encodeURIComponent(downsampled_size)}`
+    : `/data/field_value?uri=${encodeURIComponent(uri)}`;
+  const response = await fetchFromApi<FieldValueResponse>(endpoint, {
+    finish: (parsed) => {
+      if (type === 'CPX') {
+        // Transform complex data
+        parsed.value = transformComplexData(parsed.value) as AxisData;
+      }
+      parsed.value = replaceNullsWithNaN(parsed.value);
+      return parsed;
+    },
+    variant: type === 'CPX' ? 'cpx' : undefined,
+    share: (retained) => ({ ...retained }),
+  });
 
-  if (type === 'CPX') {
-    // Transform complex data
-    const updatedData = transformComplexData(response.value) as AxisData;
-    response.value = updatedData;
-  }
-  response.value = replaceNullsWithNaN(response.value);
+  response.valueRef = registerPayload(
+    payloadKey(endpoint, type === 'CPX' ? 'value:cpx' : 'value'),
+    response.value,
+  );
   return response;
 };
 
@@ -636,5 +815,11 @@ export const fetchGeometryNodes = async (uri: string, labelUri: string) => {
  * Return backend version.
  */
 export const fetchInfoVersion = async () => {
-  return fetchFromApi<InfoVersionResponse>(`/info/version`);
+  // Never cached: the header polls this to show whether the backend is alive,
+  // and a cached answer would freeze that indicator on its first value.
+  // Not tracked either: it would flash the busy spinner every 10 s.
+  return fetchFromApi<InfoVersionResponse>(`/info/version`, {
+    cacheable: false,
+    track: false,
+  });
 };

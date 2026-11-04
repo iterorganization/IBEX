@@ -23,6 +23,7 @@ Thanks to this modal, you can retrieve URIs in different ways :
 **From a file (Upload local dataset):**
 
 Upload a file using the input from the file explorer, and then the list of URIs will appear in the table below.
+The folder button next to it lists the data entries of the directory IBEX was started from (netCDF files, and HDF5 entries in it or in one of its subdirectories): click one to add it.
 
 **From the input (Write/Paste a URI):**
 
@@ -31,6 +32,20 @@ Write or copy-paste an existing URI and add it to the table below. A request wil
 **From configurable inputs (Legacy parameters):**
 
 This component can receive several parameters (User, Backend, Database, Version). You must provide at least two parameters (User and Version).
+
+From the command line
+---------------------
+
+Data entries can also be given when starting IBEX, with ``--uri`` (``-u``) followed by one or more
+URIs (see :ref:`Command-line options`). They are opened together in a new configuration, named
+``URI-0``, ``URI-1``, ... in the order given:
+
+.. code-block:: bash
+
+   ./launch.sh -u "imas:hdf5?path=/path/to/entry1" "imas:hdf5?path=/path/to/entry2"
+
+Each URI is checked as when it is typed in the dialog. Those that do not exist are listed in a
+notification, and the others are still opened.
 
 UDA Support
 -------------
